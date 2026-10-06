@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>进程的地址空间：mmap、munmap 与 mprotect</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* ── 基础重置 ── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            color-scheme: light;
+            --bg-primary: #f7f7f8;
+            --bg-secondary: #ffffff;
+            --bg-card: #eef0f3;
+            --bg-code: #f2f3f5;
+            --text-primary: #1f2328;
+            --text-secondary: #57606a;
+            --text-muted: #6e7781;
+            --accent: #2563eb;
+            --accent-glow: rgba(37, 99, 235, 0.08);
+            --border: #d9dce1;
+            --border-subtle: #e7e9ec;
+            --radius: 12px;
+            --shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Serif SC', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.8;
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── 文章容器 ── */
+        .book-content {
+            max-width: 780px;
+            margin: 0 auto;
+            padding: 60px 32px 120px;
+        }
+
+        /* ── 标题 ── */
+        h1 {
+            font-size: 2.2em;
+            font-weight: 700;
+            margin: 0 0 12px;
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+        }
+
+        h2 {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 56px 0 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h3 {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: var(--accent);
+            margin: 36px 0 12px;
+        }
+
+        /* ── 段落与文字 ── */
+        p {
+            margin: 0 0 16px;
+            color: var(--text-primary);
+        }
+
+        strong {
+            color: #0f172a;
+            font-weight: 600;
+        }
+
+        em {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.2s;
+        }
+        a:hover {
+            border-bottom-color: var(--accent);
+        }
+
+        /* ── 引用 ── */
+        blockquote {
+            margin: 24px 0;
+            padding: 16px 20px;
+            background: var(--bg-secondary);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 var(--radius) var(--radius) 0;
+            color: var(--text-secondary);
+        }
+        blockquote p { margin: 0; }
+
+        /* ── 列表 ── */
+        ul, ol {
+            margin: 12px 0 20px 24px;
+            color: var(--text-primary);
+        }
+        li {
+            margin: 6px 0;
+        }
+
+        /* ── 分割线 ── */
+        hr {
+            border: none;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border), transparent);
+            margin: 48px 0;
+        }
+
+        /* ── 表格 ── */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 24px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+        thead {
+            background: var(--bg-card);
+        }
+        th {
+            padding: 12px 16px;
+            font-weight: 600;
+            text-align: left;
+            color: var(--accent);
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        td {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border-subtle);
+        }
+        tbody tr {
+            background: var(--bg-secondary);
+            transition: background 0.15s;
+        }
+        tbody tr:hover {
+            background: var(--bg-card);
+        }
+
+        /* ── 代码 ── */
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-code);
+            padding: 2px 7px;
+            border-radius: 5px;
+            font-size: 0.88em;
+            color: #6d28d9;
+        }
+
+        pre {
+            margin: 20px 0;
+            padding: 20px 24px;
+            background: var(--bg-code);
+            border-radius: var(--radius);
+            overflow-x: auto;
+            border: 1px solid var(--border);
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9em;
+            color: var(--text-primary);
+        }
+
+        /* ── 视频嵌入卡片 ── */
+        .video-card {
+            margin: 32px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .video-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(15, 23, 42, 0.12);
+        }
+
+        .video-wrapper {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 */
+            height: 0;
+            overflow: hidden;
+        }
+        .video-wrapper iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .video-card img {
+            width: 100%;
+            display: block;
+        }
+
+        .video-caption {
+            padding: 12px 16px;
+            font-size: 0.88em;
+            color: var(--text-secondary);
+            text-align: center;
+            line-height: 1.6;
+            margin: 0;
+        }
+        .video-caption a {
+            color: var(--accent);
+        }
+
+        .video-card.fallback {
+            padding: 20px;
+            text-align: center;
+        }
+
+        /* ── Lightbox：截图点击放大 ── */
+        .screenshot-card img { cursor: zoom-in; transition: opacity 0.15s; }
+        .screenshot-card img:hover { opacity: 0.9; }
+        .lightbox {
+            position: fixed; inset: 0; z-index: 999;
+            display: none; align-items: center; justify-content: center;
+            background: rgba(5, 5, 8, 0.92); backdrop-filter: blur(4px);
+            cursor: zoom-out; padding: 24px;
+        }
+        .lightbox.open { display: flex; }
+        .lightbox img {
+            max-width: 96vw; max-height: 90vh;
+            border-radius: 8px; box-shadow: 0 12px 60px rgba(0,0,0,0.7);
+        }
+        .lightbox-caption {
+            position: absolute; bottom: 14px; left: 0; right: 0;
+            text-align: center; color: var(--text-secondary); font-size: 0.85em;
+        }
+
+        /* ── 顶部信息栏 ── */
+        .book-content > blockquote:first-of-type {
+            background: var(--accent-glow);
+            border-left-color: var(--accent);
+            border-radius: var(--radius);
+            margin-bottom: 32px;
+        }
+
+        /* ── 图表居中 ── */
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            margin: 32px 0;
+            overflow-x: auto;
+        }
+
+        /* ── 滚动条 ── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* ── 响应式 ── */
+        @media (max-width: 640px) {
+            .book-content { padding: 32px 16px 80px; }
+            h1 { font-size: 1.7em; }
+            h2 { font-size: 1.3em; }
+        }
+    </style>
+</head>
+<body>
+    <article class="book-content">
+        <h1 id="mmapmunmap-mprotect">进程的地址空间：mmap、munmap 与 mprotect</h1>
+<blockquote>
+<p><strong>课程</strong>：2026 春季学期《操作系统原理》，第 6 讲<br />
+<strong>讲师</strong>：蒋炎岩（jyy）<br />
+<strong>官方课程主页</strong>：<a href="https://jyywiki.cn/OS/2026/">https://jyywiki.cn/OS/2026/</a><br />
+<strong>官方讲义</strong>：<a href="https://jyywiki.cn/OS/2026/lect6.md">https://jyywiki.cn/OS/2026/lect6.md</a><br />
+<strong>视频来源</strong>：<a href="https://www.bilibili.com/video/BV18nAjz9EcW/">Bilibili BV18nAjz9EcW</a><br />
+<strong>版权说明</strong>：课程讲义与幻灯片归蒋炎岩所有，采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书是对课堂讲授的书面化重构，保留出处与许可说明。</p>
+</blockquote>
+<h2 id="_1">导语：进程的内存里到底有什么？</h2>
+<p>上一讲通过 <code>fork</code>、<code>execve</code> 和 <code>exit</code> 建立了进程生命周期。CrazyOS 中每个 <code>struct proc</code> 都拥有一块固定大小的 <code>mem</code>：</p>
+<div class="highlight"><pre><span></span><code><span class="cp">#define MEM_SIZE   (1 &lt;&lt; 20)</span>
+<span class="cp">#define MEM_OFFSET 0x80000000u</span>
+<span class="cp">#define STACK_TOP  (MEM_OFFSET + MEM_SIZE)</span>
+
+<span class="k">struct</span><span class="w"> </span><span class="nc">proc</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">CPUState</span><span class="w"> </span><span class="n">cpu</span><span class="p">;</span>
+<span class="w">    </span><span class="kt">uint8_t</span><span class="w"> </span><span class="n">mem</span><span class="p">[</span><span class="n">MEM_SIZE</span><span class="p">];</span>
+<span class="w">    </span><span class="cm">/* pid, buffer, length, ... */</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<p>这说明进程不仅有寄存器和 PC，也有自己的内存。真实进程的地址空间比 CrazyOS 复杂得多：</p>
+<ul>
+<li>程序代码；</li>
+<li>只读数据；</li>
+<li>已初始化数据；</li>
+<li>未初始化数据；</li>
+<li>堆；</li>
+<li>栈；</li>
+<li>动态链接库；</li>
+<li>内核提供的 <code>vvar</code> / <code>vdso</code>；</li>
+<li>匿名映射；</li>
+<li>文件映射；</li>
+<li>共享内存。</li>
+</ul>
+<p>本讲的关键问题是：</p>
+<blockquote>
+<p><strong>进程地址空间中的每一个字节，究竟由谁规定、从哪里来、为什么放在那里？</strong></p>
+</blockquote>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_01_47.png" alt="CrazyOS 中每个进程有一份独立的 memory" loading="lazy">
+  <p class="video-caption">📷 CrazyOS 中每个进程有一份独立的 memory<br><a href="https://www.bilibili.com/video/BV18nAjz9EcW/?t=107" target="_blank" rel="noopener">回到原视频 (00:01:47)</a></p>
+</div>
+
+<hr />
+<h2 id="1">1. 地址空间与指针</h2>
+<h3 id="11">1.1 教科书定义</h3>
+<p>操作系统为每个进程提供独立的虚拟地址范围，称为 <strong>进程地址空间（Address Space）</strong>。</p>
+<p>核心作用包括：</p>
+<ul>
+<li>隔离：不同进程互不干扰；</li>
+<li>保护：无权限访问产生异常；</li>
+<li>抽象：程序以为拥有一大片连续内存；</li>
+<li>扩展：内存可按需分配；</li>
+<li>有限共享：在隔离基础上支持共享内存。</li>
+</ul>
+<p>但只记定义并不能回答：</p>
+<ul>
+<li>代码、数据和栈分别在哪？</li>
+<li>为什么有些地址可读、有些可写、有些可执行？</li>
+<li>为什么每次运行地址可能变化？</li>
+<li>程序未访问的内存为什么可以先“分配”？</li>
+</ul>
+<p>这些问题的答案需要从地址、ELF、加载器和 ABI 一层层构建。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_04_02.png" alt="进程地址空间的隔离与虚拟化" loading="lazy">
+  <p class="video-caption">📷 进程地址空间的隔离与虚拟化<br><a href="https://www.bilibili.com/video/BV18nAjz9EcW/?t=242" target="_blank" rel="noopener">回到原视频 (00:04:02)</a></p>
+</div>
+
+<h3 id="12">1.2 地址空间就是可由指针访问的字节序列</h3>
+<p>CPU 的 <code>load</code> / <code>store</code> 指令需要一个地址和位宽：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">unsigned</span><span class="w"> </span><span class="kt">char</span><span class="w"> </span><span class="o">*</span><span class="n">ptr</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">...;</span>
+<span class="kt">unsigned</span><span class="w"> </span><span class="kt">char</span><span class="w"> </span><span class="n">value</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">*</span><span class="n">ptr</span><span class="p">;</span><span class="w">   </span><span class="cm">/* load */</span>
+<span class="o">*</span><span class="n">ptr</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span><span class="w">                     </span><span class="cm">/* store */</span>
+</code></pre></div>
+
+<p>指针本质上保存地址。地址空间就是进程通过 <code>load</code>、<code>store</code> 和取指能够访问的字节范围。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    P["指针 / 地址"] --&gt; M["地址空间"]
+    M --&gt; L["load: 读取字节"]
+    M --&gt; S["store: 写入字节"]
+    M --&gt; F["fetch: 读取指令"]
+</code></pre></div>
+
+<h3 id="13-volatile">1.3 为什么需要 volatile</h3>
+<div class="highlight"><pre><span></span><code><span class="k">volatile</span><span class="w"> </span><span class="kt">char</span><span class="w"> </span><span class="o">*</span><span class="n">ptr</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">input</span><span class="p">();</span>
+<span class="o">*</span><span class="n">ptr</span><span class="p">;</span>
+</code></pre></div>
+
+<p>如果读取结果没有被使用，普通指针访问可能被编译器当作死代码删除。</p>
+<p><code>volatile</code> 告诉编译器：</p>
+<blockquote>
+<p>对该地址的访问具有可观察效果，不允许优化掉。</p>
+</blockquote>
+<p>它与“指向的内存不可修改”的 <code>const</code> 不同：</p>
+<ul>
+<li><code>const char *</code>：不能通过该指针修改内存；</li>
+<li><code>volatile char *</code>：每次访问都必须真实执行；</li>
+<li><code>volatile char * volatile</code>：指针本身也不能被优化缓存。</li>
+</ul>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_06_01.png" alt="用指针观察代码、数据与栈的不同地址" loading="lazy">
+  <p class="video-caption">📷 用指针观察代码、数据与栈的不同地址<br><a href="https://www.bilibili.com/video/BV18nAjz9EcW/?t=361" target="_blank" rel="noopener">回到原视频 (00:06:01)</a></p>
+</div>
+
+<p>课堂使用指针分别指向函数、全局变量和局部变量，打印地址，并读取 <code>main</code> 函数开头的机器码，再与二进制文件交叉验证。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_10_05.png" alt="指针读取 main 函数机器码并与 ELF 对照" loading="lazy">
+  <p class="video-caption">📷 指针读取 main 函数机器码并与 ELF 对照<br><a href="https://www.bilibili.com/video/BV18nAjz9EcW/?t=605" target="_blank" rel="noopener">回到原视频 (00:10:05)</a></p>
+</div>
+
+<hr />
+<h2 id="2">2. 地址空间中的字节从哪里来</h2>
+<h3 id="21">2.1 字节本身不带类型</h3>
+<p>一个字节本身没有“整数”“指针”或“指令”标签。它被如何解释取决于 CPU 当前如何使用它：</p>
+<ul>
+<li>PC 指向它：作为指令取指、译码；</li>
+<li><code>load</code> 读取它：按指定位宽解释为数据；</li>
+<li><code>store</code> 写入它：替换对应字节。</li>
+</ul>
+<p>所以必须先回答“字节是什么”，再回答“字节放在哪里”和“初始值是什么”。</p>
+<h3 id="22-elf-pt_load">2.2 ELF 与 PT_LOAD</h3>
+<p>链接器将代码和数据组织为 ELF 节区：</p>
+<ul>
+<li><code>.text</code>：机器指令；</li>
+<li><code>.rodata</code>：只读数据；</li>
+<li><code>.data</code>：有初始值的可写数据；</li>
+<li><code>.bss</code>：零初始化的数据，不占文件中的实际内容；</li>
+<li>其他链接与动态加载元数据。</li>
+</ul>
+<p>加载器只关心 ELF 中的 <code>PT_LOAD</code> 段。每段包含：</p>
+<div class="highlight"><pre><span></span><code>文件偏移
+虚拟地址
+大小
+对齐
+访问权限
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart LR
+    S["源文件"] --&gt; C["编译与汇编"]
+    C --&gt; O["目标文件&lt;br/&gt;.text / .data / .bss"]
+    O --&gt; L["链接器"]
+    L --&gt; E["ELF"]
+    E --&gt; H["Program Headers&lt;br/&gt;PT_LOAD"]
+    H --&gt; A["进程地址空间"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_16_40.png" alt="ELF 的 PT_LOAD 段决定哪些内容被加载" loading="lazy">
+  <p class="video-caption">📷 ELF 的 PT_LOAD 段决定哪些内容被加载<br><a href="https://www.bilibili.com/video/BV18nAjz9EcW/?t=1000" target="_blank" rel="noopener">回到原视频 (00:16:40)</a></p>
+</div>
+
+<h3 id="23-abi">2.3 ABI、加载器与初始栈</h3>
+<p>操作系统加载器与 System V ABI 共同规定进程初始状态：</p>
+<ul>
+<li>加载 <code>PT_LOAD</code> 段；</li>
+<li>清零 <code>bss</code>；</li>
+<li>设置初始 PC 和 SP；</li>
+<li>在栈上放置 <code>argc</code>、<code>argv</code>、<code>envp</code>、<code>auxv</code> 字符串与指针；</li>
+<li>设置必要寄存器。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    E["execve"] --&gt; L["OS 加载器"]
+    L --&gt; P["加载 PT_LOAD"]
+    L --&gt; B["清零 bss"]
+    L --&gt; S["建立初始栈"]
+    S --&gt; A["argc / argv / envp / auxv"]
+    L --&gt; R["设置 PC / SP / 寄存器"]
+    R --&gt; U["进入程序入口"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_18_21.png" alt="ABI 规定进程初始栈和寄存器状态" loading="lazy">
+  <p class="video-caption">📷 ABI 规定进程初始栈和寄存器状态<br><a href="https://www.bilibili.com/video/BV18nAjz9EcW/?t=1101" target="_blank" rel="noopener">回到原视频 (00:18:21)</a></p>
+</div>
+
+<h3 id="24-aslr">2.4 ASLR</h3>
+<p>同一个程序多次运行时，函数和变量的绝对地址可能不同。这是因为 Linux 启用了：</p>
+<blockquote>
+<p><strong>Address Space Layout Randomization（ASLR）</strong></p>
+</blockquote>
+<p>系统会随机化代码、栈、堆和动态库的加载位置，使攻击者更难预测地址。GDB 默认可能关闭或固定部分随机化，因此调试时地址更稳定。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_15_33.png" alt="ASLR 使程序每次运行时地址布局变化" loading="lazy">
+  <p class="video-caption">📷 ASLR 使程序每次运行时地址布局变化<br><a href="https://www.bilibili.com/video/BV18nAjz9EcW/?t=933" target="_blank" rel="noopener">回到原视频 (00:15:33)</a></p>
+</div>
+
+<hr />
+<h2 id="3">3. 探索真实进程地址空间</h2>
+<h3 id="31-procpidmaps">3.1 <code>/proc/&lt;pid&gt;/maps</code></h3>
+<p>Linux 通过 <code>procfs</code> 提供进程地址空间映射：</p>
+<div class="highlight"><pre><span></span><code>cat<span class="w"> </span>/proc/&lt;pid&gt;/maps
+</code></pre></div>
+
+<p>每一行通常包含：</p>
+<div class="highlight"><pre><span></span><code>起始地址-结束地址  权限  偏移  设备  inode  路径
+</code></pre></div>
+
+<p>权限由三个字符组成：</p>
+<ul>
+<li><code>r</code>：可读；</li>
+<li><code>w</code>：可写；</li>
+<li><code>x</code>：可执行。</li>
+</ul>
+<p>典型区域包括：</p>
+<ul>
+<li>可执行文件映射；</li>
+<li>共享库；</li>
+<li>匿名堆区域；</li>
+<li>线程栈；</li>
+<li><code>vvar</code>；</li>
+<li><code>vdso</code>；</li>
+<li><code>vsyscall</code>。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    P["进程 PID"] --&gt; F["/proc/PID/maps"]
+    F --&gt; R["地址区间与权限"]
+    F --&gt; M["文件映射"]
+    F --&gt; A["匿名内存"]
+    F --&gt; V["vvar / vdso"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_27_44.png" alt="解析 procfs maps 得到真实地址空间布局" loading="lazy">
+  <p class="video-caption">📷 解析 procfs maps 得到真实地址空间布局<br><a href="https://www.bilibili.com/video/BV18nAjz9EcW/?t=1664" target="_blank" rel="noopener">回到原视频 (00:27:44)</a></p>
+</div>
+
+<h3 id="32">3.2 最小程序也不只有代码与栈</h3>
+<p>即使是一个直接用 <code>ld</code> 链接的最小程序，地址空间中仍可能出现：</p>
+<ul>
+<li>一段可读可执行的程序映射；</li>
+<li><code>vvar</code>；</li>
+<li><code>vdso</code>；</li>
+<li>初始栈。</li>
+</ul>
+<p><code>vvar</code> 与 <code>vdso</code> 是 Linux 提供的优化机制：</p>
+<ul>
+<li><code>vvar</code>：内核与用户态共享的只读数据；</li>
+<li><code>vdso</code>：可直接在用户态执行的少量代码。</li>
+</ul>
+<p>对于 <code>gettimeofday()</code> 等高频调用，程序可以利用 CPU 时间计数器和共享数据，在不进入内核的情况下得到时间。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_24_30.png" alt="vvar 与 vdso 让部分系统调用绕过内核" loading="lazy">
+  <p class="video-caption">📷 vvar 与 vdso 让部分系统调用绕过内核<br><a href="https://www.bilibili.com/video/BV18nAjz9EcW/?t=1470" target="_blank" rel="noopener">回到原视频 (00:24:30)</a></p>
+</div>
+
+<h3 id="33-address-space-explorer">3.3 Address Space Explorer</h3>
+<p>课堂让 AI 编写一个命令行工具：</p>
+<blockquote>
+<p>接收 PID，解析 <code>/proc/&lt;pid&gt;/maps</code>，展示地址空间，并对可执行区域反汇编前 1 KB。</p>
+</blockquote>
+<p>核心实现只需要：</p>
+<ol>
+<li>读取 <code>/proc/&lt;pid&gt;/maps</code>；</li>
+<li>解析每段地址、权限和路径；</li>
+<li>对可执行区间读取内存；</li>
+<li>使用 Capstone 等反汇编库解码指令。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    PID["输入 PID"] --&gt; MAPS["读取 /proc/PID/maps"]
+    MAPS --&gt; PARSE["解析区间与权限"]
+    PARSE --&gt; EXEC{"区域可执行?"}
+    EXEC --&gt;|"是"| READ["读取前 1KB"]
+    READ --&gt; DIS["反汇编"]
+    EXEC --&gt;|"否"| SKIP["显示映射信息"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_20_00.png" alt="程序化展示另一个进程的地址空间" loading="lazy">
+  <p class="video-caption">📷 程序化展示另一个进程的地址空间<br><a href="https://www.bilibili.com/video/BV18nAjz9EcW/?t=1200" target="_blank" rel="noopener">回到原视频 (00:20:00)</a></p>
+</div>
+
+<hr />
+<h2 id="4-mmu-vr">4. MMU：操作系统给进程戴上的 VR 眼镜</h2>
+<h3 id="41">4.1 虚拟地址到物理页</h3>
+<p>地址空间中的“连续地址”并不对应连续的物理页。CPU 每次取指、<code>load</code> 和 <code>store</code> 都经过 MMU：</p>
+<ul>
+<li>查页表；</li>
+<li>检查权限；</li>
+<li>找到物理页；</li>
+<li>完成访问；</li>
+<li>若映射不存在或无权限则触发异常。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    V["进程虚拟地址"] --&gt; M["MMU / 页表"]
+    M --&gt;|"有映射且权限允许"| P["物理页"]
+    M --&gt;|"无映射"| PF["缺页异常"]
+    M --&gt;|"无权限"| EX["保护异常"]
+</code></pre></div>
+
+<p>用户进程不能直接配置 MMU，因此它只能看到操作系统“投影”出来的世界。讲师把它类比为无法摘下的 VR 眼镜：</p>
+<blockquote>
+<p>进程以为自己在访问一片连续内存，实际看到的地址和权限完全由操作系统决定。</p>
+</blockquote>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_31_40.png" alt="MMU 将虚拟地址映射到操作系统选择的物理页" loading="lazy">
+  <p class="video-caption">📷 MMU 将虚拟地址映射到操作系统选择的物理页<br><a href="https://www.bilibili.com/video/BV18nAjz9EcW/?t=1900" target="_blank" rel="noopener">回到原视频 (00:31:40)</a></p>
+</div>
+
+<h3 id="42-0">4.2 为什么 0 地址不可访问</h3>
+<p>绝大多数进程的第 0 页没有合法映射。因此：</p>
+<div class="highlight"><pre><span></span><code><span class="o">*</span><span class="p">(</span><span class="kt">char</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="mi">0</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+</code></pre></div>
+
+<p>会触发 segmentation fault。空指针访问能被检测出来，正是因为地址空间存在大范围“洞”。</p>
+<h3 id="43-brk-sbrk">4.3 brk / sbrk</h3>
+<p>早期 UNIX 用 <code>brk</code> / <code>sbrk</code> 改变 data segment 末尾的 break：</p>
+<ul>
+<li>增大 break：申请更多连续堆空间；</li>
+<li>减小 break：释放堆尾部空间。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>[text][data][bss]                [stack]
+                 ^
+               brk
+</code></pre></div>
+
+<p><code>brk</code> 只能调整堆尾部，难以支持大块、稀疏或文件映射，因此现代系统主要使用 <code>mmap</code>。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_34_21.png" alt="通过调整 break 改变堆空间" loading="lazy">
+  <p class="video-caption">📷 通过调整 break 改变堆空间<br><a href="https://www.bilibili.com/video/BV18nAjz9EcW/?t=2061" target="_blank" rel="noopener">回到原视频 (00:34:21)</a></p>
+</div>
+
+<hr />
+<h2 id="5-mmapmunmap-mprotect">5. mmap、munmap 与 mprotect</h2>
+<h3 id="51-api">5.1 API</h3>
+<div class="highlight"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="o">*</span><span class="nf">mmap</span><span class="p">(</span><span class="kt">void</span><span class="w"> </span><span class="o">*</span><span class="n">addr</span><span class="p">,</span><span class="w"> </span><span class="kt">size_t</span><span class="w"> </span><span class="n">length</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">prot</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">flags</span><span class="p">,</span>
+<span class="w">           </span><span class="kt">int</span><span class="w"> </span><span class="n">fd</span><span class="p">,</span><span class="w"> </span><span class="kt">off_t</span><span class="w"> </span><span class="n">offset</span><span class="p">);</span>
+
+<span class="kt">int</span><span class="w"> </span><span class="nf">munmap</span><span class="p">(</span><span class="kt">void</span><span class="w"> </span><span class="o">*</span><span class="n">addr</span><span class="p">,</span><span class="w"> </span><span class="kt">size_t</span><span class="w"> </span><span class="n">length</span><span class="p">);</span>
+
+<span class="kt">int</span><span class="w"> </span><span class="nf">mprotect</span><span class="p">(</span><span class="kt">void</span><span class="w"> </span><span class="o">*</span><span class="n">addr</span><span class="p">,</span><span class="w"> </span><span class="kt">size_t</span><span class="w"> </span><span class="n">length</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">prot</span><span class="p">);</span>
+</code></pre></div>
+
+<ul>
+<li><code>addr</code>：建议映射地址；</li>
+<li><code>length</code>：映射长度；</li>
+<li><code>prot</code>：读、写、执行权限；</li>
+<li><code>flags</code>：匿名、私有、共享、固定地址等；</li>
+<li><code>fd</code>：可选文件；</li>
+<li><code>offset</code>：映射文件偏移。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["进程地址空间"] --&gt; M["mmap"]
+    M --&gt; AN["匿名零页 / 内存"]
+    M --&gt; FM["文件映射"]
+    A --&gt; U["munmap"]
+    A --&gt; P["mprotect"]
+    P --&gt; R["修改 rwx 权限"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_36_01.png" alt="mmap、munmap 与 mprotect 管理地址空间" loading="lazy">
+  <p class="video-caption">📷 mmap、munmap 与 mprotect 管理地址空间<br><a href="https://www.bilibili.com/video/BV18nAjz9EcW/?t=2161" target="_blank" rel="noopener">回到原视频 (00:36:01)</a></p>
+</div>
+
+<h3 id="52">5.2 匿名映射与按需分配</h3>
+<p>使用：</p>
+<div class="highlight"><pre><span></span><code><span class="n">mmap</span><span class="p">(</span><span class="nb">NULL</span><span class="p">,</span><span class="w"> </span><span class="n">length</span><span class="p">,</span>
+<span class="w">     </span><span class="n">PROT_READ</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="n">PROT_WRITE</span><span class="p">,</span>
+<span class="w">     </span><span class="n">MAP_PRIVATE</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="n">MAP_ANONYMOUS</span><span class="p">,</span>
+<span class="w">     </span><span class="mi">-1</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">);</span>
+</code></pre></div>
+
+<p>可以获得一段初始值为零的匿名内存。</p>
+<p>关键点是：</p>
+<ul>
+<li><code>mmap</code> 可以瞬间返回，即使申请 8 GB；</li>
+<li>此时不一定分配任何物理页；</li>
+<li>只有第一次访问某个页面时，才触发缺页异常并分配物理页；</li>
+<li>未访问的页面不会占用实际内存。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant P as 进程
+    participant O as 操作系统
+    participant M as 物理内存
+    P-&gt;&gt;O: mmap(8GB)
+    O--&gt;&gt;P: 返回虚拟地址
+    P-&gt;&gt;O: 首次访问某页
+    O-&gt;&gt;M: 分配零页 / 物理页
+    O--&gt;&gt;P: 完成访问
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_39_45.png" alt="申请超大匿名映射，实际访问时才分配物理页" loading="lazy">
+  <p class="video-caption">📷 申请超大匿名映射，实际访问时才分配物理页<br><a href="https://www.bilibili.com/video/BV18nAjz9EcW/?t=2385" target="_blank" rel="noopener">回到原视频 (00:39:45)</a></p>
+</div>
+
+<p><code>strace</code> 可以看到真实的 <code>mmap</code> 参数和返回地址。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_41_17.png" alt="strace 中的匿名 mmap 调用" loading="lazy">
+  <p class="video-caption">📷 strace 中的匿名 mmap 调用<br><a href="https://www.bilibili.com/video/BV18nAjz9EcW/?t=2477" target="_blank" rel="noopener">回到原视频 (00:41:17)</a></p>
+</div>
+
+<h3 id="53">5.3 文件映射</h3>
+<p>传入文件描述符后，<code>mmap</code> 可以把文件映射到地址空间：</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    F["文件 / 设备"] --&gt; O["open"]
+    O --&gt; FD["文件描述符"]
+    FD --&gt; M["mmap"]
+    M --&gt; A["进程地址空间"]
+    A --&gt; P["通过指针读写"]
+</code></pre></div>
+
+<p>典型用途：</p>
+<ul>
+<li>映射大文件，只访问部分页面；</li>
+<li>映射磁盘或设备；</li>
+<li>映射 <code>/dev/gpiomem</code> 控制 GPIO；</li>
+<li>在多个进程之间映射共享内存；</li>
+<li>把设备寄存器当成内存访问。</li>
+</ul>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_43_00.png" alt="将文件或设备直接映射到地址空间" loading="lazy">
+  <p class="video-caption">📷 将文件或设备直接映射到地址空间<br><a href="https://www.bilibili.com/video/BV18nAjz9EcW/?t=2580" target="_blank" rel="noopener">回到原视频 (00:43:00)</a></p>
+</div>
+
+<p>危险也由此产生：错误地映射并写入整个磁盘设备，可能覆盖真实数据。课堂回忆了曾误覆盖讲台机磁盘的事故。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_44_53.png" alt="通过 /dev/gpiomem 映射 GPIO 寄存器" loading="lazy">
+  <p class="video-caption">📷 通过 /dev/gpiomem 映射 GPIO 寄存器<br><a href="https://www.bilibili.com/video/BV18nAjz9EcW/?t=2693" target="_blank" rel="noopener">回到原视频 (00:44:53)</a></p>
+</div>
+
+<h3 id="54">5.4 共享内存</h3>
+<p><code>shm_open()</code> 返回一个类似文件的描述符，多个进程可以分别 <code>mmap</code>：</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    S["共享内存对象"] --&gt; M1["mmap 进程 A"]
+    S --&gt; M2["mmap 进程 B"]
+    M1 --&gt; R["同一组物理页"]
+    M2 --&gt; R
+</code></pre></div>
+
+<p>这为进程间通信和共享大块数据结构提供了高效机制。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_45_20.png" alt="共享内存对象可映射到多个进程" loading="lazy">
+  <p class="video-caption">📷 共享内存对象可映射到多个进程<br><a href="https://www.bilibili.com/video/BV18nAjz9EcW/?t=2720" target="_blank" rel="noopener">回到原视频 (00:45:20)</a></p>
+</div>
+
+<h3 id="55-mprotect-jit">5.5 mprotect 与 JIT</h3>
+<p>动态生成代码时，可以先用可读可写权限写入机器码，再通过：</p>
+<div class="highlight"><pre><span></span><code><span class="n">mprotect</span><span class="p">(</span><span class="n">addr</span><span class="p">,</span><span class="w"> </span><span class="n">length</span><span class="p">,</span><span class="w"> </span><span class="n">PROT_READ</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="n">PROT_EXEC</span><span class="p">);</span>
+</code></pre></div>
+
+<p>把数据页变成可执行页。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["RW 内存"] --&gt; W["写入机器码"]
+    W --&gt; P["mprotect: R + X"]
+    P --&gt; J["跳转到生成代码"]
+</code></pre></div>
+
+<p>浏览器 JavaScript 引擎、Java JIT 等都在运行时生成并执行代码。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_45_44.png" alt="mprotect 支持动态代码生成与 JIT" loading="lazy">
+  <p class="video-caption">📷 mprotect 支持动态代码生成与 JIT<br><a href="https://www.bilibili.com/video/BV18nAjz9EcW/?t=2744" target="_blank" rel="noopener">回到原视频 (00:45:44)</a></p>
+</div>
+
+<hr />
+<h2 id="6">6. 入侵进程地址空间</h2>
+<h3 id="61-gdb">6.1 GDB 如何插入断点</h3>
+<p><em>(参考时间: 00:48:33)</em></p>
+<p>普通代码页通常是 <code>r-x</code>，不可写。GDB 要打断点，需要：</p>
+<ol>
+<li>使用 <code>ptrace</code> 附加目标进程；</li>
+<li>修改目标页权限；</li>
+<li>把目标指令替换为断点指令；</li>
+<li>命中后暂停目标进程；</li>
+<li>恢复原指令；</li>
+<li>再继续执行。</li>
+</ol>
+<p>在 x86 上，单字节 <code>int3</code> 可作为软件断点：</p>
+<div class="highlight"><pre><span></span><code><span class="nf">int3</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant G as GDB
+    participant P as 目标进程
+    participant O as 操作系统
+    G-&gt;&gt;O: ptrace attach
+    G-&gt;&gt;P: 修改页面权限
+    G-&gt;&gt;P: 写入 int3
+    P-&gt;&gt;O: 执行到 int3
+    O--&gt;&gt;G: 暂停并通知调试器
+    G-&gt;&gt;P: 恢复原指令
+</code></pre></div>
+
+<p>因此，调试器本身就是“合法入侵另一个进程地址空间”的工具。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_48_33.png" alt="GDB 通过 ptrace 和内存写入实现断点" loading="lazy">
+  <p class="video-caption">📷 GDB 通过 ptrace 和内存写入实现断点<br><a href="https://www.bilibili.com/video/BV18nAjz9EcW/?t=2913" target="_blank" rel="noopener">回到原视频 (00:48:33)</a></p>
+</div>
+
+<h3 id="62-game-genie">6.2 Game Genie：总线上的物理金手指</h3>
+<p><em>(参考时间: 00:53:51)</em></p>
+<p>在无 MMU 的卡带机时代，Game Genie 插在主机和游戏卡带之间，直接拦截地址总线与数据总线。</p>
+<p>它维护一个 Lookup Table：</p>
+<div class="highlight"><pre><span></span><code>如果读取地址 A 且原值为 X
+则把返回值替换为 Y
+</code></pre></div>
+
+<p>游戏初始化生命值为 3 时，只需匹配存放常数 3 的指令地址，就能改成 30、99 或任意值。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    C["CPU 地址 / 读信号"] --&gt; G["Game Genie LUT"]
+    G --&gt;|"命中 A:X"| Y["返回 Y"]
+    G --&gt;|"未命中"| R["原始 ROM 数据"]
+    Y --&gt; C
+    R --&gt; C
+</code></pre></div>
+
+<p>Game Genie 本质上是一个极小的可编程固件，先展示自己的界面，配置 LUT，再把控制权交回游戏。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_53_51.png" alt="Game Genie 用查表替换物理内存读取结果" loading="lazy">
+  <p class="video-caption">📷 Game Genie 用查表替换物理内存读取结果<br><a href="https://www.bilibili.com/video/BV18nAjz9EcW/?t=3231" target="_blank" rel="noopener">回到原视频 (00:53:51)</a></p>
+</div>
+
+<h3 id="63">6.3 内存扫描修改器</h3>
+<p>现代游戏外挂通常不需要改装总线，而是直接读写目标进程内存。</p>
+<h4 id="_2">单地址变量</h4>
+<p>若游戏把金钱保存在一个固定地址：</p>
+<div class="highlight"><pre><span></span><code>进入游戏：EXP = 4950
+击败怪物：EXP = 5100
+</code></pre></div>
+
+<p>可以：</p>
+<ol>
+<li>扫描所有值为 4950 的内存；</li>
+<li>打怪后再次扫描值变为 5100 的地址；</li>
+<li>缩小候选集合；</li>
+<li>找到真正的 EXP 地址并修改。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    S1["扫描 EXP=4950"] --&gt; C1["大量候选"]
+    C1 --&gt; E["战斗后 EXP=5100"]
+    E --&gt; S2["二次扫描"]
+    S2 --&gt; F["缩小候选"]
+    F --&gt; M["修改目标地址"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_57_40.png" alt="内存扫描器通过数值变化定位游戏变量" loading="lazy">
+  <p class="video-caption">📷 内存扫描器通过数值变化定位游戏变量<br><a href="https://www.bilibili.com/video/BV18nAjz9EcW/?t=3460" target="_blank" rel="noopener">回到原视频 (00:57:40)</a></p>
+</div>
+
+<p>课堂使用 DOSBox + 金山游侠风格工具演示修改即时战略游戏中的金钱。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_00_00.png" alt="修改目标进程内存改变游戏状态" loading="lazy">
+  <p class="video-caption">📷 修改目标进程内存改变游戏状态<br><a href="https://www.bilibili.com/video/BV18nAjz9EcW/?t=3600" target="_blank" rel="noopener">回到原视频 (01:00:00)</a></p>
+</div>
+
+<h4 id="_3">数据不可变时扫描失效</h4>
+<p>如果游戏使用持久化数据结构：</p>
+<div class="highlight"><pre><span></span><code><span class="n">state_new</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">new</span><span class="w"> </span><span class="n">State</span><span class="p">(</span><span class="n">state</span><span class="p">);</span>
+<span class="n">state_new</span><span class="p">.</span><span class="n">update</span><span class="p">(</span><span class="n">exp</span><span class="p">);</span>
+<span class="n">state</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">state_new</span><span class="p">;</span>
+</code></pre></div>
+
+<p>每次更新都会创建新对象，旧地址失效，简单扫描无法定位。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    S0["State v0&lt;br/&gt;EXP=4950"] --&gt; S1["State v1&lt;br/&gt;EXP=5100"]
+    S1 --&gt; S2["State v2&lt;br/&gt;EXP=5200"]
+    S0 -.旧地址失效.-&gt; X["固定地址扫描失败"]
+</code></pre></div>
+
+<p>此时需要更深入理解程序语义，甚至编写专门的调试器脚本。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_02_25.png" alt="不可变数据结构使固定地址扫描失效" loading="lazy">
+  <p class="video-caption">📷 不可变数据结构使固定地址扫描失效<br><a href="https://www.bilibili.com/video/BV18nAjz9EcW/?t=3745" target="_blank" rel="noopener">回到原视频 (01:02:25)</a></p>
+</div>
+
+<h3 id="64">6.4 变速齿轮</h3>
+<p>程序无法直接感知时间，只能通过系统调用，例如：</p>
+<div class="highlight"><pre><span></span><code><span class="n">sleep</span><span class="p">();</span>
+<span class="n">usleep</span><span class="p">();</span>
+<span class="n">alarm</span><span class="p">();</span>
+<span class="n">gettimeofday</span><span class="p">();</span>
+</code></pre></div>
+
+<p>变速工具可以：</p>
+<ul>
+<li>拦截或替换时间相关函数；</li>
+<li>把 <code>sleep(t)</code> 变成 <code>sleep(t / speed)</code>；</li>
+<li>对 <code>gettimeofday()</code> 构造一个按比例加速的虚拟时间轴。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["游戏调用 sleep / gettimeofday"] --&gt; H["时间劫持层"]
+    H --&gt; V["虚拟时间轴"]
+    V --&gt; R["游戏认为时间加速"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_06_10.png" alt="变速齿轮通过劫持时间系统调用实现加速" loading="lazy">
+  <p class="video-caption">📷 变速齿轮通过劫持时间系统调用实现加速<br><a href="https://www.bilibili.com/video/BV18nAjz9EcW/?t=3970" target="_blank" rel="noopener">回到原视频 (01:06:10)</a></p>
+</div>
+
+<h3 id="65-dma-cxl">6.5 更底层的 DMA 与 CXL</h3>
+<p>在更极端的场景中，外设可以通过 DMA 持续读取主内存，甚至把内存镜像到另一台计算机或 FPGA。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    CPU["CPU"] --&gt; M["DRAM"]
+    M --&gt; DMA["DMA / PCIe 设备"]
+    DMA --&gt; F["FPGA / 另一台机器"]
+    F --&gt; A["外部分析或修改内存"]
+</code></pre></div>
+
+<p>CXL 等高速内存互联还可以实现双写和内存镜像，用于数据中心容错，也可能被用于观测和修改进程状态。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_12_23.png" alt="通过 DMA 与 CXL 实现外部内存镜像" loading="lazy">
+  <p class="video-caption">📷 通过 DMA 与 CXL 实现外部内存镜像<br><a href="https://www.bilibili.com/video/BV18nAjz9EcW/?t=4343" target="_blank" rel="noopener">回到原视频 (01:12:23)</a></p>
+</div>
+
+<hr />
+<h2 id="7-procpidmem">7. <code>/proc/&lt;pid&gt;/mem</code></h2>
+<p>游戏修改器与地址空间探索工具最终都可以归结为文件操作：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">int</span><span class="w"> </span><span class="n">fd</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">open</span><span class="p">(</span><span class="s">"/proc/&lt;pid&gt;/mem"</span><span class="p">,</span><span class="w"> </span><span class="n">O_RDWR</span><span class="p">);</span>
+<span class="n">lseek</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span><span class="w"> </span><span class="n">address</span><span class="p">,</span><span class="w"> </span><span class="n">SEEK_SET</span><span class="p">);</span>
+<span class="n">read</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span><span class="w"> </span><span class="n">buffer</span><span class="p">,</span><span class="w"> </span><span class="n">size</span><span class="p">);</span>
+<span class="n">write</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span><span class="w"> </span><span class="n">data</span><span class="p">,</span><span class="w"> </span><span class="n">size</span><span class="p">);</span>
+</code></pre></div>
+
+<p><code>/proc/&lt;pid&gt;/mem</code> 看起来是一个普通文件，但它实际代表目标进程的完整地址空间。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    P["修改器进程"] --&gt; F["/proc/PID/mem"]
+    F --&gt; A["目标进程地址空间"]
+    A --&gt; M["读取或修改数据"]
+</code></pre></div>
+
+<p>权限检查仍然存在：通常需要 <code>ptrace</code> 权限或 root 权限。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_17_42.png" alt="通过 /proc/pid/mem 读写另一个进程的内存" loading="lazy">
+  <p class="video-caption">📷 通过 /proc/pid/mem 读写另一个进程的内存<br><a href="https://www.bilibili.com/video/BV18nAjz9EcW/?t=4662" target="_blank" rel="noopener">回到原视频 (01:17:42)</a></p>
+</div>
+
+<hr />
+<h2 id="8">8. 本讲总结</h2>
+<div class="highlight"><pre><span></span><code>mindmap
+  root((进程地址空间))
+    字节来源
+      ISA 解释
+      ELF PT_LOAD
+      Loader + ABI
+      argv / envp / auxv
+      ASLR
+    指针与虚拟内存
+      地址与位宽
+      volatile
+      MMU 页表
+      权限检查
+    管理 API
+      brk / sbrk
+      mmap
+      匿名映射
+      文件映射
+      munmap
+      mprotect
+    应用
+      malloc
+      共享内存
+      MMIO
+      JIT
+      vvar / vdso
+    入侵
+      GDB / ptrace
+      Game Genie
+      内存扫描
+      变速齿轮
+      DMA / CXL
+      /proc/pid/mem
+</code></pre></div>
+
+<p>核心结论：</p>
+<ol>
+<li>地址空间是进程可以通过指针访问的虚拟地址范围。</li>
+<li>字节本身无类型，含义由 CPU 指令决定。</li>
+<li>ELF 的 <code>PT_LOAD</code>、加载器和 ABI 决定数据放在哪里。</li>
+<li>初始栈中保存 <code>argc</code>、<code>argv</code>、<code>envp</code>、<code>auxv</code>。</li>
+<li>ASLR 随机化地址布局，提高攻击难度。</li>
+<li><code>procfs</code> 的 <code>maps</code> 和 <code>mem</code> 可以观察甚至修改其他进程。</li>
+<li>MMU 是操作系统强制施加的地址翻译与权限检查机制。</li>
+<li><code>brk</code> 是旧式堆扩展 API；现代内存映射主要依赖 <code>mmap</code>。</li>
+<li><code>mmap</code> 可按需分配匿名内存，也可映射文件、设备和共享内存。</li>
+<li><code>munmap</code> 回收映射，<code>mprotect</code> 修改读、写、执行权限。</li>
+<li>动态代码生成依赖从读写页面切换到可执行页面。</li>
+<li>调试器、游戏外挂和内存工具都建立在进程内存访问能力之上。</li>
+</ol>
+<blockquote>
+<p>计算机世界里没有魔法。<br />
+每一个地址、每一个字节和每一项权限，最终都有明确的来源。</p>
+</blockquote>
+<hr />
+<h2 id="_4">附：官方参考与延伸阅读</h2>
+<p>课程与讲义：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/2026/">《操作系统原理》2026 课程主页</a></li>
+<li><a href="https://jyywiki.cn/OS/2026/lect6.md">第 6 讲讲义：进程的地址空间</a></li>
+<li><a href="https://jyywiki.cn/OS/2026/video/BV18nAjz9EcW/">本讲视频</a></li>
+</ul>
+<p>课程演示：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/demos/virtualization/crazy-os">CrazyOS</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/virtualization/pointers">重新理解指针</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/virtualization/addr-space">探索进程地址空间</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/virtualization/mmap">mmap 系统调用</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/virtualization/knight">金山游侠式内存修改器</a></li>
+</ul>
+<p>系统与硬件资料：</p>
+<ul>
+<li><a href="http://jyywiki.cn/OS/manuals/sysv-abi.pdf">System V ABI</a>，重点阅读 Section 3.4 Process Initialization。</li>
+<li><a href="https://perf.wiki.kernel.org/index.php/Perf_tools_support_for_Intel%C2%AE_Processor_Trace">Intel Processor Trace</a></li>
+<li><a href="https://tuxnes.sourceforge.net/gamegenie.html">Game Genie Technical Notes</a></li>
+<li><a href="https://patents.google.com/patent/EP0402067A2/en">Game Genie 专利 EP0402067A2</a></li>
+<li><a href="https://www.howtogeek.com/706248/what-was-the-game-genie-cheat-device-and-how-did-it-work/">Game Genie 工作原理</a></li>
+</ul>
+<p>阅读材料：</p>
+<ul>
+<li><em>Operating Systems: Three Easy Pieces</em></li>
+<li>第 12 章：Dialogue；</li>
+<li>第 13 章：Address Spaces；</li>
+<li>第 14 章：Memory API。</li>
+<li><code>man 2 mmap</code></li>
+<li><code>man 2 munmap</code></li>
+<li><code>man 2 mprotect</code></li>
+<li><code>man 2 brk</code></li>
+<li><code>man 5 proc</code></li>
+<li><code>man 2 ptrace</code></li>
+</ul>
+<blockquote>
+<p><strong>版权说明</strong>：课程讲义与幻灯片的著作权归蒋炎岩所有，采用 Creative Commons BY-NC 4.0 许可。电子书正文为课堂内容的书面化重构，脚本占位符已替换为视频画面或官方资料渲染图；引用与来源链接均保留在本页。</p>
+</blockquote>
+    </article>
+
+    <!-- Mermaid 图表引擎初始化 -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            mermaid.initialize({ startOnLoad: false, theme: 'default' });
+            
+            // 兼容普通代码块以及丢失 language-mermaid 类名的情况 (CodeHilite 干扰)
+            const codeNodes = document.querySelectorAll('pre code, .highlight code');
+            codeNodes.forEach(function(node) {
+                const text = node.textContent.trim();
+                // 匹配常见的 mermaid 图表前缀
+                if (text.startsWith('graph ') || text.startsWith('flowchart ') || text.startsWith('sequenceDiagram') || text.startsWith('gantt') || text.startsWith('pie') || text.startsWith('classDiagram') || text.startsWith('stateDiagram') || text.startsWith('mindmap')) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.className = 'mermaid';
+                    tempDiv.textContent = text;
+                    
+                    // 获取需要替换的最外层父节点 (比如 div.highlight 或者 pre)
+                    const wrapper = node.closest('.highlight') || node.parentNode;
+                    wrapper.replaceWith(tempDiv); 
+                }
+            });
+            
+            // 所有节点转换完成，统一进行图表动态绘制
+            mermaid.run();
+        });
+    </script>
+    <!-- Lightbox：截图点击放大 -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const lightbox = document.createElement('div');
+            lightbox.className = 'lightbox';
+            lightbox.innerHTML = '<img alt=""><div class="lightbox-caption"></div>';
+            document.body.appendChild(lightbox);
+            const lbImg = lightbox.querySelector('img');
+            const lbCap = lightbox.querySelector('.lightbox-caption');
+            function openLightbox(src, alt) {
+                lbImg.src = src; lbImg.alt = alt || '';
+                lbCap.textContent = alt || '';
+                lightbox.classList.add('open');
+                document.body.style.overflow = 'hidden';
+            }
+            function closeLightbox() {
+                lightbox.classList.remove('open');
+                lbImg.src = '';
+                document.body.style.overflow = '';
+            }
+            document.querySelectorAll('.screenshot-card img').forEach(function(img) {
+                img.addEventListener('click', function() { openLightbox(img.src, img.alt); });
+            });
+            lightbox.addEventListener('click', closeLightbox);
+            document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
+        });
+    </script>
+</body>
+</html>
