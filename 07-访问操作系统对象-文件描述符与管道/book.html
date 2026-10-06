@@ -1,0 +1,1044 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>访问操作系统对象：文件描述符与管道</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* ── 基础重置 ── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            color-scheme: light;
+            --bg-primary: #f7f7f8;
+            --bg-secondary: #ffffff;
+            --bg-card: #eef0f3;
+            --bg-code: #f2f3f5;
+            --text-primary: #1f2328;
+            --text-secondary: #57606a;
+            --text-muted: #6e7781;
+            --accent: #2563eb;
+            --accent-glow: rgba(37, 99, 235, 0.08);
+            --border: #d9dce1;
+            --border-subtle: #e7e9ec;
+            --radius: 12px;
+            --shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Serif SC', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.8;
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── 文章容器 ── */
+        .book-content {
+            max-width: 780px;
+            margin: 0 auto;
+            padding: 60px 32px 120px;
+        }
+
+        /* ── 标题 ── */
+        h1 {
+            font-size: 2.2em;
+            font-weight: 700;
+            margin: 0 0 12px;
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+        }
+
+        h2 {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 56px 0 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h3 {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: var(--accent);
+            margin: 36px 0 12px;
+        }
+
+        /* ── 段落与文字 ── */
+        p {
+            margin: 0 0 16px;
+            color: var(--text-primary);
+        }
+
+        strong {
+            color: #0f172a;
+            font-weight: 600;
+        }
+
+        em {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.2s;
+        }
+        a:hover {
+            border-bottom-color: var(--accent);
+        }
+
+        /* ── 引用 ── */
+        blockquote {
+            margin: 24px 0;
+            padding: 16px 20px;
+            background: var(--bg-secondary);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 var(--radius) var(--radius) 0;
+            color: var(--text-secondary);
+        }
+        blockquote p { margin: 0; }
+
+        /* ── 列表 ── */
+        ul, ol {
+            margin: 12px 0 20px 24px;
+            color: var(--text-primary);
+        }
+        li {
+            margin: 6px 0;
+        }
+
+        /* ── 分割线 ── */
+        hr {
+            border: none;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border), transparent);
+            margin: 48px 0;
+        }
+
+        /* ── 表格 ── */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 24px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+        thead {
+            background: var(--bg-card);
+        }
+        th {
+            padding: 12px 16px;
+            font-weight: 600;
+            text-align: left;
+            color: var(--accent);
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        td {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border-subtle);
+        }
+        tbody tr {
+            background: var(--bg-secondary);
+            transition: background 0.15s;
+        }
+        tbody tr:hover {
+            background: var(--bg-card);
+        }
+
+        /* ── 代码 ── */
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-code);
+            padding: 2px 7px;
+            border-radius: 5px;
+            font-size: 0.88em;
+            color: #6d28d9;
+        }
+
+        pre {
+            margin: 20px 0;
+            padding: 20px 24px;
+            background: var(--bg-code);
+            border-radius: var(--radius);
+            overflow-x: auto;
+            border: 1px solid var(--border);
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9em;
+            color: var(--text-primary);
+        }
+
+        /* ── 视频嵌入卡片 ── */
+        .video-card {
+            margin: 32px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .video-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(15, 23, 42, 0.12);
+        }
+
+        .video-wrapper {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 */
+            height: 0;
+            overflow: hidden;
+        }
+        .video-wrapper iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .video-card img {
+            width: 100%;
+            display: block;
+        }
+
+        .video-caption {
+            padding: 12px 16px;
+            font-size: 0.88em;
+            color: var(--text-secondary);
+            text-align: center;
+            line-height: 1.6;
+            margin: 0;
+        }
+        .video-caption a {
+            color: var(--accent);
+        }
+
+        .video-card.fallback {
+            padding: 20px;
+            text-align: center;
+        }
+
+        /* ── Lightbox：截图点击放大 ── */
+        .screenshot-card img { cursor: zoom-in; transition: opacity 0.15s; }
+        .screenshot-card img:hover { opacity: 0.9; }
+        .lightbox {
+            position: fixed; inset: 0; z-index: 999;
+            display: none; align-items: center; justify-content: center;
+            background: rgba(5, 5, 8, 0.92); backdrop-filter: blur(4px);
+            cursor: zoom-out; padding: 24px;
+        }
+        .lightbox.open { display: flex; }
+        .lightbox img {
+            max-width: 96vw; max-height: 90vh;
+            border-radius: 8px; box-shadow: 0 12px 60px rgba(0,0,0,0.7);
+        }
+        .lightbox-caption {
+            position: absolute; bottom: 14px; left: 0; right: 0;
+            text-align: center; color: var(--text-secondary); font-size: 0.85em;
+        }
+
+        /* ── 顶部信息栏 ── */
+        .book-content > blockquote:first-of-type {
+            background: var(--accent-glow);
+            border-left-color: var(--accent);
+            border-radius: var(--radius);
+            margin-bottom: 32px;
+        }
+
+        /* ── 图表居中 ── */
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            margin: 32px 0;
+            overflow-x: auto;
+        }
+
+        /* ── 滚动条 ── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* ── 响应式 ── */
+        @media (max-width: 640px) {
+            .book-content { padding: 32px 16px 80px; }
+            h1 { font-size: 1.7em; }
+            h2 { font-size: 1.3em; }
+        }
+    </style>
+</head>
+<body>
+    <article class="book-content">
+        <h1 id="_1">访问操作系统对象：文件描述符与管道</h1>
+<blockquote>
+<p><strong>课程</strong>：2026 春季学期《操作系统原理》，第 7 讲<br />
+<strong>讲师</strong>：蒋炎岩（jyy）<br />
+<strong>官方课程主页</strong>：<a href="https://jyywiki.cn/OS/2026/">https://jyywiki.cn/OS/2026/</a><br />
+<strong>官方讲义</strong>：<a href="https://jyywiki.cn/OS/2026/lect7.md">https://jyywiki.cn/OS/2026/lect7.md</a><br />
+<strong>视频来源</strong>：<a href="https://www.bilibili.com/video/BV1QFQmB7EQD/">Bilibili BV1QFQmB7EQD</a><br />
+<strong>版权说明</strong>：课程讲义与幻灯片归蒋炎岩所有，采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书是对课堂讲授的书面化重构，保留出处与许可说明。</p>
+</blockquote>
+<h2 id="_2">导语：进程之外还有一整个世界</h2>
+<p>前几讲解决了进程自身的两个核心问题：</p>
+<ul>
+<li>生命周期：<code>fork</code>、<code>execve</code>、<code>exit</code>；</li>
+<li>地址空间：<code>mmap</code>、<code>munmap</code>、<code>mprotect</code>。</li>
+</ul>
+<p>但进程不能只读写自己的内存。只要它要：</p>
+<ul>
+<li>读取网络请求；</li>
+<li>写入文件；</li>
+<li>打开终端；</li>
+<li>和其他进程交换数据；</li>
+<li>使用打印机、GPU、键盘等设备；</li>
+</ul>
+<p>它就必须访问操作系统中的其他对象。</p>
+<p>应用开发者关心“我想做什么”，操作系统设计者关心“提供什么样的通用机制，让所有应用都能自行组合出所需功能”。</p>
+<p>UNIX 给出的核心答案是：</p>
+<blockquote>
+<p><strong>Everything is a File。</strong></p>
+</blockquote>
+<p>文件描述符则是应用程序用来访问这些操作系统对象的指针。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_11_39.png" alt="操作系统对象与通用 API" loading="lazy">
+  <p class="video-caption">📷 操作系统对象与通用 API<br><a href="https://www.bilibili.com/video/BV1QFQmB7EQD/?t=699" target="_blank" rel="noopener">回到原视频 (00:11:39)</a></p>
+</div>
+
+<hr />
+<h2 id="1-git-ai">1. 实验、Git 与 AI 辅助工作流</h2>
+<p><em>(参考时间: 00:00:05)</em></p>
+<p>课程实验框架在 3 月 22 日更新过，一度出现“新框架搭配旧 TestKit”的版本问题。解决方式不是记死 Git 命令，而是理解目标：</p>
+<ul>
+<li>查看提交历史；</li>
+<li>暂时回退一个 commit；</li>
+<li>从远端同步更新；</li>
+<li>将更新合并回本地。</li>
+</ul>
+<p>Agent 可以根据目标自动组合 <code>git log</code>、<code>git reset</code>、<code>git fetch</code>、<code>git merge</code> 等命令。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    P["明确目标"] --&gt; A["Coding Agent"]
+    A --&gt; G1["git log"]
+    G1 --&gt; G2["git reset"]
+    G2 --&gt; G3["git fetch"]
+    G3 --&gt; G4["git merge"]
+    G4 --&gt; R["同步完成"]
+</code></pre></div>
+
+<p>重点不是要求每个人背住命令，而是建立“哪件事能够做到”的概念，再让 AI 放大人的自主性。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_03_27.png" alt="使用 Agent 查看提交历史并回退版本" loading="lazy">
+  <p class="video-caption">📷 使用 Agent 查看提交历史并回退版本<br><a href="https://www.bilibili.com/video/BV1QFQmB7EQD/?t=207" target="_blank" rel="noopener">回到原视频 (00:03:27)</a></p>
+</div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_05_16.png" alt="同步远端 TestKit 更新" loading="lazy">
+  <p class="video-caption">📷 同步远端 TestKit 更新<br><a href="https://www.bilibili.com/video/BV1QFQmB7EQD/?t=316" target="_blank" rel="noopener">回到原视频 (00:05:16)</a></p>
+</div>
+
+<hr />
+<h2 id="2">2. 进程是一个封闭世界</h2>
+<p><em>(参考时间: 00:07:02)</em></p>
+<p>进程自己的资源只有寄存器和地址空间。除此之外的一切访问都要经过系统调用：</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    P["进程内部"] --&gt; C["CPU 寄存器"]
+    P --&gt; M["地址空间"]
+    P --&gt; S["System Call"]
+    S --&gt; O["操作系统对象"]
+    O --&gt; F["文件"]
+    O --&gt; D["设备"]
+    O --&gt; N["网络连接"]
+    O --&gt; I["进程间通信对象"]
+</code></pre></div>
+
+<p>操作系统经过几十年演化，已经定义了大量对象：</p>
+<ul>
+<li>文件与目录；</li>
+<li>管道和 FIFO；</li>
+<li>套接字；</li>
+<li>终端与伪终端；</li>
+<li>GPU、输入设备、块设备；</li>
+<li>信号与锁；</li>
+<li>共享内存；</li>
+<li>进程与线程。</li>
+</ul>
+<p>问题在于：操作系统不可能为每一种对象单独发明完全不同的编程模型。它需要一种统一、稳定、可复用的抽象。</p>
+<hr />
+<h2 id="3">3. 从程序员意图到操作系统机制</h2>
+<h3 id="31">3.1 程序员想表达的是对象操作</h3>
+<p>应用开发者更希望写出接近自然语言的接口：</p>
+<div class="highlight"><pre><span></span><code><span class="n">Path</span><span class="p">(</span><span class="s2">"/proc/1234/maps"</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">()</span>
+
+<span class="n">memory_map</span> <span class="o">=</span> <span class="n">GetMemoryMap</span><span class="p">(</span><span class="n">pid</span><span class="p">)</span>
+<span class="n">ReadProcessMemory</span><span class="p">(</span><span class="n">pid</span><span class="p">,</span> <span class="n">address</span><span class="p">,</span> <span class="n">buffer</span><span class="p">,</span> <span class="n">size</span><span class="p">)</span>
+</code></pre></div>
+
+<p>而不是每次都直接使用一系列底层系统调用。</p>
+<h3 id="32">3.2 操作系统提供通用机制</h3>
+<p>UNIX 没有为 <code>GetMemoryMap</code> 发明专门的系统调用，而是把进程信息放进：</p>
+<div class="highlight"><pre><span></span><code>/proc/&lt;pid&gt;/maps
+/proc/&lt;pid&gt;/mem
+</code></pre></div>
+
+<p>应用只需复用已经存在的文件 API：</p>
+<div class="highlight"><pre><span></span><code><span class="n">open</span><span class="p">();</span>
+<span class="n">read</span><span class="p">();</span>
+<span class="n">write</span><span class="p">();</span>
+</code></pre></div>
+
+<p>Windows 选择了另一种设计：</p>
+<ul>
+<li><code>CreateFileW</code></li>
+<li><code>WriteFile</code></li>
+<li><code>SetFilePointerEx</code></li>
+<li><code>OpenProcess</code></li>
+<li><code>VirtualQueryEx</code></li>
+<li><code>ReadProcessMemory</code></li>
+</ul>
+<p>它为开发者提供更直接的专用 API，能够更高效地把结构体信息交给应用。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    U["UNIX"] --&gt; UF["统一文件 API"]
+    UF --&gt; P["procfs / devfs / 普通文件"]
+    W["Windows"] --&gt; WA["对象专用 API"]
+    WA --&gt; K["内核对象"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_15_29.png" alt="UNIX 统一文件抽象与 Windows 专用 API 的对比" loading="lazy">
+  <p class="video-caption">📷 UNIX 统一文件抽象与 Windows 专用 API 的对比<br><a href="https://www.bilibili.com/video/BV1QFQmB7EQD/?t=929" target="_blank" rel="noopener">回到原视频 (00:15:29)</a></p>
+</div>
+
+<hr />
+<h2 id="4-everything-is-a-file">4. Everything is a File</h2>
+<h3 id="41">4.1 什么是文件？</h3>
+<p>最朴素的解释是：</p>
+<blockquote>
+<p>一个有名字的数据对象，表现为可读写、可定位的字节序列。</p>
+</blockquote>
+<p>文件模型非常通用，因为数据流、数组、图片、文本、日志都可以表示成字节序列。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    F["文件"] --&gt; B["有名字的字节序列"]
+    B --&gt; R["read"]
+    B --&gt; W["write"]
+    B --&gt; S["lseek"]
+    B --&gt; C["close"]
+</code></pre></div>
+
+<h3 id="42">4.2 什么可以被“假装成文件”？</h3>
+<p>UNIX 把操作系统对象暴露成文件：</p>
+<ul>
+<li>普通文件：文本、图片、代码；</li>
+<li>设备文件：磁盘、终端、GPU、GPIO；</li>
+<li>伪设备：<code>/dev/null</code>、<code>/dev/urandom</code>；</li>
+<li>procfs：进程和内核状态；</li>
+<li>sysfs：内核与设备信息；</li>
+<li>管道：进程间字节流；</li>
+<li>套接字：网络与本地通信；</li>
+<li>共享内存对象。</li>
+</ul>
+<p>随后再用目录树给这些对象命名。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_18_15.png" alt="文件抽象覆盖数据流、设备、进程与通信" loading="lazy">
+  <p class="video-caption">📷 文件抽象覆盖数据流、设备、进程与通信<br><a href="https://www.bilibili.com/video/BV1QFQmB7EQD/?t=1095" target="_blank" rel="noopener">回到原视频 (00:18:15)</a></p>
+</div>
+
+<h3 id="43">4.3 文件系统可以构建信息系统</h3>
+<p>课程网站的在线评测系统本身就是一个例子：</p>
+<div class="highlight"><pre><span></span><code>/var/www/filerecv/OS2025/M1/&lt;student&gt;/&lt;timestamp&gt;.zip
+</code></pre></div>
+
+<p>提交完成后，后台评测程序监控目录，并生成：</p>
+<div class="highlight"><pre><span></span><code>&lt;timestamp&gt;.result
+</code></pre></div>
+
+<p>前端刷新页面时直接遍历目录树。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    W["Web 后端"] --&gt; F["提交目录"]
+    F --&gt; J["Online Judge 监控"]
+    J --&gt; R["生成 .result"]
+    R --&gt; U["前端遍历目录"]
+</code></pre></div>
+
+<p>文件系统的优点：</p>
+<ul>
+<li>人类可以直接查看和修改；</li>
+<li>命令行为工具可以组合；</li>
+<li>重判只需删除 <code>.result</code>；</li>
+<li>不需要为每个操作写专用后台工具。</li>
+</ul>
+<p>代价是缺少数据库那样的事务一致性保证。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_23_55.png" alt="课程 OJ 直接用文件系统组织提交和结果" loading="lazy">
+  <p class="video-caption">📷 课程 OJ 直接用文件系统组织提交和结果<br><a href="https://www.bilibili.com/video/BV1QFQmB7EQD/?t=1435" target="_blank" rel="noopener">回到原视频 (00:23:55)</a></p>
+</div>
+
+<p>例如重判所有提交，只需要删除旧结果：</p>
+<div class="highlight"><pre><span></span><code>find<span class="w"> </span>...<span class="w"> </span>-name<span class="w"> </span><span class="s1">'*.result'</span><span class="w"> </span>-delete
+</code></pre></div>
+
+<p>评测器再次扫描时，会重新处理缺少结果的任务。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_26_39.png" alt="用 find 删除结果文件触发批量重判" loading="lazy">
+  <p class="video-caption">📷 用 find 删除结果文件触发批量重判<br><a href="https://www.bilibili.com/video/BV1QFQmB7EQD/?t=1599" target="_blank" rel="noopener">回到原视频 (00:26:39)</a></p>
+</div>
+
+<h3 id="44-fhs">4.4 FHS</h3>
+<p>Linux 文件系统布局遵循 <strong>Filesystem Hierarchy Standard（FHS）</strong>：</p>
+<ul>
+<li><code>/bin</code>、<code>/usr/bin</code>；</li>
+<li><code>/etc</code>；</li>
+<li><code>/home</code>；</li>
+<li><code>/dev</code>；</li>
+<li><code>/proc</code>；</li>
+<li><code>/sys</code>；</li>
+<li><code>/var</code>；</li>
+<li><code>/tmp</code>。</li>
+</ul>
+<p>标准让用户和程序能够预测文件位置。macOS 虽然是 UNIX 系统，但并不完全遵循 Linux FHS。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_30_47.png" alt="Filesystem Hierarchy Standard 规定的目录结构" loading="lazy">
+  <p class="video-caption">📷 Filesystem Hierarchy Standard 规定的目录结构<br><a href="https://www.bilibili.com/video/BV1QFQmB7EQD/?t=1847" target="_blank" rel="noopener">回到原视频 (00:30:47)</a></p>
+</div>
+
+<hr />
+<h2 id="5-unix-philosophy">5. UNIX Philosophy：组合小工具</h2>
+<p><em>(参考时间: 00:33:08)</em></p>
+<p>UNIX Philosophy 可以概括为：</p>
+<ol>
+<li>每个程序只做一件事，并把它做好；</li>
+<li>程序能够协同工作；</li>
+<li>把文本流作为通用接口。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    E["一个工具的输出"] --&gt; T["文本流"]
+    T --&gt; P["管道"]
+    P --&gt; I["另一个工具的输入"]
+</code></pre></div>
+
+<p>文本接口同时面向：</p>
+<ul>
+<li>人类：容易查看、编辑和调试；</li>
+<li>机器：容易解析和组合；</li>
+<li>Agent：容易进入语言模型上下文。</li>
+</ul>
+<p>例如统计所有进程的 <code>VmRSS</code>：</p>
+<div class="highlight"><pre><span></span><code>grep<span class="w"> </span>-s<span class="w"> </span>VmRSS<span class="w"> </span>/proc/*<span class="o">[</span><span class="m">0</span>-9<span class="o">]</span>/status<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="p">|</span><span class="w"> </span>awk<span class="w"> </span><span class="s1">'{sum += $2} END {print sum " kB"}'</span>
+</code></pre></div>
+
+<p>这种“快速但不够严谨”的接口也有缺点，例如空格、引号和格式变化会让解析变得脆弱。AI 时代，Agent 可以生成更严格的程序或直接调用结构化 API。</p>
+<p>但“小工具组合”和“统一数据接口”的思想仍然有巨大价值。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_36_40.png" alt="UNIX 文本接口与管道组合" loading="lazy">
+  <p class="video-caption">📷 UNIX 文本接口与管道组合<br><a href="https://www.bilibili.com/video/BV1QFQmB7EQD/?t=2200" target="_blank" rel="noopener">回到原视频 (00:36:40)</a></p>
+</div>
+
+<hr />
+<h2 id="6">6. 文件在操作系统内部是什么</h2>
+<h3 id="61-crazyos">6.1 从 CrazyOS 理解文件对象</h3>
+<p>CrazyOS 中每个进程有输出缓冲区：</p>
+<div class="highlight"><pre><span></span><code><span class="k">struct</span><span class="w"> </span><span class="nc">proc</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">char</span><span class="w"> </span><span class="n">buf</span><span class="p">[</span><span class="n">BUFSIZE</span><span class="p">];</span>
+<span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">buf_len</span><span class="p">;</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<p>如果给它一个当前偏移：</p>
+<div class="highlight"><pre><span></span><code><span class="k">struct</span><span class="w"> </span><span class="nc">FILE</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">char</span><span class="w"> </span><span class="o">*</span><span class="n">data</span><span class="p">;</span>
+<span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">offset</span><span class="p">;</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<p>立即得到文件的最小模型：</p>
+<ul>
+<li><code>open</code>：分配 <code>struct FILE</code>；</li>
+<li><code>close</code>：释放 <code>struct FILE</code>；</li>
+<li><code>read</code>：从 <code>data + offset</code> 读取并推进 offset；</li>
+<li><code>write</code>：写入并推进 offset；</li>
+<li><code>lseek</code>：修改 offset；</li>
+<li><code>dup</code>：创建指向同一文件对象的新引用。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    O["open"] --&gt; F["struct FILE"]
+    F --&gt; D["data buffer"]
+    F --&gt; P["offset"]
+    R["read/write/lseek"] --&gt; F
+    C["close"] --&gt; F
+    U["dup"] --&gt; F
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_43_06.png" alt="CrazyOS 缓冲区与文件对象的关系" loading="lazy">
+  <p class="video-caption">📷 CrazyOS 缓冲区与文件对象的关系<br><a href="https://www.bilibili.com/video/BV1QFQmB7EQD/?t=2586" target="_blank" rel="noopener">回到原视频 (00:43:06)</a></p>
+</div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_45_19.png" alt="文件对象由数据缓冲区和当前偏移组成" loading="lazy">
+  <p class="video-caption">📷 文件对象由数据缓冲区和当前偏移组成<br><a href="https://www.bilibili.com/video/BV1QFQmB7EQD/?t=2719" target="_blank" rel="noopener">回到原视频 (00:45:19)</a></p>
+</div>
+
+<h3 id="62">6.2 应用不能直接持有内核指针</h3>
+<p><code>struct FILE</code> 位于内核地址空间，应用无法直接解引用。UNIX 使用一个整数间接引用对象：</p>
+<div class="highlight"><pre><span></span><code>文件描述符（File Descriptor）
+</code></pre></div>
+
+<p>文件描述符只对当前进程有意义，由操作系统负责解释。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    P["进程 FD 表"] --&gt; D0["FD 0"]
+    P --&gt; D1["FD 1"]
+    P --&gt; D2["FD 2"]
+    P --&gt; D3["FD 3"]
+    D0 --&gt; K["内核对象"]
+    D1 --&gt; K
+    D2 --&gt; K
+    D3 --&gt; K
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_49_31.png" alt="文件描述符是应用程序访问内核对象的间接指针" loading="lazy">
+  <p class="video-caption">📷 文件描述符是应用程序访问内核对象的间接指针<br><a href="https://www.bilibili.com/video/BV1QFQmB7EQD/?t=2971" target="_blank" rel="noopener">回到原视频 (00:49:31)</a></p>
+</div>
+
+<h3 id="63">6.3 三个标准描述符</h3>
+<p>进程启动时通常已有：</p>
+<table>
+<thead>
+<tr>
+<th>FD</th>
+<th>名称</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>stdin</td>
+<td>标准输入</td>
+</tr>
+<tr>
+<td>1</td>
+<td>stdout</td>
+<td>标准输出</td>
+</tr>
+<tr>
+<td>2</td>
+<td>stderr</td>
+<td>标准错误</td>
+</tr>
+</tbody>
+</table>
+<p><code>open</code> 总是分配当前最小的未使用描述符。</p>
+<p>例如：</p>
+<ul>
+<li>0、1、2 已使用，则新文件获得 3；</li>
+<li>关闭 FD 3 后再打开，新对象仍优先获得 3。</li>
+</ul>
+<div class="highlight"><pre><span></span><code><span class="n">write</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="s">"hello</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span><span class="w"> </span><span class="mi">6</span><span class="p">);</span>
+</code></pre></div>
+
+<p>本质上是在向 FD 1 对应的内核对象写入字节。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_57_04.png" alt="0、1、2 是进程默认继承的标准描述符" loading="lazy">
+  <p class="video-caption">📷 0、1、2 是进程默认继承的标准描述符<br><a href="https://www.bilibili.com/video/BV1QFQmB7EQD/?t=3424" target="_blank" rel="noopener">回到原视频 (00:57:04)</a></p>
+</div>
+
+<h3 id="64-windows-handle">6.4 Windows Handle</h3>
+<p>Windows 用 <strong>Handle</strong> 表示操作系统对象引用。Handle 更像带权限的“把柄”：</p>
+<ul>
+<li>不仅包含对象标识；</li>
+<li>也可能携带访问权限；</li>
+<li>不同 Handle 可以指向不同对象或具有不同权限。</li>
+</ul>
+<p>UNIX 文件描述符只是一个整数索引，权限语义更多保存在内核对象中。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_53_45.png" alt="Windows Handle 与 UNIX 文件描述符的差异" loading="lazy">
+  <p class="video-caption">📷 Windows Handle 与 UNIX 文件描述符的差异<br><a href="https://www.bilibili.com/video/BV1QFQmB7EQD/?t=3225" target="_blank" rel="noopener">回到原视频 (00:53:45)</a></p>
+</div>
+
+<hr />
+<h2 id="7-fork">7. 文件描述符与 fork 的复杂交互</h2>
+<p><em>(参考时间: 01:01:24)</em></p>
+<p>考虑：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">int</span><span class="w"> </span><span class="n">fd</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">open</span><span class="p">(</span><span class="s">"log.txt"</span><span class="p">,</span><span class="w"> </span><span class="n">O_WRONLY</span><span class="p">);</span>
+<span class="n">write</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span><span class="w"> </span><span class="s">"1"</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span>
+<span class="n">fork</span><span class="p">();</span>
+<span class="n">write</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span><span class="w"> </span><span class="s">"2"</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span>
+</code></pre></div>
+
+<p>问题是：最终文件里应该有几个 <code>2</code>？</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    O["打开 log.txt&lt;br/&gt;FD=3，offset=0"] --&gt; W1["写入 1&lt;br/&gt;offset=1"]
+    W1 --&gt; F["fork"]
+    F --&gt; P["父进程 FD=3"]
+    F --&gt; C["子进程 FD=3"]
+    P --&gt; W2["父进程写入 2"]
+    C --&gt; W3["子进程写入 2"]
+</code></pre></div>
+
+<p>有两种可能设计：</p>
+<h4 id="_3">深复制</h4>
+<p>父子进程拥有独立 offset，最终文件可能为：</p>
+<div class="highlight"><pre><span></span><code>12
+</code></pre></div>
+
+<p>双方从同一位置覆盖写入。</p>
+<h4 id="_4">浅复制</h4>
+<p>父子进程共享打开文件对象和 offset：</p>
+<div class="highlight"><pre><span></span><code>122
+</code></pre></div>
+
+<p>两次写入顺序追加。</p>
+<p>UNIX 选择浅复制。父子进程共享 offset，因此日志或追加型文件不会轻易互相覆盖。如果要获得独立 offset，可以再次 <code>open</code> 文件。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    P["父 FD"] --&gt; O["共享 open file description"]
+    C["子 FD"] --&gt; O
+    O --&gt; F["文件"]
+    O --&gt; S["共享 offset"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_04_15.png" alt="fork 后父子进程共享文件对象和 offset" loading="lazy">
+  <p class="video-caption">📷 fork 后父子进程共享文件对象和 offset<br><a href="https://www.bilibili.com/video/BV1QFQmB7EQD/?t=3855" target="_blank" rel="noopener">回到原视频 (01:04:15)</a></p>
+</div>
+
+<p>这种默认继承带来安全风险：父进程打开敏感文件后若忘记关闭，子进程通过 <code>execve</code> 执行的其他程序也可能继承该 FD。</p>
+<p>解决方案：</p>
+<div class="highlight"><pre><span></span><code><span class="n">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span><span class="w"> </span><span class="n">O_CLOEXEC</span><span class="p">);</span>
+</code></pre></div>
+
+<p>让描述符在 <code>execve</code> 时自动关闭，更接近“最小权限原则”。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_06_35.png" alt="O_CLOEXEC 避免文件描述符泄漏给新程序" loading="lazy">
+  <p class="video-caption">📷 O_CLOEXEC 避免文件描述符泄漏给新程序<br><a href="https://www.bilibili.com/video/BV1QFQmB7EQD/?t=3995" target="_blank" rel="noopener">回到原视频 (01:06:35)</a></p>
+</div>
+
+<hr />
+<h2 id="8">8. 看看系统里到底打开了什么</h2>
+<p><code>/proc/&lt;pid&gt;/fd/</code> 把每个进程的文件描述符映射为符号链接：</p>
+<div class="highlight"><pre><span></span><code>ls<span class="w"> </span>-l<span class="w"> </span>/proc/*/fd/*<span class="w"> </span><span class="m">2</span>&gt;/dev/null
+</code></pre></div>
+
+<p>可以看到：</p>
+<ul>
+<li><code>/dev/pts/...</code>：伪终端；</li>
+<li><code>/dev/tty...</code>：控制台；</li>
+<li><code>/dev/null</code>：空设备；</li>
+<li>GPU 渲染设备；</li>
+<li>输入设备；</li>
+<li>pipe；</li>
+<li>socket。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    P["进程 PID"] --&gt; FD["/proc/PID/fd"]
+    FD --&gt; N["FD 0 / 1 / 2 / ..."]
+    N --&gt; O["对应的内核对象"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_07_46.png" alt="通过 procfs 查看所有进程打开的文件" loading="lazy">
+  <p class="video-caption">📷 通过 procfs 查看所有进程打开的文件<br><a href="https://www.bilibili.com/video/BV1QFQmB7EQD/?t=4066" target="_blank" rel="noopener">回到原视频 (01:07:46)</a></p>
+</div>
+
+<p>只要权限允许，还可以直接向终端设备写数据：</p>
+<div class="highlight"><pre><span></span><code><span class="nb">echo</span><span class="w"> </span>hello<span class="w"> </span>&gt;<span class="w"> </span>/dev/pts/5
+</code></pre></div>
+
+<p>对应终端会立即显示内容。这说明 Everything is a File 不只是概念，而是可以真实操作的接口。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_10_13.png" alt="向另一个伪终端写入数据" loading="lazy">
+  <p class="video-caption">📷 向另一个伪终端写入数据<br><a href="https://www.bilibili.com/video/BV1QFQmB7EQD/?t=4213" target="_blank" rel="noopener">回到原视频 (01:10:13)</a></p>
+</div>
+
+<hr />
+<h2 id="9">9. 管道：进程间的字节流</h2>
+<h3 id="91">9.1 匿名管道</h3>
+<div class="highlight"><pre><span></span><code><span class="kt">int</span><span class="w"> </span><span class="nf">pipe</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">pipefd</span><span class="p">[</span><span class="mi">2</span><span class="p">]);</span>
+</code></pre></div>
+
+<p>系统会创建一个匿名管道对象，并返回两个文件描述符：</p>
+<ul>
+<li><code>pipefd[0]</code>：读端；</li>
+<li><code>pipefd[1]</code>：写端。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    W["写端 FD"] --&gt; P["Pipe 缓冲区"]
+    P --&gt; R["读端 FD"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_11_51.png" alt="匿名管道提供读端和写端两个文件描述符" loading="lazy">
+  <p class="video-caption">📷 匿名管道提供读端和写端两个文件描述符<br><a href="https://www.bilibili.com/video/BV1QFQmB7EQD/?t=4311" target="_blank" rel="noopener">回到原视频 (01:11:51)</a></p>
+</div>
+
+<p>管道具有阻塞行为：</p>
+<ul>
+<li>管道为空时，<code>read</code> 会等待；</li>
+<li>管道已满时，<code>write</code> 会等待；</li>
+<li>写端全部关闭后，读取会得到 EOF。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant W as 写进程
+    participant P as Pipe
+    participant R as 读进程
+    R-&gt;&gt;P: read，空管道
+    Note over R: 阻塞等待
+    W-&gt;&gt;P: write("hello")
+    P--&gt;&gt;R: 返回 "hello"
+    R-&gt;&gt;R: 继续运行
+</code></pre></div>
+
+<h3 id="92-fifo">9.2 命名管道 FIFO</h3>
+<p>如果不同时具有亲缘关系的进程也要通过管道通信，可以创建命名管道：</p>
+<div class="highlight"><pre><span></span><code>mkfifo<span class="w"> </span>/tmp/my.pipe
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code><span class="n">mkfifo</span><span class="p">(</span><span class="s">"/tmp/my.pipe"</span><span class="p">,</span><span class="w"> </span><span class="mo">0666</span><span class="p">);</span>
+</code></pre></div>
+
+<p>它在文件系统中有一个名字，但行为仍是管道：</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_14_00.png" alt="命名管道在目录中显示为 FIFO" loading="lazy">
+  <p class="video-caption">📷 命名管道在目录中显示为 FIFO<br><a href="https://www.bilibili.com/video/BV1QFQmB7EQD/?t=4440" target="_blank" rel="noopener">回到原视频 (01:14:00)</a></p>
+</div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_15_12.png" alt="命名管道的读端等待写端产生数据" loading="lazy">
+  <p class="video-caption">📷 命名管道的读端等待写端产生数据<br><a href="https://www.bilibili.com/video/BV1QFQmB7EQD/?t=4512" target="_blank" rel="noopener">回到原视频 (01:15:12)</a></p>
+</div>
+
+<h3 id="93-shell">9.3 Shell 管道如何工作</h3>
+<p>Shell 中的：</p>
+<div class="highlight"><pre><span></span><code>ls<span class="w"> </span><span class="p">|</span><span class="w"> </span>wc<span class="w"> </span>-l
+</code></pre></div>
+
+<p>大致流程：</p>
+<ol>
+<li>Shell 创建匿名管道；</li>
+<li><code>fork</code> 出两个子进程；</li>
+<li>左进程关闭写端，把 stdout 指向管道写端；</li>
+<li>右进程关闭写端，把 stdin 指向管道读端；</li>
+<li><code>execve</code> 分别执行 <code>ls</code> 和 <code>wc</code>。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    S["Shell"] --&gt; P["pipe()"]
+    P --&gt; L["fork + dup2&lt;br/&gt;stdout -&gt; 写端"]
+    P --&gt; R["fork + dup2&lt;br/&gt;stdin -&gt; 读端"]
+    L --&gt; LS["execve(ls)"]
+    R --&gt; WC["execve(wc)"]
+</code></pre></div>
+
+<p>课堂使用 AI 生成工具，自动读取 <code>/proc/&lt;pid&gt;/fd</code> 并绘制进程、FD 与管道之间的 Mermaid 关系图。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_21_28.png" alt="自动可视化父子进程与管道文件描述符" loading="lazy">
+  <p class="video-caption">📷 自动可视化父子进程与管道文件描述符<br><a href="https://www.bilibili.com/video/BV1QFQmB7EQD/?t=4888" target="_blank" rel="noopener">回到原视频 (01:21:28)</a></p>
+</div>
+
+<hr />
+<h2 id="10-testkit">10. TestKit：用进程运行测试</h2>
+<p><em>(参考时间: 01:27:03)</em></p>
+<p>课程 TestKit 使用 <code>fork</code> 为每个测试用例创建子进程：</p>
+<ol>
+<li>父进程注册测试；</li>
+<li>每个测试在独立子进程中运行；</li>
+<li>子进程崩溃或 <code>assert</code> 失败不会杀死整个测试进程；</li>
+<li>使用共享内存或管道收集子进程输出；</li>
+<li>设置超时，检测死循环；</li>
+<li>父进程汇总通过和失败结果。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    P["TestKit 主进程"] --&gt; T1["fork 测试 1"]
+    P --&gt; T2["fork 测试 2"]
+    P --&gt; T3["fork 测试 3"]
+    T1 --&gt; R["收集结果"]
+    T2 --&gt; R
+    T3 --&gt; R
+    R --&gt; S["汇总 PASS / FAIL"]
+</code></pre></div>
+
+<p>这正是此前学过的进程、地址空间、文件和管道 API 的综合应用。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_27_03.png" alt="TestKit 在子进程中运行每个测试并汇总结果" loading="lazy">
+  <p class="video-caption">📷 TestKit 在子进程中运行每个测试并汇总结果<br><a href="https://www.bilibili.com/video/BV1QFQmB7EQD/?t=5223" target="_blank" rel="noopener">回到原视频 (01:27:03)</a></p>
+</div>
+
+<hr />
+<h2 id="11">11. 本讲总结</h2>
+<div class="highlight"><pre><span></span><code>mindmap
+  root((访问操作系统对象))
+    Everything is a File
+      字节序列
+      有名字对象
+      数据流
+      设备
+      procfs / devfs
+      socket / pipe
+    UNIX Philosophy
+      Do one thing well
+      Work together
+      Text stream interface
+      Tool composition
+    UNIX 文件模型
+      struct FILE
+      buffer + offset
+      open / close
+      read / write / lseek / dup
+    文件描述符
+      FD 0/1/2
+      最小未使用编号
+      Fork 共享 offset
+      O_CLOEXEC
+      Windows Handle
+    procfs
+      /proc/PID/fd
+      查看打开对象
+      /dev/pts
+    管道
+      pipe()
+      读端 / 写端
+      阻塞与容量
+      FIFO
+      shell 管线
+    TestKit
+      fork 子进程
+      崩溃隔离
+      超时
+      结果汇总
+</code></pre></div>
+
+<p>核心结论：</p>
+<ol>
+<li>操作系统对象包括文件、设备、管道、套接字、进程等多种资源。</li>
+<li>UNIX 用统一文件抽象复用 open/read/write/lseek/close。</li>
+<li>Windows 更倾向提供对象专用 API 和 Handle。</li>
+<li>文件可表示数据流、数组、设备和进程状态。</li>
+<li>文件系统可以构建包括在线评测在内的大量信息系统。</li>
+<li>文件在最小模型中由数据缓冲区和 offset 组成。</li>
+<li>文件描述符是用户态访问内核对象的整数指针。</li>
+<li>0、1、2 分别对应 stdin、stdout、stderr。</li>
+<li><code>open</code> 返回最小未使用的文件描述符。</li>
+<li><code>fork</code> 后父子进程共享打开文件对象和 offset。</li>
+<li><code>O_CLOEXEC</code> 防止敏感文件描述符泄漏给 <code>execve</code> 后的程序。</li>
+<li>管道是带阻塞语义和有限容量的内核字节缓冲区。</li>
+<li>Shell 管道本质上是 <code>pipe + fork + dup2 + execve</code>。</li>
+<li>TestKit 展示了进程、文件描述符、管道与共享内存的综合应用。</li>
+</ol>
+<blockquote>
+<p>UNIX 的核心设计不是拥有最多专用 API，<br />
+而是用少量通用机制组合出几乎无限的应用。</p>
+</blockquote>
+<hr />
+<h2 id="_5">附：官方参考与延伸阅读</h2>
+<p>课程与讲义：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/2026/">《操作系统原理》2026 课程主页</a></li>
+<li><a href="https://jyywiki.cn/OS/2026/lect7.md">第 7 讲讲义：访问操作系统对象</a></li>
+<li><a href="https://jyywiki.cn/OS/2026/video/BV1QFQmB7EQD/">本讲视频</a></li>
+</ul>
+<p>课程演示：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/demos/virtualization/crazy-os">CrazyOS</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/virtualization/filedesc">文件描述符</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/virtualization/pipe">UNIX 管道</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/virtualization/testkit">TestKit 测试框架</a></li>
+</ul>
+<p>规范与资料：</p>
+<ul>
+<li><a href="http://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html">Filesystem Hierarchy Standard 3.0</a></li>
+<li><a href="https://web.mit.edu/~simsong/www/ugh.pdf">The UNIX-HATERS Handbook</a></li>
+<li><a href="https://dl.acm.org/doi/10.1145/3317550.3321432">A Fork in the Road</a></li>
+</ul>
+<p>阅读材料：</p>
+<ul>
+<li><em>Operating Systems: Three Easy Pieces</em></li>
+<li>第 39 章：Files and Directories。</li>
+<li><code>man 2 open</code></li>
+<li><code>man 2 close</code></li>
+<li><code>man 2 read</code></li>
+<li><code>man 2 write</code></li>
+<li><code>man 2 lseek</code></li>
+<li><code>man 2 dup</code></li>
+<li><code>man 2 pipe</code></li>
+<li><code>man 3 mkfifo</code></li>
+<li><code>man 5 proc</code></li>
+</ul>
+<blockquote>
+<p><strong>版权说明</strong>：课程讲义与幻灯片的著作权归蒋炎岩所有，采用 Creative Commons BY-NC 4.0 许可。电子书正文为课堂内容的书面化重构，脚本占位符已替换为视频画面或官方资料渲染图；引用与来源链接均保留在本页。</p>
+</blockquote>
+    </article>
+
+    <!-- Mermaid 图表引擎初始化 -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            mermaid.initialize({ startOnLoad: false, theme: 'default' });
+            
+            // 兼容普通代码块以及丢失 language-mermaid 类名的情况 (CodeHilite 干扰)
+            const codeNodes = document.querySelectorAll('pre code, .highlight code');
+            codeNodes.forEach(function(node) {
+                const text = node.textContent.trim();
+                // 匹配常见的 mermaid 图表前缀
+                if (text.startsWith('graph ') || text.startsWith('flowchart ') || text.startsWith('sequenceDiagram') || text.startsWith('gantt') || text.startsWith('pie') || text.startsWith('classDiagram') || text.startsWith('stateDiagram') || text.startsWith('mindmap')) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.className = 'mermaid';
+                    tempDiv.textContent = text;
+                    
+                    // 获取需要替换的最外层父节点 (比如 div.highlight 或者 pre)
+                    const wrapper = node.closest('.highlight') || node.parentNode;
+                    wrapper.replaceWith(tempDiv); 
+                }
+            });
+            
+            // 所有节点转换完成，统一进行图表动态绘制
+            mermaid.run();
+        });
+    </script>
+    <!-- Lightbox：截图点击放大 -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const lightbox = document.createElement('div');
+            lightbox.className = 'lightbox';
+            lightbox.innerHTML = '<img alt=""><div class="lightbox-caption"></div>';
+            document.body.appendChild(lightbox);
+            const lbImg = lightbox.querySelector('img');
+            const lbCap = lightbox.querySelector('.lightbox-caption');
+            function openLightbox(src, alt) {
+                lbImg.src = src; lbImg.alt = alt || '';
+                lbCap.textContent = alt || '';
+                lightbox.classList.add('open');
+                document.body.style.overflow = 'hidden';
+            }
+            function closeLightbox() {
+                lightbox.classList.remove('open');
+                lbImg.src = '';
+                document.body.style.overflow = '';
+            }
+            document.querySelectorAll('.screenshot-card img').forEach(function(img) {
+                img.addEventListener('click', function() { openLightbox(img.src, img.alt); });
+            });
+            lightbox.addEventListener('click', closeLightbox);
+            document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
+        });
+    </script>
+</body>
+</html>
