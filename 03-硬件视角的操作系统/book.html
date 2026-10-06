@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>硬件视角的操作系统：从 CPU Reset 到固件</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* ── 基础重置 ── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            color-scheme: light;
+            --bg-primary: #f7f7f8;
+            --bg-secondary: #ffffff;
+            --bg-card: #eef0f3;
+            --bg-code: #f2f3f5;
+            --text-primary: #1f2328;
+            --text-secondary: #57606a;
+            --text-muted: #6e7781;
+            --accent: #2563eb;
+            --accent-glow: rgba(37, 99, 235, 0.08);
+            --border: #d9dce1;
+            --border-subtle: #e7e9ec;
+            --radius: 12px;
+            --shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Serif SC', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.8;
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── 文章容器 ── */
+        .book-content {
+            max-width: 780px;
+            margin: 0 auto;
+            padding: 60px 32px 120px;
+        }
+
+        /* ── 标题 ── */
+        h1 {
+            font-size: 2.2em;
+            font-weight: 700;
+            margin: 0 0 12px;
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+        }
+
+        h2 {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 56px 0 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h3 {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: var(--accent);
+            margin: 36px 0 12px;
+        }
+
+        /* ── 段落与文字 ── */
+        p {
+            margin: 0 0 16px;
+            color: var(--text-primary);
+        }
+
+        strong {
+            color: #0f172a;
+            font-weight: 600;
+        }
+
+        em {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.2s;
+        }
+        a:hover {
+            border-bottom-color: var(--accent);
+        }
+
+        /* ── 引用 ── */
+        blockquote {
+            margin: 24px 0;
+            padding: 16px 20px;
+            background: var(--bg-secondary);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 var(--radius) var(--radius) 0;
+            color: var(--text-secondary);
+        }
+        blockquote p { margin: 0; }
+
+        /* ── 列表 ── */
+        ul, ol {
+            margin: 12px 0 20px 24px;
+            color: var(--text-primary);
+        }
+        li {
+            margin: 6px 0;
+        }
+
+        /* ── 分割线 ── */
+        hr {
+            border: none;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border), transparent);
+            margin: 48px 0;
+        }
+
+        /* ── 表格 ── */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 24px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+        thead {
+            background: var(--bg-card);
+        }
+        th {
+            padding: 12px 16px;
+            font-weight: 600;
+            text-align: left;
+            color: var(--accent);
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        td {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border-subtle);
+        }
+        tbody tr {
+            background: var(--bg-secondary);
+            transition: background 0.15s;
+        }
+        tbody tr:hover {
+            background: var(--bg-card);
+        }
+
+        /* ── 代码 ── */
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-code);
+            padding: 2px 7px;
+            border-radius: 5px;
+            font-size: 0.88em;
+            color: #6d28d9;
+        }
+
+        pre {
+            margin: 20px 0;
+            padding: 20px 24px;
+            background: var(--bg-code);
+            border-radius: var(--radius);
+            overflow-x: auto;
+            border: 1px solid var(--border);
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9em;
+            color: var(--text-primary);
+        }
+
+        /* ── 视频嵌入卡片 ── */
+        .video-card {
+            margin: 32px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .video-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(15, 23, 42, 0.12);
+        }
+
+        .video-wrapper {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 */
+            height: 0;
+            overflow: hidden;
+        }
+        .video-wrapper iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .video-card img {
+            width: 100%;
+            display: block;
+        }
+
+        .video-caption {
+            padding: 12px 16px;
+            font-size: 0.88em;
+            color: var(--text-secondary);
+            text-align: center;
+            line-height: 1.6;
+            margin: 0;
+        }
+        .video-caption a {
+            color: var(--accent);
+        }
+
+        .video-card.fallback {
+            padding: 20px;
+            text-align: center;
+        }
+
+        /* ── Lightbox：截图点击放大 ── */
+        .screenshot-card img { cursor: zoom-in; transition: opacity 0.15s; }
+        .screenshot-card img:hover { opacity: 0.9; }
+        .lightbox {
+            position: fixed; inset: 0; z-index: 999;
+            display: none; align-items: center; justify-content: center;
+            background: rgba(5, 5, 8, 0.92); backdrop-filter: blur(4px);
+            cursor: zoom-out; padding: 24px;
+        }
+        .lightbox.open { display: flex; }
+        .lightbox img {
+            max-width: 96vw; max-height: 90vh;
+            border-radius: 8px; box-shadow: 0 12px 60px rgba(0,0,0,0.7);
+        }
+        .lightbox-caption {
+            position: absolute; bottom: 14px; left: 0; right: 0;
+            text-align: center; color: var(--text-secondary); font-size: 0.85em;
+        }
+
+        /* ── 顶部信息栏 ── */
+        .book-content > blockquote:first-of-type {
+            background: var(--accent-glow);
+            border-left-color: var(--accent);
+            border-radius: var(--radius);
+            margin-bottom: 32px;
+        }
+
+        /* ── 图表居中 ── */
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            margin: 32px 0;
+            overflow-x: auto;
+        }
+
+        /* ── 滚动条 ── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* ── 响应式 ── */
+        @media (max-width: 640px) {
+            .book-content { padding: 32px 16px 80px; }
+            h1 { font-size: 1.7em; }
+            h2 { font-size: 1.3em; }
+        }
+    </style>
+</head>
+<body>
+    <article class="book-content">
+        <h1 id="cpu-reset">硬件视角的操作系统：从 CPU Reset 到固件</h1>
+<blockquote>
+<p><strong>课程</strong>：2026 春季学期《操作系统原理》，第 3 讲<br />
+<strong>讲师</strong>：蒋炎岩（jyy）<br />
+<strong>官方课程主页</strong>：<a href="https://jyywiki.cn/OS/2026/">https://jyywiki.cn/OS/2026/</a><br />
+<strong>官方讲义</strong>：<a href="https://jyywiki.cn/OS/2026/lect3.md">https://jyywiki.cn/OS/2026/lect3.md</a><br />
+<strong>视频来源</strong>：<a href="https://www.bilibili.com/video/BV18fcozAEsy/">Bilibili BV18fcozAEsy</a><br />
+<strong>版权说明</strong>：课程讲义与幻灯片归蒋炎岩所有，采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书是对课堂讲授的书面化重构，保留出处与许可说明。</p>
+</blockquote>
+<h2 id="_1">导读：硬件根本不知道有没有操作系统</h2>
+<p>上一讲从应用视角把操作系统理解为“一组 API 和对象”。本讲切换到硬件视角，给出一个极其重要的结论：</p>
+<blockquote>
+<p><strong>硬件根本不知道有没有操作系统。</strong></p>
+</blockquote>
+<p>CPU 只是一台无情执行指令的状态机。它不会判断当前跑的是 Linux、Windows、裸机程序还是病毒；它按照手册规定，从 PC 取值、译码、执行、响应中断，然后进入下一状态。</p>
+<p>操作系统之所以能够存在，是因为硬件提供了一些关键机制：</p>
+<ul>
+<li>明确规定的 CPU Reset 初始状态；</li>
+<li>指令集与特权级；</li>
+<li>中断和异常；</li>
+<li>内存映射 I/O；</li>
+<li>对外部设备的输入输出能力；</li>
+<li>多处理器启动与核间通信。</li>
+</ul>
+<p>本讲将沿着一次真实的计算机启动过程，从 CPU Reset 开始，经过固件、BIOS/UEFI、启动扇区，最终进入操作系统。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_11_25.png" alt="从硬件视角理解操作系统" loading="lazy">
+  <p class="video-caption">📷 从硬件视角理解操作系统<br><a href="https://www.bilibili.com/video/BV18fcozAEsy/?t=685" target="_blank" rel="noopener">回到原视频 (00:11:25)</a></p>
+</div>
+
+<hr />
+<h2 id="1">1. 学习的方法：从“麻烦”中建立能力</h2>
+<p><em>(参考时间: 00:00:00)</em></p>
+<p>课程示例代码常需要下载、编译和配置环境。过去，这类操作可能消耗大量时间；今天，Agent 可以主动读取网页、递归下载目录、理解构建方式并运行示例。</p>
+<p>一个重要方法是：</p>
+<blockquote>
+<p><strong>我在做 X。如果你是这个领域的专家，你会怎么做？</strong></p>
+</blockquote>
+<p>这句话让 AI 不只是回答问题，而是以专家视角提出流程、工具和检查方法。学习者可以：</p>
+<ul>
+<li>被动观察 Agent 如何完成任务；</li>
+<li>主动追问每一步为什么这样做；</li>
+<li>让 Copilot 持续观察操作并提出建议；</li>
+<li>通过 AI 把当前任务与已有知识连接起来。</li>
+</ul>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_03_08.png" alt="专家视角的 Prompt 与 AI 辅助学习" loading="lazy">
+  <p class="video-caption">📷 专家视角的 Prompt 与 AI 辅助学习<br><a href="https://www.bilibili.com/video/BV18fcozAEsy/?t=188" target="_blank" rel="noopener">回到原视频 (00:03:08)</a></p>
+</div>
+
+<p>课堂演示了 Agent 使用 <code>curl</code>、<code>wget</code> 等工具递归下载课程示例的过程。即使 Agent 第一次没有保留目录结构，也可以通过观察错误、追问和再次执行完成修正。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_04_20.png" alt="让 Agent 下载并整理课程示例代码" loading="lazy">
+  <p class="video-caption">📷 让 Agent 下载并整理课程示例代码<br><a href="https://www.bilibili.com/video/BV18fcozAEsy/?t=260" target="_blank" rel="noopener">回到原视频 (00:04:20)</a></p>
+</div>
+
+<h3 id="11">1.1 主动学习与被动学习</h3>
+<p>两种方式都很有效：</p>
+<h4 id="_2">主动学习</h4>
+<ul>
+<li>追问 Agent 为什么选择某个工具；</li>
+<li>要求解释命令、原理和替代方案；</li>
+<li>对每一步进行验证和实验。</li>
+</ul>
+<h4 id="_3">被动学习</h4>
+<ul>
+<li>观察专家 Agent 的完整操作过程；</li>
+<li>定期让 AI 回顾刚才做了什么；</li>
+<li>从真实调试与修复中学习工作方法。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    T["遇到麻烦任务"] --&gt; A["让专家 Agent 执行"]
+    A --&gt; O["观察操作与错误"]
+    O --&gt; Q["主动追问原因"]
+    Q --&gt; R["复现与验证"]
+    R --&gt; K["形成可复用能力"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_06_48.png" alt="主动观察与询问专家 Agent" loading="lazy">
+  <p class="video-caption">📷 主动观察与询问专家 Agent<br><a href="https://www.bilibili.com/video/BV18fcozAEsy/?t=408" target="_blank" rel="noopener">回到原视频 (00:06:48)</a></p>
+</div>
+
+<p>AI 时代的学习效率可能达到过去十倍、百倍甚至千倍。关键不是取消思考，而是把时间从低价值摸索转向概念建立、验证和创造。</p>
+<hr />
+<h2 id="2">2. 复习：软件、硬件与操作系统</h2>
+<p><em>(参考时间: 00:09:28)</em></p>
+<p>前两讲已经建立了三个层次的状态机模型：</p>
+<table>
+<thead>
+<tr>
+<th>层次</th>
+<th>初始状态</th>
+<th>状态迁移</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>软件</td>
+<td><code>stack=[main(argc, argv), globals]</code></td>
+<td>执行一条语句</td>
+</tr>
+<tr>
+<td>硬件</td>
+<td>CPU Reset</td>
+<td>执行一条指令或响应中断</td>
+</tr>
+<tr>
+<td>操作系统</td>
+<td>启动完成后的内核状态</td>
+<td>响应中断、系统调用并管理对象</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    C["C / SimpleC 程序&lt;br/&gt;语句级状态机"] --&gt; B["编译与链接"]
+    B --&gt; E["ELF 可执行文件&lt;br/&gt;指令级状态机"]
+    E --&gt; S["syscall / ecall / svc"]
+    S --&gt; O["操作系统"]
+    O --&gt; H["硬件状态机"]
+    H --&gt;|"中断"| O
+</code></pre></div>
+
+<p>应用程序通过特殊指令请求操作系统服务；操作系统本身也是一个普通的二进制程序，只是它拥有更高特权并能接管硬件资源。</p>
+<hr />
+<h2 id="3">3. 什么是计算机硬件</h2>
+<h3 id="31">3.1 无情的状态机</h3>
+<p>计算机硬件的核心模型可以概括为：</p>
+<blockquote>
+<p><strong>无情执行指令的机器。</strong></p>
+</blockquote>
+<ul>
+<li>状态：寄存器和内存；</li>
+<li>初始状态：由系统设计者规定，即 CPU Reset；</li>
+<li>状态迁移：从 PC 取指令、译码、执行。</li>
+</ul>
+<p>这个模型大体正确，但忽略了一些使操作系统能够实现的关键细节。</p>
+<p>例如：</p>
+<div class="highlight"><pre><span></span><code><span class="nf">jmp</span><span class="w"> </span><span class="p">.</span>
+</code></pre></div>
+
+<p>这是一条永不离开当前位置的死循环指令。如果硬件没有任何外部干预机制，整个系统就会永久卡死，操作系统也无法重新获得控制权。</p>
+<p>因此，硬件必须提供额外的外部状态和事件机制。</p>
+<h3 id="32">3.2 内部状态与外部状态</h3>
+<p>计算机系统可以分为：</p>
+<h4 id="_4">内部状态</h4>
+<div class="highlight"><pre><span></span><code><span class="k">struct</span><span class="w"> </span><span class="nc">CPUState</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">regs</span><span class="p">[</span><span class="mi">32</span><span class="p">];</span>
+<span class="w">    </span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">csrs</span><span class="p">[</span><span class="n">CSR_COUNT</span><span class="p">];</span>
+<span class="w">    </span><span class="kt">uint8_t</span><span class="w"> </span><span class="o">*</span><span class="n">mem</span><span class="p">;</span>
+<span class="w">    </span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">mem_offset</span><span class="p">;</span>
+<span class="w">    </span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">mem_size</span><span class="p">;</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<h4 id="_5">外部状态</h4>
+<p>计算机无法完全控制的物理世界，包括：</p>
+<ul>
+<li>设备上的寄存器；</li>
+<li>Memory-mapped I/O；</li>
+<li>GPIO 引脚电平；</li>
+<li>中断线；</li>
+<li>Reset 线；</li>
+<li>网络、磁盘、摄像头等真实设备。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    C["CPU 内部状态"] &lt;--&gt; M["内存"]
+    C &lt;--&gt; D["设备寄存器 / MMIO"]
+    D &lt;--&gt; W["物理世界"]
+    E["外部事件"] --&gt;|"Interrupt"| C
+    R["Reset 信号"] --&gt;|"强制初始化"| C
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_20_21.png" alt="硬件状态与外部物理世界" loading="lazy">
+  <p class="video-caption">📷 硬件状态与外部物理世界<br><a href="https://www.bilibili.com/video/BV18fcozAEsy/?t=1221" target="_blank" rel="noopener">回到原视频 (00:20:21)</a></p>
+</div>
+
+<h3 id="33-gpio">3.3 GPIO：程序和物理世界之间的线</h3>
+<p>GPIO（General Purpose Input/Output）是通用输入输出引脚。内核代码可以通过类似接口控制电平：</p>
+<div class="highlight"><pre><span></span><code><span class="n">gpio_set_value</span><span class="p">(</span><span class="n">GPIO_23</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span>
+<span class="n">gpio_set_value</span><span class="p">(</span><span class="n">GPIO_23</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">);</span>
+</code></pre></div>
+
+<p>若在 GPIO 上连接发光二极管，交替写入 1 和 0，就会看到 LED 闪烁。</p>
+<p>概念非常简单：</p>
+<ul>
+<li>拉高电平：输出 1；</li>
+<li>拉低电平：输出 0；</li>
+<li>读取电平：获得外部输入；</li>
+<li>连接传感器、继电器、机械结构，就能操作真实世界。</li>
+</ul>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_25_16.png" alt="GPIO 控制外部发光二极管" loading="lazy">
+  <p class="video-caption">📷 GPIO 控制外部发光二极管<br><a href="https://www.bilibili.com/video/BV18fcozAEsy/?t=1516" target="_blank" rel="noopener">回到原视频 (00:25:16)</a></p>
+</div>
+
+<p>课堂让 AI 使用 <code>gpioinfo</code> 扫描系统，发现树莓派有大量 GPIO 控制器，其中一部分引脚可供电、可控制，或者连接内置 SPI、蓝牙、Wi-Fi 等设备。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_27_07.png" alt="扫描系统中的 GPIO 控制器与可用引脚" loading="lazy">
+  <p class="video-caption">📷 扫描系统中的 GPIO 控制器与可用引脚<br><a href="https://www.bilibili.com/video/BV18fcozAEsy/?t=1627" target="_blank" rel="noopener">回到原视频 (00:27:07)</a></p>
+</div>
+
+<h3 id="34">3.4 中断：操作系统获得控制权的关键</h3>
+<p>如果没有中断，一个运行死循环的程序会永久占据 CPU。中断线提供了外部打断能力：</p>
+<div class="highlight"><pre><span></span><code>if (interrupt_pending) {
+    save_current_context();
+    jump_to_interrupt_vector();
+}
+</code></pre></div>
+
+<p>中断可能来自：</p>
+<ul>
+<li>时钟；</li>
+<li>键盘；</li>
+<li>网卡收到数据包；</li>
+<li>磁盘完成 I/O；</li>
+<li>其他处理器；</li>
+<li>软件异常。</li>
+</ul>
+<p>中断到来时，CPU 会暂停当前指令流，跳转到预先设置的处理入口。</p>
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant A as 应用程序
+    participant CPU
+    participant OS as 操作系统中断处理程序
+    participant D as 外部设备
+    A-&gt;&gt;CPU: 持续执行指令
+    D-&gt;&gt;CPU: 发出中断
+    CPU-&gt;&gt;OS: 保存上下文并跳转
+    OS-&gt;&gt;D: 处理设备事件
+    OS-&gt;&gt;CPU: 恢复上下文
+    CPU-&gt;&gt;A: 继续执行
+</code></pre></div>
+
+<p>中断机制使操作系统能够拥有“霸主地位”。普通应用无权关闭硬件中断；如果尝试执行特权指令，通常会产生异常并终止。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_29_01.png" alt="中断机制使操作系统可以随时夺回 CPU" loading="lazy">
+  <p class="video-caption">📷 中断机制使操作系统可以随时夺回 CPU<br><a href="https://www.bilibili.com/video/BV18fcozAEsy/?t=1741" target="_blank" rel="noopener">回到原视频 (00:29:01)</a></p>
+</div>
+
+<p>如果操作系统在内核态错误地关闭中断并进入死循环，系统就可能真正死机。这也是历史电脑需要 Reset 按钮的原因之一。</p>
+<h3 id="35-reset">3.5 Reset：强制回到初始状态</h3>
+<p>早期台式机通常有 Reset 按钮。按下后，它通过电路直接向 CPU 发出 Reset 信号：</p>
+<ul>
+<li>不依赖操作系统配合；</li>
+<li>不要求程序主动退出；</li>
+<li>将 CPU 强制带回厂商规定的初始状态。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    R["Reset 信号"] --&gt; P["PC 设为规定值"]
+    P --&gt; I["中断关闭"]
+    I --&gt; M["执行固件第一条指令"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_32_29.png" alt="Reset 按钮将机器强制恢复到初始状态" loading="lazy">
+  <p class="video-caption">📷 Reset 按钮将机器强制恢复到初始状态<br><a href="https://www.bilibili.com/video/BV18fcozAEsy/?t=1949" target="_blank" rel="noopener">回到原视频 (00:32:29)</a></p>
+</div>
+
+<p>现代笔记本通常没有独立 Reset 按钮，但长按电源键会通过硬件电路触发强制复位。</p>
+<h3 id="36-cpu-reset">3.6 CPU Reset 是可观察的真实状态</h3>
+<p><em>(参考时间: 00:39:31)</em></p>
+<p>课堂使用 QEMU 与 GDB，在 RISC-V 和 ARM64 上直接观察 Reset 后的寄存器状态与最初执行的指令。</p>
+<p>RISC-V 演示中，自定义代码最先执行：</p>
+<div class="highlight"><pre><span></span><code><span class="nf">addi</span><span class="w"> </span><span class="no">a6</span><span class="p">,</span><span class="w"> </span><span class="no">zero</span><span class="p">,</span><span class="w"> </span><span class="mi">8</span>
+<span class="nf">addi</span><span class="w"> </span><span class="no">a7</span><span class="p">,</span><span class="w"> </span><span class="no">zero</span><span class="p">,</span><span class="w"> </span><span class="mi">16</span>
+<span class="nf">ebreak</span>
+</code></pre></div>
+
+<p>执行后可以看到 <code>a6=8</code>、<code>a7=16</code>，证明程序确实从 CPU Reset 规定的位置开始，并且寄存器变化完全符合指令语义。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_42_31.png" alt="RISC-V CPU Reset 后的状态与指令 trace" loading="lazy">
+  <p class="video-caption">📷 RISC-V CPU Reset 后的状态与指令 trace<br><a href="https://www.bilibili.com/video/BV18fcozAEsy/?t=2551" target="_blank" rel="noopener">回到原视频 (00:42:31)</a></p>
+</div>
+
+<p>ARM64 也可以做同样的实验。关键在于建立正确概念：CPU Reset 不是抽象传说，而是一组明确定义、可以调试的状态。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_44_00.png" alt="通过最小固件观察 ARM64 Reset 状态" loading="lazy">
+  <p class="video-caption">📷 通过最小固件观察 ARM64 Reset 状态<br><a href="https://www.bilibili.com/video/BV18fcozAEsy/?t=2640" target="_blank" rel="noopener">回到原视频 (00:44:00)</a></p>
+</div>
+
+<h3 id="37">3.7 多处理器：状态迁移变得不确定</h3>
+<p>现代计算机几乎都是多处理器系统。概念模型可以写成：</p>
+<ul>
+<li>每个 CPU 有独立寄存器；</li>
+<li>所有 CPU 共享内存；</li>
+<li>每个状态周期可以选择某一个 CPU 执行一条指令；</li>
+<li>每个 CPU 也可能响应中断。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    S["共享内存"] --&gt; C0["CPU 0 寄存器"]
+    S --&gt; C1["CPU 1 寄存器"]
+    S --&gt; C2["CPU 2 寄存器"]
+    N["下一状态"] --&gt; A["CPU 0 执行"]
+    N --&gt; B["CPU 1 执行"]
+    N --&gt; C["CPU 2 执行"]
+    N --&gt; I["响应中断"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_46_47.png" alt="多处理器系统的共享状态与并发迁移" loading="lazy">
+  <p class="video-caption">📷 多处理器系统的共享状态与并发迁移<br><a href="https://www.bilibili.com/video/BV18fcozAEsy/?t=2807" target="_blank" rel="noopener">回到原视频 (00:46:47)</a></p>
+</div>
+
+<p>每次状态迁移可能有多个选择，因此同一个并发程序多次运行可能得到不同结果。这既是多核系统强大能力的来源，也是并发复杂性的根源。</p>
+<h3 id="38">3.8 操作系统最终成为一个中断处理程序</h3>
+<p>操作系统启动完成后，大部分时间并不持续占用 CPU。它保存在内存中，等待：</p>
+<ul>
+<li>时钟中断；</li>
+<li>设备中断；</li>
+<li>系统调用；</li>
+<li>异常；</li>
+<li>核间消息。</li>
+</ul>
+<p>当事件到来，操作系统接管 CPU，完成服务后返回应用。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    F["固件与启动代码"] --&gt; K["操作系统初始化"]
+    K --&gt; W["等待中断或 syscall"]
+    W --&gt; H["处理系统事件"]
+    H --&gt; W
+</code></pre></div>
+
+<p>从硬件视角看，操作系统是一个普通二进制程序；运行起来以后，它主要表现为一个高特权的中断与系统调用处理程序。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_51_02.png" alt="操作系统启动后成为系统服务与中断处理者" loading="lazy">
+  <p class="video-caption">📷 操作系统启动后成为系统服务与中断处理者<br><a href="https://www.bilibili.com/video/BV18fcozAEsy/?t=3062" target="_blank" rel="noopener">回到原视频 (00:51:02)</a></p>
+</div>
+
+<hr />
+<h2 id="4-cpu-reset">4. 固件：CPU Reset 后执行的第一段代码</h2>
+<h3 id="41">4.1 谁把第一条合法指令放在了内存里？</h3>
+<p><em>(参考时间: 00:52:57)</em></p>
+<p>RAM 是易失性存储，断电后内容消失。CPU Reset 时，普通内存中不可能天然存在一段准备好的操作系统。</p>
+<p>答案由主板和系统厂商提供：</p>
+<blockquote>
+<p>将一块只读存储或闪存以内存映射方式放到 CPU Reset 后要执行的地址。</p>
+</blockquote>
+<p>这段代码从出生起就拥有机器的完整控制权，称为 <strong>Firmware（固件）</strong>。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    R["CPU Reset"] --&gt; A["固定入口地址"]
+    A --&gt; F["Firmware / ROM / Flash"]
+    F --&gt; D["扫描和初始化硬件"]
+    D --&gt; B["加载 Boot Loader"]
+    B --&gt; O["加载操作系统"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_54_36.png" alt="固件是 CPU Reset 后执行的第一段合法代码" loading="lazy">
+  <p class="video-caption">📷 固件是 CPU Reset 后执行的第一段合法代码<br><a href="https://www.bilibili.com/video/BV18fcozAEsy/?t=3276" target="_blank" rel="noopener">回到原视频 (00:54:36)</a></p>
+</div>
+
+<h3 id="42">4.2 固件的职责</h3>
+<p>固件至少要完成：</p>
+<ul>
+<li>扫描和识别基础硬件；</li>
+<li>初始化内存、总线和设备；</li>
+<li>配置处理器功能；</li>
+<li>初始化显示与输入设备；</li>
+<li>查找可启动设备；</li>
+<li>加载引导程序；</li>
+<li>将控制权交给操作系统。</li>
+</ul>
+<p>开机时按 Del、F2、F1、Esc、F10 或 F12 等按键，可以进入固件配置界面。不同品牌的按键不统一，但都能看到一部分硬件配置能力：</p>
+<ul>
+<li>开关 CPU 核心或硬件虚拟化；</li>
+<li>配置内存时序；</li>
+<li>控制风扇转速；</li>
+<li>选择启动顺序；</li>
+<li>开启或关闭设备。</li>
+</ul>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_58_00.png" alt="固件提供直接配置硬件的界面" loading="lazy">
+  <p class="video-caption">📷 固件提供直接配置硬件的界面<br><a href="https://www.bilibili.com/video/BV18fcozAEsy/?t=3480" target="_blank" rel="noopener">回到原视频 (00:58:00)</a></p>
+</div>
+
+<h3 id="43-legacy-bios">4.3 Legacy BIOS</h3>
+<p>IBM PC 时代使用 <strong>BIOS（Basic I/O System）</strong>。它在内存中常驻，并提供固定编号的中断服务：</p>
+<div class="highlight"><pre><span></span><code><span class="nf">int</span><span class="w"> </span><span class="mi">0x10</span>
+</code></pre></div>
+
+<p>执行 <code>int 0x10</code> 时，CPU 查询中断向量表，跳转到 BIOS 提供的显示服务。BIOS 还可以提供：</p>
+<ul>
+<li>显示字符和图形；</li>
+<li>读写磁盘；</li>
+<li>读取键盘和鼠标；</li>
+<li>其他基础 I/O。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    P["程序"] --&gt;|"int 0x10"| V["中断向量表"]
+    V --&gt; B["BIOS 服务代码"]
+    B --&gt; D["显示设备"]
+</code></pre></div>
+
+<p>BIOS 的固定规范促进了 IBM PC 兼容机生态，使不同厂商的软件和硬件能够协调工作。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_01_35.png" alt="通过 BIOS 中断调用基础设备服务" loading="lazy">
+  <p class="video-caption">📷 通过 BIOS 中断调用基础设备服务<br><a href="https://www.bilibili.com/video/BV18fcozAEsy/?t=3695" target="_blank" rel="noopener">回到原视频 (01:01:35)</a></p>
+</div>
+
+<h3 id="44-uefi">4.4 UEFI</h3>
+<p>现代系统逐步转向 <strong>UEFI（Unified Extensible Firmware Interface）</strong>。它不仅负责传统启动，还支持更丰富的设备驱动：</p>
+<ul>
+<li>指纹识别；</li>
+<li>USB 网卡 PXE 网络启动；</li>
+<li>蓝牙键盘；</li>
+<li>USB 扩展坞；</li>
+<li>UEFI 文件系统与可执行程序。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    U["UEFI 固件"] --&gt; D["设备驱动框架"]
+    U --&gt; F["FAT 启动分区"]
+    U --&gt; S["安全启动与签名验证"]
+    D --&gt; N["网络 / USB / 存储启动"]
+    F --&gt; L["UEFI Boot Loader"]
+    S --&gt; L
+    L --&gt; K["操作系统内核"]
+</code></pre></div>
+
+<p>UEFI 本质上仍是一段运行在 CPU 上的代码，只是能力与接口比传统 BIOS 更复杂。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_06_04.png" alt="UEFI 为现代设备与启动方式提供扩展支持" loading="lazy">
+  <p class="video-caption">📷 UEFI 为现代设备与启动方式提供扩展支持<br><a href="https://www.bilibili.com/video/BV18fcozAEsy/?t=3964" target="_blank" rel="noopener">回到原视频 (01:06:04)</a></p>
+</div>
+
+<hr />
+<h2 id="5-cih">5. CIH 病毒：当固件可以被写入</h2>
+<h3 id="51">5.1 固件为什么开始支持更新</h3>
+<p>早期固件是真正的 ROM，出厂后无法修改。但新硬件不断出现，如果固件没有对应驱动，就可能无法识别启动设备。</p>
+<p>因此，后来的主板芯片组允许通过特定过程更新 Flash/PROM。为防误写，更新前必须向指定 I/O 端口写入一段解锁序列。</p>
+<p>问题在于：<strong>解锁序列也写在公开手册中。</strong></p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_08_45.png" alt="固件写保护与更新解锁机制" loading="lazy">
+  <p class="video-caption">📷 固件写保护与更新解锁机制<br><a href="https://www.bilibili.com/video/BV18fcozAEsy/?t=4125" target="_blank" rel="noopener">回到原视频 (01:08:45)</a></p>
+</div>
+
+<h3 id="52-cih">5.2 CIH 病毒</h3>
+<p><em>(参考时间: 01:11:48)</em></p>
+<p>CIH，也称 Chernobyl 病毒，由台湾学生陈盈豪在 1998 年编写。它影响 Windows 9x，并在每年 4 月 26 日触发破坏逻辑。</p>
+<p>与传统只破坏文件的病毒不同，CIH 可以：</p>
+<ul>
+<li>驻留系统并感染其他可执行文件；</li>
+<li>劫持中断描述符表获得高权限；</li>
+<li>在触发日期解锁固件写保护；</li>
+<li>通过硬件 I/O 或物理内存写入破坏 BIOS；</li>
+<li>让主板无法再正常启动，物理上形成“变砖”。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    E["感染可执行文件"] --&gt; R["驻留内存"]
+    R --&gt; H["截获系统调用 / 中断"]
+    H --&gt; P["等待触发日期"]
+    P --&gt; U["解锁固件写保护"]
+    U --&gt; D["覆盖 BIOS 内容"]
+    D --&gt; B["系统无法启动"]
+</code></pre></div>
+
+<p>课堂使用 AI 将原始汇编病毒翻译成可读的 C 代码，帮助分析感染、潜伏和破坏过程。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_14_43.png" alt="AI 将 CIH 汇编代码翻译为可读 C 代码" loading="lazy">
+  <p class="video-caption">📷 AI 将 CIH 汇编代码翻译为可读 C 代码<br><a href="https://www.bilibili.com/video/BV18fcozAEsy/?t=4483" target="_blank" rel="noopener">回到原视频 (01:14:43)</a></p>
+</div>
+
+<p>病毒感染内存中的系统代码时，不会立刻破坏宿主。它把一段代码替换成跳转到“增强版代码”，执行原功能后顺便完成感染，再跳回原流程。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["原系统代码 A"] --&gt; V["病毒代码 A+"]
+    V --&gt; P["执行原功能"]
+    V --&gt; I["感染磁盘或其他程序"]
+    V --&gt; A2["跳回原系统流程"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_16_01.png" alt="病毒通过劫持代码路径传播并潜伏" loading="lazy">
+  <p class="video-caption">📷 病毒通过劫持代码路径传播并潜伏<br><a href="https://www.bilibili.com/video/BV18fcozAEsy/?t=4561" target="_blank" rel="noopener">回到原视频 (01:16:01)</a></p>
+</div>
+
+<h3 id="53">5.3 现代固件安全</h3>
+<p>现代固件更新通常依赖数字签名：</p>
+<ul>
+<li>厂商使用私钥签名固件；</li>
+<li>固件自身使用公钥验证更新包；</li>
+<li>操作系统即使被 rootkit 完全控制，也无法直接改写固件；</li>
+<li>只有经过可信验证的更新才能被接受。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    P["固件更新包"] --&gt; S["厂商私钥签名"]
+    S --&gt; U["写入更新分区"]
+    U --&gt; V["固件公钥验证"]
+    V --&gt;|"验证通过"| A["应用更新"]
+    V --&gt;|"验证失败"| R["拒绝更新"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_19_50.png" alt="数字签名保护固件更新过程" loading="lazy">
+  <p class="video-caption">📷 数字签名保护固件更新过程<br><a href="https://www.bilibili.com/video/BV18fcozAEsy/?t=4790" target="_blank" rel="noopener">回到原视频 (01:19:50)</a></p>
+</div>
+
+<p>现代攻击目标也发生了变化：</p>
+<ul>
+<li>单纯破坏系统、炫技的价值下降；</li>
+<li>窃取隐私、Token、支付信息更有收益；</li>
+<li>Agent 与开放工具带来了新的提示词注入与供应链风险。</li>
+</ul>
+<p>讲师提醒学生研究安全应以白帽方式让系统更安全，而不是制造大规模破坏。</p>
+<hr />
+<h2 id="6-512">6. 从固件到操作系统：512 字节启动扇区</h2>
+<h3 id="61-bios">6.1 BIOS 启动约定</h3>
+<p><em>(参考时间: 01:23:19)</em></p>
+<p>IBM PC/PC-DOS 2.0 建立了经典启动约定：</p>
+<ol>
+<li>BIOS 按设备顺序扫描；</li>
+<li>读取磁盘第一个 512 字节；</li>
+<li>检查末尾两个字节是否为 <code>0x55 0xAA</code>；</li>
+<li>若匹配，将 512 字节加载到 <code>0x7C00</code>；</li>
+<li>设置 <code>CS:IP = 0x0000:0x7C00</code>；</li>
+<li>跳转执行启动代码。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    B["BIOS"] --&gt; S["扫描启动设备"]
+    S --&gt; R["读取前 512 字节"]
+    R --&gt; M{"末尾为 55 AA?"}
+    M --&gt;|"是"| L["加载到 0x7C00"]
+    L --&gt; J["CS:IP = 0000:7C00"]
+    J --&gt; E["执行 Boot Loader"]
+    M --&gt;|"否"| N["尝试下一设备"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_25_06.png" alt="BIOS 对 512 字节启动扇区的识别约定" loading="lazy">
+  <p class="video-caption">📷 BIOS 对 512 字节启动扇区的识别约定<br><a href="https://www.bilibili.com/video/BV18fcozAEsy/?t=5106" target="_blank" rel="noopener">回到原视频 (01:25:06)</a></p>
+</div>
+
+<h3 id="62">6.2 手工制作最小启动盘</h3>
+<p>Linux 命令可以生成一个只包含无限循环和合法签名的镜像：</p>
+<div class="highlight"><pre><span></span><code><span class="o">(</span><span class="nb">printf</span><span class="w"> </span><span class="s2">"\xeb\xfe"</span><span class="p">;</span><span class="w"> </span>cat<span class="w"> </span>/dev/zero<span class="w"> </span><span class="p">|</span><span class="w"> </span>head<span class="w"> </span>-c<span class="w"> </span><span class="m">508</span><span class="p">;</span><span class="w"> </span><span class="nb">printf</span><span class="w"> </span><span class="s2">"\x55\xaa"</span><span class="o">)</span><span class="w"> </span>&gt;<span class="w"> </span>a.img
+</code></pre></div>
+
+<p>其中：</p>
+<ul>
+<li><code>eb fe</code> 对应当前地址上的无限跳转；</li>
+<li>中间补 0；</li>
+<li>最后写入 <code>55 aa</code>。</li>
+</ul>
+<p>QEMU 启动该镜像后，可以看到 BIOS 输出：</p>
+<div class="highlight"><pre><span></span><code>Booting from Hard Disk...
+</code></pre></div>
+
+<p>并最终停在 <code>CS:IP = 0000:7C00</code>。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_28_00.png" alt="QEMU 成功加载手工构造的启动扇区" loading="lazy">
+  <p class="video-caption">📷 QEMU 成功加载手工构造的启动扇区<br><a href="https://www.bilibili.com/video/BV18fcozAEsy/?t=5280" target="_blank" rel="noopener">回到原视频 (01:28:00)</a></p>
+</div>
+
+<p>如果把末尾 Magic Number 改成 <code>aa 55</code>，固件会认为该设备不可启动，转而尝试光盘、网络等其他设备。</p>
+<h3 id="63-grub">6.3 GRUB 的多阶段引导</h3>
+<p>512 字节不足以容纳完整文件系统驱动和内核加载器，因此常见引导程序会分阶段工作：</p>
+<ul>
+<li>Stage 1：扫描磁盘，寻找下一阶段；</li>
+<li>Stage 1.5：提供特定文件系统读取能力；</li>
+<li>Stage 2：显示启动菜单并加载操作系统。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    F["Firmware"] --&gt; S1["Boot Sector / Stage 1"]
+    S1 --&gt; S15["Stage 1.5&lt;br/&gt;文件系统模块"]
+    S15 --&gt; S2["GRUB Stage 2"]
+    S2 --&gt; K["Linux Kernel"]
+</code></pre></div>
+
+<hr />
+<h2 id="7">7. 调试固件：从“相信文档”到亲眼看到</h2>
+<p><em>(参考时间: 01:30:59)</em></p>
+<p>文档说固件会把启动扇区加载到 <code>0x7C00</code>。要验证并理解这究竟由哪条指令完成，可以使用 QEMU + GDB：</p>
+<ol>
+<li>在 <code>0x7C00</code> 设置硬件 Watchpoint；</li>
+<li>从 CPU Reset 开始执行；</li>
+<li>每当该地址被写入时暂停；</li>
+<li>查看当前 <code>CS:IP</code>、寄存器和指令；</li>
+<li>找到负责磁盘搬运的固件代码。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant G as GDB
+    participant Q as QEMU
+    participant B as SeaBIOS
+    participant M as Memory 0x7C00
+    G-&gt;&gt;Q: watch *(word*)0x7C00
+    Q-&gt;&gt;B: CPU Reset，开始执行
+    B-&gt;&gt;M: 写入启动扇区字节
+    M--&gt;&gt;G: Watchpoint 触发
+    G-&gt;&gt;Q: info registers / x/…
+    Q--&gt;&gt;G: 当前固件指令与寄存器
+</code></pre></div>
+
+<p>使用 GDB 脚本可以向 Watchpoint 添加 hook：每次命中时自动打印 <code>0x7C00</code> 附近的内存和寄存器状态。这样就能逐步看到固件从磁盘把数据搬入内存。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_34_40.png" alt="通过 Watchpoint 定位固件加载启动扇区的代码" loading="lazy">
+  <p class="video-caption">📷 通过 Watchpoint 定位固件加载启动扇区的代码<br><a href="https://www.bilibili.com/video/BV18fcozAEsy/?t=5680" target="_blank" rel="noopener">回到原视频 (01:34:40)</a></p>
+</div>
+
+<h3 id="71-opensbi">7.1 OpenSBI</h3>
+<p>RISC-V 平台常用 <strong>OpenSBI（Supervisor Binary Interface）</strong> 作为开源固件。它实现 SBI 规范，为操作系统提供统一的硬件抽象与服务：</p>
+<ul>
+<li>时钟与 IPI；</li>
+<li>远程刷新；</li>
+<li>系统复位；</li>
+<li>平台信息；</li>
+<li>启动下一特权级。</li>
+</ul>
+<p>OpenSBI 的入口、链接地址和平台初始化流程都可以通过学习源码和 AI 辅助分析理解。现代固件的复杂度远高于 512 字节时代，但它仍然只是一个运行在硬件上的状态机。</p>
+<hr />
+<h2 id="8">8. 本讲总结</h2>
+<p>本讲从硬件视角建立了一条完整启动链：</p>
+<div class="highlight"><pre><span></span><code>mindmap
+  root((硬件视角))
+    硬件状态机
+      寄存器与内存
+      CPU Reset
+      指令与中断
+      GPIO / MMIO
+    多处理器
+      独立寄存器
+      共享内存
+      不确定状态迁移
+    固件
+      硬件初始化
+      BIOS / UEFI
+      Boot Loader
+      固件更新
+    安全
+      写保护
+      CIH
+      数字签名
+    启动
+      512 字节
+      55 AA
+      0x7C00
+      GRUB 多阶段
+    调试
+      QEMU
+      GDB
+      Watchpoint
+      OpenSBI
+</code></pre></div>
+
+<p>核心结论：</p>
+<ol>
+<li>硬件不知道操作系统是否存在，它只执行指令和响应事件。</li>
+<li>中断和 Reset 是操作系统能够在死循环或错误状态下重新获得控制权的关键。</li>
+<li>操作系统本身也是普通二进制程序，启动完成后主要作为中断和系统调用处理程序存在。</li>
+<li>CPU Reset 后执行的是主板固件代码。</li>
+<li>固件负责初始化硬件、加载启动程序并最终引导操作系统。</li>
+<li>BIOS 使用固定中断服务；UEFI 提供了更丰富的驱动和启动框架。</li>
+<li>固件可写带来了 CIH 等破坏性攻击，数字签名是后续的重要防线。</li>
+<li>传统 PC 启动依赖 512 字节启动扇区与 <code>55 AA</code> 签名。</li>
+<li>启动过程完全可以通过 QEMU 和 GDB 调试，不必停留在“文档这样说”。</li>
+<li>抽象层设计能力在 Agentic AI 时代更加重要。</li>
+</ol>
+<blockquote>
+<p>计算机世界没有魔法。<br />
+只有状态、迁移、抽象，以及一层又一层可以验证的实现。</p>
+</blockquote>
+<hr />
+<h2 id="_6">附：官方参考与延伸阅读</h2>
+<p>课程与讲义：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/2026/">《操作系统原理》2026 课程主页</a></li>
+<li><a href="https://jyywiki.cn/OS/2026/lect3.md">第 3 讲讲义：硬件视角的操作系统</a></li>
+<li><a href="https://www.bilibili.com/video/BV18fcozAEsy/">本讲视频</a></li>
+</ul>
+<p>演示与工具：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/demos/intro/cpu-reset">CPU Reset 演示</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/intro/cih">CIH 病毒分析演示</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/intro/debug-firmware">调试 SeaBIOS 固件</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/intro/opensbi">OpenSBI 演示</a></li>
+<li><a href="https://github.com/riscv-software-src/opensbi">OpenSBI 源码</a></li>
+<li><a href="https://www.qemu.org/docs/master/system/invocation.html">QEMU 文档</a></li>
+<li><a href="https://www.usenix.org/legacy/publications/library/proceedings/usenix05/tech/freenix/full_papers/bellard/bellard.pdf">QEMU: A fast and portable dynamic translator</a></li>
+</ul>
+<p>固件与安全资料：</p>
+<ul>
+<li><a href="https://software.intel.com/en-us/articles/intel-sdm">Intel 64 and IA-32 Architectures Software Developer’s Manual</a></li>
+<li><a href="https://www.ami.com/bios-uefi-utilities/">AMI BIOS/UEFI</a></li>
+<li><a href="https://www.phoenix.com/device-firmware/">Phoenix Firmware</a></li>
+<li><a href="https://www.zhihu.com/question/21672895">UEFI 相关讨论</a></li>
+<li><a href="https://www.binarly.io/blog/leaked-intel-boot-guard-keys-what-happened-how-does-it-affect-the-software-supply-chain">Leaked Intel Boot Guard Keys</a></li>
+</ul>
+<blockquote>
+<p><strong>版权说明</strong>：课程讲义与幻灯片的著作权归蒋炎岩所有，采用 Creative Commons BY-NC 4.0 许可。电子书正文为课堂内容的书面化重构，脚本占位符已替换为视频画面或官方资料渲染图；引用与来源链接均保留在本页。</p>
+</blockquote>
+    </article>
+
+    <!-- Mermaid 图表引擎初始化 -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            mermaid.initialize({ startOnLoad: false, theme: 'default' });
+            
+            // 兼容普通代码块以及丢失 language-mermaid 类名的情况 (CodeHilite 干扰)
+            const codeNodes = document.querySelectorAll('pre code, .highlight code');
+            codeNodes.forEach(function(node) {
+                const text = node.textContent.trim();
+                // 匹配常见的 mermaid 图表前缀
+                if (text.startsWith('graph ') || text.startsWith('flowchart ') || text.startsWith('sequenceDiagram') || text.startsWith('gantt') || text.startsWith('pie') || text.startsWith('classDiagram') || text.startsWith('stateDiagram') || text.startsWith('mindmap')) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.className = 'mermaid';
+                    tempDiv.textContent = text;
+                    
+                    // 获取需要替换的最外层父节点 (比如 div.highlight 或者 pre)
+                    const wrapper = node.closest('.highlight') || node.parentNode;
+                    wrapper.replaceWith(tempDiv); 
+                }
+            });
+            
+            // 所有节点转换完成，统一进行图表动态绘制
+            mermaid.run();
+        });
+    </script>
+    <!-- Lightbox：截图点击放大 -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const lightbox = document.createElement('div');
+            lightbox.className = 'lightbox';
+            lightbox.innerHTML = '<img alt=""><div class="lightbox-caption"></div>';
+            document.body.appendChild(lightbox);
+            const lbImg = lightbox.querySelector('img');
+            const lbCap = lightbox.querySelector('.lightbox-caption');
+            function openLightbox(src, alt) {
+                lbImg.src = src; lbImg.alt = alt || '';
+                lbCap.textContent = alt || '';
+                lightbox.classList.add('open');
+                document.body.style.overflow = 'hidden';
+            }
+            function closeLightbox() {
+                lightbox.classList.remove('open');
+                lbImg.src = '';
+                document.body.style.overflow = '';
+            }
+            document.querySelectorAll('.screenshot-card img').forEach(function(img) {
+                img.addEventListener('click', function() { openLightbox(img.src, img.alt); });
+            });
+            lightbox.addEventListener('click', closeLightbox);
+            document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
+        });
+    </script>
+</body>
+</html>
