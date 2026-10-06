@@ -1,0 +1,1375 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>并发控制：信号量</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* ── 基础重置 ── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            color-scheme: light;
+            --bg-primary: #f7f7f8;
+            --bg-secondary: #ffffff;
+            --bg-card: #eef0f3;
+            --bg-code: #f2f3f5;
+            --text-primary: #1f2328;
+            --text-secondary: #57606a;
+            --text-muted: #6e7781;
+            --accent: #2563eb;
+            --accent-glow: rgba(37, 99, 235, 0.08);
+            --border: #d9dce1;
+            --border-subtle: #e7e9ec;
+            --radius: 12px;
+            --shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Serif SC', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.8;
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── 文章容器 ── */
+        .book-content {
+            max-width: 780px;
+            margin: 0 auto;
+            padding: 60px 32px 120px;
+        }
+
+        /* ── 标题 ── */
+        h1 {
+            font-size: 2.2em;
+            font-weight: 700;
+            margin: 0 0 12px;
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+        }
+
+        h2 {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 56px 0 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h3 {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: var(--accent);
+            margin: 36px 0 12px;
+        }
+
+        /* ── 段落与文字 ── */
+        p {
+            margin: 0 0 16px;
+            color: var(--text-primary);
+        }
+
+        strong {
+            color: #0f172a;
+            font-weight: 600;
+        }
+
+        em {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.2s;
+        }
+        a:hover {
+            border-bottom-color: var(--accent);
+        }
+
+        /* ── 引用 ── */
+        blockquote {
+            margin: 24px 0;
+            padding: 16px 20px;
+            background: var(--bg-secondary);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 var(--radius) var(--radius) 0;
+            color: var(--text-secondary);
+        }
+        blockquote p { margin: 0; }
+
+        /* ── 列表 ── */
+        ul, ol {
+            margin: 12px 0 20px 24px;
+            color: var(--text-primary);
+        }
+        li {
+            margin: 6px 0;
+        }
+
+        /* ── 分割线 ── */
+        hr {
+            border: none;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border), transparent);
+            margin: 48px 0;
+        }
+
+        /* ── 表格 ── */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 24px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+        thead {
+            background: var(--bg-card);
+        }
+        th {
+            padding: 12px 16px;
+            font-weight: 600;
+            text-align: left;
+            color: var(--accent);
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        td {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border-subtle);
+        }
+        tbody tr {
+            background: var(--bg-secondary);
+            transition: background 0.15s;
+        }
+        tbody tr:hover {
+            background: var(--bg-card);
+        }
+
+        /* ── 代码 ── */
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-code);
+            padding: 2px 7px;
+            border-radius: 5px;
+            font-size: 0.88em;
+            color: #6d28d9;
+        }
+
+        pre {
+            margin: 20px 0;
+            padding: 20px 24px;
+            background: var(--bg-code);
+            border-radius: var(--radius);
+            overflow-x: auto;
+            border: 1px solid var(--border);
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9em;
+            color: var(--text-primary);
+        }
+
+        /* ── 视频嵌入卡片 ── */
+        .video-card {
+            margin: 32px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .video-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(15, 23, 42, 0.12);
+        }
+
+        .video-wrapper {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 */
+            height: 0;
+            overflow: hidden;
+        }
+        .video-wrapper iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .video-card img {
+            width: 100%;
+            display: block;
+        }
+
+        .video-caption {
+            padding: 12px 16px;
+            font-size: 0.88em;
+            color: var(--text-secondary);
+            text-align: center;
+            line-height: 1.6;
+            margin: 0;
+        }
+        .video-caption a {
+            color: var(--accent);
+        }
+
+        .video-card.fallback {
+            padding: 20px;
+            text-align: center;
+        }
+
+        /* ── Lightbox：截图点击放大 ── */
+        .screenshot-card img { cursor: zoom-in; transition: opacity 0.15s; }
+        .screenshot-card img:hover { opacity: 0.9; }
+        .lightbox {
+            position: fixed; inset: 0; z-index: 999;
+            display: none; align-items: center; justify-content: center;
+            background: rgba(5, 5, 8, 0.92); backdrop-filter: blur(4px);
+            cursor: zoom-out; padding: 24px;
+        }
+        .lightbox.open { display: flex; }
+        .lightbox img {
+            max-width: 96vw; max-height: 90vh;
+            border-radius: 8px; box-shadow: 0 12px 60px rgba(0,0,0,0.7);
+        }
+        .lightbox-caption {
+            position: absolute; bottom: 14px; left: 0; right: 0;
+            text-align: center; color: var(--text-secondary); font-size: 0.85em;
+        }
+
+        /* ── 顶部信息栏 ── */
+        .book-content > blockquote:first-of-type {
+            background: var(--accent-glow);
+            border-left-color: var(--accent);
+            border-radius: var(--radius);
+            margin-bottom: 32px;
+        }
+
+        /* ── 图表居中 ── */
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            margin: 32px 0;
+            overflow-x: auto;
+        }
+
+        /* ── 滚动条 ── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* ── 响应式 ── */
+        @media (max-width: 640px) {
+            .book-content { padding: 32px 16px 80px; }
+            h1 { font-size: 1.7em; }
+            h2 { font-size: 1.3em; }
+        }
+    </style>
+</head>
+<body>
+    <article class="book-content">
+        <h1 id="_1">并发控制：信号量</h1>
+<blockquote>
+<p><strong>课程</strong>：2026 春季学期《操作系统原理》<br />
+<strong>讲师</strong>：蒋炎岩（jyy）<br />
+<strong>官方课程主页</strong>：<a href="https://jyywiki.cn/OS/2026/">https://jyywiki.cn/OS/2026/</a><br />
+<strong>官方讲义</strong>：<a href="https://jyywiki.cn/OS/2026/lect16.md">https://jyywiki.cn/OS/2026/lect16.md</a><br />
+<strong>视频来源</strong>：<a href="https://www.bilibili.com/video/BV1yQogB2Esf/">Bilibili BV1yQogB2Esf</a><br />
+<strong>版权说明</strong>：课程讲义与幻灯片归蒋炎岩所有，采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书是对课堂讲授的书面化重构，保留出处与许可说明。</p>
+</blockquote>
+<h2 id="_2">导语：从“一把钥匙”到“多把钥匙”</h2>
+<p><em>(参考时间: 00:00)</em></p>
+<p>上一讲已经建立了同步的基本方法：</p>
+<div class="highlight"><pre><span></span><code><span class="n">mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">condition</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">cond_wait</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cv</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="p">}</span>
+<span class="n">mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+</code></pre></div>
+
+<p>以及：</p>
+<div class="highlight"><pre><span></span><code><span class="n">mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="cm">/* 改变共享状态 */</span>
+<span class="n">cond_broadcast</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cv</span><span class="p">);</span>
+<span class="n">mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+</code></pre></div>
+
+<p>这是“万能同步模板”，但代码看起来总包含一个显式等待循环。</p>
+<p>这一讲从一个非常自然的问题出发：</p>
+<blockquote>
+<p>互斥锁通常只有一把钥匙。桌上有多个车位、多个手环或多个许可时，会发生什么？</p>
+</blockquote>
+<p>答案就是 <strong>信号量（Semaphore）</strong>：</p>
+<ul>
+<li>内部保存一个整数计数；</li>
+<li><code>P</code> / <code>acquire</code> / <code>down</code> / <code>wait</code> 消耗一个 token；</li>
+<li><code>V</code> / <code>release</code> / <code>up</code> / <code>post</code> 产生一个 token；</li>
+<li>token 可以表示钥匙、车位、手环、任务完成次数或可用数据数。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["互斥锁：0 / 1 把钥匙"] --&gt; B["允许多个 token"]
+    B --&gt; C["计数型进入凭证"]
+    C --&gt; D["Semaphore"]
+    D --&gt; E["互斥、同步、限流、生产消费"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_02_10.png" alt="回顾同步点、happens-before 与万能同步模板" loading="lazy">
+  <p class="video-caption">📷 回顾同步点、happens-before 与万能同步模板<br><a href="https://www.bilibili.com/video/BV1yQogB2Esf/?t=130" target="_blank" rel="noopener">回到原视频 (00:02:10)</a></p>
+</div>
+
+<hr />
+<h2 id="1">1. 从计算图想到跨线程传递锁</h2>
+<h3 id="11-dag">1.1 DAG 的同步条件</h3>
+<p><em>(参考时间: 00:04)</em></p>
+<p>有向无环图 <code>G(V, E)</code> 中：</p>
+<ul>
+<li>节点表示计算；</li>
+<li>边 <code>u → v</code> 表示 <code>v</code> 依赖 <code>u</code>；</li>
+<li>节点 <code>v</code> 必须等所有前驱完成。</li>
+</ul>
+<p>最直接的实现是给每个节点维护：</p>
+<div class="highlight"><pre><span></span><code>pending[v] = 尚未完成的前驱数量
+</code></pre></div>
+
+<p>前驱完成时递减，减到零时唤醒 <code>v</code>。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["u1"] --&gt; P["pending[v]"]
+    B["u2"] --&gt; P
+    C["u3"] --&gt; P
+    P --&gt; D{"pending[v] == 0？"}
+    D -- "是" --&gt; E["v 可以执行"]
+    D -- "否" --&gt; F["继续等待"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_04_50.png" alt="DAG 节点与依赖关系" loading="lazy">
+  <p class="video-caption">📷 DAG 节点与依赖关系<br><a href="https://www.bilibili.com/video/BV1yQogB2Esf/?t=290" target="_blank" rel="noopener">回到原视频 (00:04:50)</a></p>
+</div>
+
+<h3 id="12-happens-before">1.2 用互斥锁实现 happens-before</h3>
+<p><em>(参考时间: 00:07)</em></p>
+<p>一个聪明的做法：</p>
+<ul>
+<li>为每条边 <code>e: u → v</code> 创建一个互斥锁；</li>
+<li>主线程先 <code>lock(e)</code>，把钥匙收走；</li>
+<li><code>u</code> 完成后 <code>unlock(e)</code>，把钥匙放回；</li>
+<li><code>v</code> 开始时 <code>lock(e)</code>，拿走钥匙后继续。</li>
+</ul>
+<p>由于 lock acquire/release 本身具有同步语义，这自然形成了：</p>
+<div class="highlight"><pre><span></span><code>u 完成 → unlock(e) → lock(e) → v 开始
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant M as Main
+    participant U as Task u
+    participant L as Edge Lock e
+    participant V as Task v
+    M-&gt;&gt;L: lock (take key)
+    U-&gt;&gt;U: work(u)
+    U-&gt;&gt;L: unlock (return key)
+    L--&gt;&gt;V: lock succeeds
+    V-&gt;&gt;V: work(v)
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_07_20.png" alt="主线程收走边锁，前驱完成后释放" loading="lazy">
+  <p class="video-caption">📷 主线程收走边锁，前驱完成后释放<br><a href="https://www.bilibili.com/video/BV1yQogB2Esf/?t=440" target="_blank" rel="noopener">回到原视频 (00:07:20)</a></p>
+</div>
+
+<h3 id="13-undefined-behavior">1.3 逻辑正确，但属于 undefined behavior</h3>
+<p><em>(参考时间: 00:09)</em></p>
+<p>同一把 mutex 的上锁和解锁发生在不同线程：</p>
+<div class="highlight"><pre><span></span><code><span class="nl">main</span><span class="p">:</span><span class="w"> </span><span class="n">lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">edge</span><span class="p">);</span>
+<span class="nl">u</span><span class="p">:</span><span class="w">    </span><span class="n">work</span><span class="p">(</span><span class="n">u</span><span class="p">);</span>
+<span class="nl">u</span><span class="p">:</span><span class="w">    </span><span class="n">unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">edge</span><span class="p">);</span>
+<span class="nl">v</span><span class="p">:</span><span class="w">    </span><span class="n">lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">edge</span><span class="p">);</span>
+</code></pre></div>
+
+<p>逻辑上能建立 happens-before，但 POSIX mutex 不允许跨线程按这种方式“传钥匙”。线程库的 fast path 和所有权检查可能假设 lock/unlock 配对在同一个线程中。</p>
+<p>因此这是有趣的思路，却不是可依赖的实现。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Main lock(edge)"] --&gt; B["U 完成计算"]
+    B --&gt; C["U unlock(edge)"]
+    C --&gt; D["V lock(edge)"]
+    D --&gt; E["Happens-before 成立"]
+    C --&gt; F["但锁由不同线程解锁"]
+    F --&gt; G["Undefined behavior"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_10_20.png" alt="跨线程传递 mutex 是未定义行为" loading="lazy">
+  <p class="video-caption">📷 跨线程传递 mutex 是未定义行为<br><a href="https://www.bilibili.com/video/BV1yQogB2Esf/?t=620" target="_blank" rel="noopener">回到原视频 (00:10:20)</a></p>
+</div>
+
+<h3 id="14-token">1.4 Token 才是本质</h3>
+<p><em>(参考时间: 00:12)</em></p>
+<p>真正需要传递的不是“锁对象”，而是一个 token：</p>
+<ul>
+<li>有 token 才能继续；</li>
+<li>release 产生 token；</li>
+<li>acquire 消耗 token。</li>
+</ul>
+<p>这种 token 可以理解为：</p>
+<ul>
+<li>桌上的钥匙；</li>
+<li>停车场剩余车位；</li>
+<li>游泳馆手环；</li>
+<li>餐厅空桌；</li>
+<li>任务完成通知。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Release：产生 token"] --&gt; Table["共享 token 池"]
+    Table --&gt; B["Acquire：消耗 token"]
+    B --&gt; C["允许后续操作"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_12_50.png" alt="Release 产生 token，Acquire 消耗 token" loading="lazy">
+  <p class="video-caption">📷 Release 产生 token，Acquire 消耗 token<br><a href="https://www.bilibili.com/video/BV1yQogB2Esf/?t=770" target="_blank" rel="noopener">回到原视频 (00:12:50)</a></p>
+</div>
+
+<h3 id="15-token">1.5 为什么不能有多个 token</h3>
+<p><em>(参考时间: 00:15)</em></p>
+<p>现实世界天然存在计数资源：</p>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>资源计数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>停车场</td>
+<td>剩余车位</td>
+</tr>
+<tr>
+<td>游泳馆</td>
+<td>剩余名额</td>
+</tr>
+<tr>
+<td>餐厅</td>
+<td>空桌数量</td>
+</tr>
+<tr>
+<td>token 桶</td>
+<td>可用凭证数量</td>
+</tr>
+</tbody>
+</table>
+<p>只要有空位，就可以直接进入；没有空位，就等待别人释放。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["资源计数 &gt; 0"] --&gt; B["Acquire 成功"]
+    B --&gt; C["计数减一"]
+    C --&gt; D["使用资源"]
+    D --&gt; E["Release"]
+    E --&gt; F["计数加一"]
+    F --&gt; A
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_15_30.png" alt="停车场与游泳馆的计数型资源模型" loading="lazy">
+  <p class="video-caption">📷 停车场与游泳馆的计数型资源模型<br><a href="https://www.bilibili.com/video/BV1yQogB2Esf/?t=930" target="_blank" rel="noopener">回到原视频 (00:15:30)</a></p>
+</div>
+
+<hr />
+<h2 id="2-api">2. 信号量 API</h2>
+<h3 id="21-p-v">2.1 P / V 操作</h3>
+<p><em>(参考时间: 00:17)</em></p>
+<p>信号量包含一个整数 <code>count</code>：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="nf">P</span><span class="p">(</span><span class="n">sem_t</span><span class="w"> </span><span class="o">*</span><span class="n">sem</span><span class="p">);</span><span class="w">  </span><span class="cm">/* try + decrease */</span>
+<span class="kt">void</span><span class="w"> </span><span class="nf">V</span><span class="p">(</span><span class="n">sem_t</span><span class="w"> </span><span class="o">*</span><span class="n">sem</span><span class="p">);</span><span class="w">  </span><span class="cm">/* increase */</span>
+</code></pre></div>
+
+<p>历史名称：</p>
+<ul>
+<li><code>P</code>：Prolaag，尝试递减；</li>
+<li><code>V</code>：Verhoog，递增；</li>
+<li>现代别名：down/up、wait/post、acquire/release。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["P / wait / acquire"] --&gt; B{"count &gt; 0？"}
+    B -- "是" --&gt; C["count--"]
+    C --&gt; D["成功返回"]
+    B -- "否" --&gt; E["等待"]
+    E --&gt; B
+    F["V / post / release"] --&gt; G["count++"]
+    G --&gt; H["唤醒等待者"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_17_00.png" alt="P 消耗一个 token，V 产生一个 token" loading="lazy">
+  <p class="video-caption">📷 P 消耗一个 token，V 产生一个 token<br><a href="https://www.bilibili.com/video/BV1yQogB2Esf/?t=1020" target="_blank" rel="noopener">回到原视频 (00:17:00)</a></p>
+</div>
+
+<h3 id="22">2.2 用条件变量实现信号量</h3>
+<p><em>(参考时间: 00:21)</em></p>
+<div class="highlight"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="nf">P</span><span class="p">(</span><span class="n">sem_t</span><span class="w"> </span><span class="o">*</span><span class="n">sem</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sem</span><span class="o">-&gt;</span><span class="n">lk</span><span class="p">);</span>
+<span class="w">    </span><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">sem</span><span class="o">-&gt;</span><span class="n">count</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">cond_wait</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sem</span><span class="o">-&gt;</span><span class="n">cv</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">sem</span><span class="o">-&gt;</span><span class="n">lk</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="n">sem</span><span class="o">-&gt;</span><span class="n">count</span><span class="o">--</span><span class="p">;</span>
+<span class="w">    </span><span class="n">mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sem</span><span class="o">-&gt;</span><span class="n">lk</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">V</span><span class="p">(</span><span class="n">sem_t</span><span class="w"> </span><span class="o">*</span><span class="n">sem</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sem</span><span class="o">-&gt;</span><span class="n">lk</span><span class="p">);</span>
+<span class="w">    </span><span class="n">sem</span><span class="o">-&gt;</span><span class="n">count</span><span class="o">++</span><span class="p">;</span>
+<span class="w">    </span><span class="n">cond_broadcast</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sem</span><span class="o">-&gt;</span><span class="n">cv</span><span class="p">);</span>
+<span class="w">    </span><span class="n">mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sem</span><span class="o">-&gt;</span><span class="n">lk</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>这体现了信号量与条件变量的关系：</p>
+<blockquote>
+<p>信号量可以看作一个只等待 <code>count &gt; 0</code> 这一种条件的特殊同步对象。</p>
+</blockquote>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Semaphore"] --&gt; B["Mutex 保护 count"]
+    A --&gt; C["Condition Variable 等待 count &gt; 0"]
+    D["P"] --&gt; E["wait until count &gt; 0"]
+    E --&gt; F["count--"]
+    G["V"] --&gt; H["count++"]
+    H --&gt; I["broadcast"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_22_00.png" alt="用互斥锁和条件变量实现信号量" loading="lazy">
+  <p class="video-caption">📷 用互斥锁和条件变量实现信号量<br><a href="https://www.bilibili.com/video/BV1yQogB2Esf/?t=1320" target="_blank" rel="noopener">回到原视频 (00:22:00)</a></p>
+</div>
+
+<h3 id="23-n">2.3 只有 n 个容量的资源</h3>
+<p><em>(参考时间: 00:18)</em></p>
+<p>以 <code>count = 4</code> 为例：</p>
+<div class="highlight"><pre><span></span><code>初始：4
+P1：3
+P2：2
+P3：1
+P4：0
+P5：等待
+</code></pre></div>
+
+<p>任何线程执行 <code>V</code> 后计数加一，等待中的 <code>P5</code> 才能继续。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Semaphore count = 4"] --&gt; B["P1/P2/P3/P4 成功"]
+    B --&gt; C["count = 0"]
+    D["T5 P"] --&gt; E["等待"]
+    F["任一线程 V"] --&gt; G["count = 1"]
+    G --&gt; H["T5 P 成功"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_19_00.png" alt="多个线程竞争有限 token" loading="lazy">
+  <p class="video-caption">📷 多个线程竞争有限 token<br><a href="https://www.bilibili.com/video/BV1yQogB2Esf/?t=1140" target="_blank" rel="noopener">回到原视频 (00:19:00)</a></p>
+</div>
+
+<h3 id="24">2.4 互斥锁是信号量的特例</h3>
+<p><em>(参考时间: 00:23)</em></p>
+<p>初始化：</p>
+<div class="highlight"><pre><span></span><code><span class="n">sem_t</span><span class="w"> </span><span class="n">mutex</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">SEM_INIT</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+</code></pre></div>
+
+<p>然后：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="nf">lock</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">P</span><span class="p">(</span><span class="o">&amp;</span><span class="n">mutex</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">unlock</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">V</span><span class="p">(</span><span class="o">&amp;</span><span class="n">mutex</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>只有一把钥匙时，信号量退化为互斥锁。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["SEM_INIT(1)"] --&gt; B["P 消耗唯一 token"]
+    B --&gt; C["其他线程等待"]
+    C --&gt; D["V 放回 token"]
+    D --&gt; B
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_23_20.png" alt="`SEM_INIT(1)` 实现互斥锁" loading="lazy">
+  <p class="video-caption">📷 `SEM_INIT(1)` 实现互斥锁<br><a href="https://www.bilibili.com/video/BV1yQogB2Esf/?t=1400" target="_blank" rel="noopener">回到原视频 (00:23:20)</a></p>
+</div>
+
+<hr />
+<h2 id="3">3. 用信号量实现同步</h2>
+<h3 id="31-happens-before">3.1 一次性 happens-before</h3>
+<p><em>(参考时间: 00:25)</em></p>
+<div class="highlight"><pre><span></span><code><span class="n">sem_t</span><span class="w"> </span><span class="n">ready</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">SEM_INIT</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">T_A</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">work_a</span><span class="p">();</span>
+<span class="w">    </span><span class="n">V</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ready</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">T_B</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">P</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ready</span><span class="p">);</span>
+<span class="w">    </span><span class="n">work_b</span><span class="p">();</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><code>P</code> 会等待 <code>V</code> 产生 token。因此 <code>work_a()</code> happens-before <code>work_b()</code>。</p>
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant A as T_A
+    participant S as Semaphore
+    participant B as T_B
+    A-&gt;&gt;A: work_a
+    A-&gt;&gt;S: V
+    B-&gt;&gt;S: P
+    S--&gt;&gt;B: token acquired
+    B-&gt;&gt;B: work_b
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_25_30.png" alt="信号量实现一次确定的 A → B" loading="lazy">
+  <p class="video-caption">📷 信号量实现一次确定的 A → B<br><a href="https://www.bilibili.com/video/BV1yQogB2Esf/?t=1530" target="_blank" rel="noopener">回到原视频 (00:25:30)</a></p>
+</div>
+
+<h3 id="32-join">3.2 实现 <code>join</code></h3>
+<p><em>(参考时间: 00:27)</em></p>
+<p>两种等价方式。</p>
+<p><strong>每个线程一个信号量：</strong></p>
+<div class="highlight"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="nf">worker</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">tid</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">do_work</span><span class="p">(</span><span class="n">tid</span><span class="p">);</span>
+<span class="w">    </span><span class="n">V</span><span class="p">(</span><span class="o">&amp;</span><span class="n">done</span><span class="p">[</span><span class="n">tid</span><span class="p">]);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">join</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">n</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">P</span><span class="p">(</span><span class="o">&amp;</span><span class="n">done</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>共用一个计数信号量：</strong></p>
+<div class="highlight"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="nf">worker</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">tid</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">do_work</span><span class="p">(</span><span class="n">tid</span><span class="p">);</span>
+<span class="w">    </span><span class="n">V</span><span class="p">(</span><span class="o">&amp;</span><span class="n">done</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">join</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">n</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">P</span><span class="p">(</span><span class="o">&amp;</span><span class="n">done</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart LR
+    T1["T1 V(done)"] --&gt; S["done count++"]
+    T2["T2 V(done)"] --&gt; S
+    T3["T3 V(done)"] --&gt; S
+    T4["T4 V(done)"] --&gt; S
+    S --&gt; M["main 执行 n 次 P(done)"]
+    M --&gt; J["join 返回"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_28_00.png" alt="用计数信号量等待所有线程结束" loading="lazy">
+  <p class="video-caption">📷 用计数信号量等待所有线程结束<br><a href="https://www.bilibili.com/video/BV1yQogB2Esf/?t=1680" target="_blank" rel="noopener">回到原视频 (00:28:00)</a></p>
+</div>
+
+<h3 id="33-dag">3.3 实现任意 DAG</h3>
+<p><em>(参考时间: 00:30)</em></p>
+<p>为每个节点 <code>v</code> 创建一个信号量 <code>sem[v]</code>，初始值为 <code>0</code>：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="nf">T_v</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">n_predecessors</span><span class="p">(</span><span class="n">v</span><span class="p">);</span><span class="w"> </span><span class="n">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">P</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sem</span><span class="p">[</span><span class="n">v</span><span class="p">]);</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="n">work</span><span class="p">(</span><span class="n">v</span><span class="p">);</span>
+
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">u</span><span class="w"> </span><span class="n">in</span><span class="w"> </span><span class="n">successors</span><span class="p">(</span><span class="n">v</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">V</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sem</span><span class="p">[</span><span class="n">u</span><span class="p">]);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>节点 <code>v</code> 收到等于入边数量的 token 后开始计算。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    U["u 完成"] --&gt; SU["V(sem[v])"]
+    W["w 完成"] --&gt; SV["V(sem[v])"]
+    SU --&gt; S["sem[v] count"]
+    SV --&gt; S
+    S --&gt; P["v 执行 n_pred 次 P"]
+    P --&gt; R["v 开始计算"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_31_00.png" alt="使用节点信号量实现 DAG 依赖" loading="lazy">
+  <p class="video-caption">📷 使用节点信号量实现 DAG 依赖<br><a href="https://www.bilibili.com/video/BV1yQogB2Esf/?t=1860" target="_blank" rel="noopener">回到原视频 (00:31:00)</a></p>
+</div>
+
+<hr />
+<h2 id="4">4. 生产者消费者：信号量的代表作</h2>
+<h3 id="41">4.1 两个计数表</h3>
+<p><em>(参考时间: 00:34)</em></p>
+<div class="highlight"><pre><span></span><code><span class="n">sem_t</span><span class="w"> </span><span class="n">empty</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">SEM_INIT</span><span class="p">(</span><span class="n">depth</span><span class="p">);</span>
+<span class="n">sem_t</span><span class="w"> </span><span class="n">fill</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="n">SEM_INIT</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">producer</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">tid</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">P</span><span class="p">(</span><span class="o">&amp;</span><span class="n">empty</span><span class="p">);</span>
+<span class="w">    </span><span class="n">produce_one</span><span class="p">();</span>
+<span class="w">    </span><span class="n">V</span><span class="p">(</span><span class="o">&amp;</span><span class="n">fill</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">consumer</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">tid</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">P</span><span class="p">(</span><span class="o">&amp;</span><span class="n">fill</span><span class="p">);</span>
+<span class="w">    </span><span class="n">consume_one</span><span class="p">();</span>
+<span class="w">    </span><span class="n">V</span><span class="p">(</span><span class="o">&amp;</span><span class="n">empty</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>含义：</p>
+<ul>
+<li><code>empty</code> 中的 token 表示空槽位；</li>
+<li><code>fill</code> 中的 token 表示已填入的数据；</li>
+<li>生产者从 <code>empty</code> 拿 token，生产后向 <code>fill</code> 放入 token；</li>
+<li>消费者从 <code>fill</code> 拿 token，消费后向 <code>empty</code> 放入 token。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    E["empty"] --&gt;|"P"| P["Producer"]
+    P --&gt;|"V"| F["fill"]
+    F --&gt;|"P"| C["Consumer"]
+    C --&gt;|"V"| E
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_35_00.png" alt="信号量生产者消费者是两边对称的 token 搬运" loading="lazy">
+  <p class="video-caption">📷 信号量生产者消费者是两边对称的 token 搬运<br><a href="https://www.bilibili.com/video/BV1yQogB2Esf/?t=2100" target="_blank" rel="noopener">回到原视频 (00:35:00)</a></p>
+</div>
+
+<h3 id="42">4.2 全局不变量</h3>
+<p><em>(参考时间: 00:38)</em></p>
+<p>缓冲区大小为 <code>depth</code>，始终满足：</p>
+<div class="highlight"><pre><span></span><code>empty
++ fill
++ producer_holding_token
++ consumer_holding_token
+= depth
+</code></pre></div>
+
+<p>每次 <code>P</code> 消耗一个 token，每次 <code>V</code> 产生一个 token，因此总数保持守恒。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["depth 个槽位 token"] --&gt; B["empty + fill"]
+    B --&gt; C["正在生产 / 消费的线程持有 token"]
+    C --&gt; D["总量始终 = depth"]
+    D --&gt; E["不会超额生产，也不会无数据消费"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_38_30.png" alt="缓冲区 token 总量守恒" loading="lazy">
+  <p class="video-caption">📷 缓冲区 token 总量守恒<br><a href="https://www.bilibili.com/video/BV1yQogB2Esf/?t=2310" target="_blank" rel="noopener">回到原视频 (00:38:30)</a></p>
+</div>
+
+<h3 id="43">4.3 生产者与消费者完全对称</h3>
+<p><em>(参考时间: 00:41)</em></p>
+<p>生产者：</p>
+<div class="highlight"><pre><span></span><code>从 empty 取走一个球
+→ 填充一个槽位
+→ 向 fill 放入一个球
+</code></pre></div>
+
+<p>消费者：</p>
+<div class="highlight"><pre><span></span><code>从 fill 取走一个球
+→ 清空一个槽位
+→ 向 empty 放入一个球
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Producer holds empty token"] --&gt; B["Write buffer"]
+    B --&gt; C["Fill token created"]
+    D["Consumer holds fill token"] --&gt; E["Read buffer"]
+    E --&gt; F["Empty token returned"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_41_00.png" alt="生产者与消费者在 empty/fill 之间搬运球" loading="lazy">
+  <p class="video-caption">📷 生产者与消费者在 empty/fill 之间搬运球<br><a href="https://www.bilibili.com/video/BV1yQogB2Esf/?t=2460" target="_blank" rel="noopener">回到原视频 (00:41:00)</a></p>
+</div>
+
+<hr />
+<h2 id="5">5. 信号量的边界</h2>
+<h3 id="51">5.1 计数不总能表达同步条件</h3>
+<p><em>(参考时间: 00:45)</em></p>
+<p>上一讲“括号鱼”问题要求：</p>
+<div class="highlight"><pre><span></span><code>&lt;&gt;&lt;_
+&gt;&lt;&gt;_
+</code></pre></div>
+
+<p>合法状态有“或”条件：</p>
+<div class="highlight"><pre><span></span><code>当前可以打印 &lt; 或 &gt;
+</code></pre></div>
+
+<p>单个信号量的计数无法自然表达这种全局状态条件。</p>
+<p>可以用多个信号量并配合随机选择模拟，但代码会逐渐变成协议技巧，而不是清晰的全局条件。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["复杂同步条件"] --&gt; B{"是否能映射为 token 计数？"}
+    B -- "是" --&gt; C["Semaphore 很优雅"]
+    B -- "否 / 含 OR 条件" --&gt; D["多个信号量 + 额外协议"]
+    D --&gt; E["可尝试，但难理解、难证明"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_45_30.png" alt="括号鱼的“或条件”难以用单个信号量表达" loading="lazy">
+  <p class="video-caption">📷 括号鱼的“或条件”难以用单个信号量表达<br><a href="https://www.bilibili.com/video/BV1yQogB2Esf/?t=2730" target="_blank" rel="noopener">回到原视频 (00:45:30)</a></p>
+</div>
+
+<h3 id="52-close-open">5.2 close / open 让生产者消费者变复杂</h3>
+<p><em>(参考时间: 01:06)</em></p>
+<p>给生产者消费者增加：</p>
+<ul>
+<li><code>close()</code>：禁止新的生产消费，等待正在执行的请求结束；</li>
+<li><code>open()</code>：重新允许生产消费。</li>
+</ul>
+<p>条件变量写法可以扩展共享状态：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">bool</span><span class="w"> </span><span class="n">closing</span><span class="p">;</span>
+<span class="kt">int</span><span class="w"> </span><span class="n">active</span><span class="p">;</span>
+</code></pre></div>
+
+<p>等待条件变为：</p>
+<div class="highlight"><pre><span></span><code>not closing &amp;&amp; has_space / has_item
+</code></pre></div>
+
+<p>信号量实现则需要额外协议协调 close、open 与现有 token，复杂度大幅增加。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["close 请求"] --&gt; B["设置 closing = true"]
+    B --&gt; C["阻止新 put/get"]
+    C --&gt; D["等待 active 请求结束"]
+    D --&gt; E["all_closed"]
+    E --&gt; F["open 重新允许操作"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_07_00.png" alt="增加 close/open 后，信号量实现明显不再优雅" loading="lazy">
+  <p class="video-caption">📷 增加 close/open 后，信号量实现明显不再优雅<br><a href="https://www.bilibili.com/video/BV1yQogB2Esf/?t=4020" target="_blank" rel="noopener">回到原视频 (01:07:00)</a></p>
+</div>
+
+<h3 id="53">5.3 用信号量实现条件变量很困难</h3>
+<p><em>(参考时间: 01:10)</em></p>
+<p>教科书式伪实现：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="nf">wait</span><span class="p">(</span><span class="n">cond_t</span><span class="w"> </span><span class="o">*</span><span class="n">cv</span><span class="p">,</span><span class="w"> </span><span class="n">mutex_t</span><span class="w"> </span><span class="o">*</span><span class="n">mutex</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">cv</span><span class="o">-&gt;</span><span class="n">nwait</span><span class="o">++</span><span class="p">;</span>
+<span class="w">    </span><span class="n">mutex_unlock</span><span class="p">(</span><span class="n">mutex</span><span class="p">);</span>
+<span class="w">    </span><span class="n">P</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cv</span><span class="o">-&gt;</span><span class="n">sleep</span><span class="p">);</span>
+<span class="w">    </span><span class="n">mutex_lock</span><span class="p">(</span><span class="n">mutex</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">broadcast</span><span class="p">(</span><span class="n">cond_t</span><span class="w"> </span><span class="o">*</span><span class="n">cv</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">cv</span><span class="o">-&gt;</span><span class="n">nwait</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">V</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cv</span><span class="o">-&gt;</span><span class="n">sleep</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="n">cv</span><span class="o">-&gt;</span><span class="n">nwait</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>问题在于：</p>
+<blockquote>
+<p><code>unlock(mutex)</code> 和 <code>P(cv-&gt;sleep)</code> 之间不是不可分割的。</p>
+</blockquote>
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant W as Waiter
+    participant M as Mutex
+    participant S as Semaphore
+    W-&gt;&gt;W: nwait++
+    W-&gt;&gt;M: unlock
+    Note over W: 尚未执行 P(sleep)
+    Note over S: Broadcast 的 V 先发生
+    W-&gt;&gt;S: P(sleep)
+    Note over W: 可能抢走未来某次唤醒
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_14_30.png" alt="信号量实现条件变量时可能出现唤醒丢失" loading="lazy">
+  <p class="video-caption">📷 信号量实现条件变量时可能出现唤醒丢失<br><a href="https://www.bilibili.com/video/BV1yQogB2Esf/?t=4470" target="_blank" rel="noopener">回到原视频 (01:14:30)</a></p>
+</div>
+
+<h3 id="54-futex">5.4 实际实现依赖 futex</h3>
+<p>条件变量要求：</p>
+<div class="highlight"><pre><span></span><code>释放锁 + 睡眠
+</code></pre></div>
+
+<p>必须原子完成。用户态纯信号量无法保证这一点，操作系统通过 futex 或等价原语提供原子等待。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Condition Variable Wait"] --&gt; B["必须原子执行"]
+    B --&gt; C["release mutex"]
+    B --&gt; D["enqueue + sleep"]
+    C --&gt; E["用户态无法单独保证"]
+    D --&gt; E
+    E --&gt; F["内核 futex slow path"]
+</code></pre></div>
+
+<hr />
+<h2 id="6">6. 哲学家吃饭问题</h2>
+<h3 id="61">6.1 问题定义</h3>
+<p><em>(参考时间: 00:48)</em></p>
+<p>五位哲学家围桌而坐，每人需要同时拿到左右两把叉子才能吃饭。</p>
+<p>每个线程：</p>
+<div class="highlight"><pre><span></span><code><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">think</span><span class="p">();</span>
+<span class="w">    </span><span class="n">acquire</span><span class="p">(</span><span class="n">left</span><span class="p">);</span>
+<span class="w">    </span><span class="n">acquire</span><span class="p">(</span><span class="n">right</span><span class="p">);</span>
+<span class="w">    </span><span class="n">eat</span><span class="p">();</span>
+<span class="w">    </span><span class="n">release</span><span class="p">(</span><span class="n">right</span><span class="p">);</span>
+<span class="w">    </span><span class="n">release</span><span class="p">(</span><span class="n">left</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    P0["Philosopher 0"] --&gt; F0["Fork 0"]
+    P0 --&gt; F1["Fork 1"]
+    P1["Philosopher 1"] --&gt; F1
+    P1 --&gt; F2["Fork 2"]
+    P2["Philosopher 2"] --&gt; F2
+    P2 --&gt; F3["Fork 3"]
+    P3["Philosopher 3"] --&gt; F3
+    P3 --&gt; F4["Fork 4"]
+    P4["Philosopher 4"] --&gt; F4
+    P4 --&gt; F0
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_49_30.png" alt="五位哲学家与五把叉子的环形依赖" loading="lazy">
+  <p class="video-caption">📷 五位哲学家与五把叉子的环形依赖<br><a href="https://www.bilibili.com/video/BV1yQogB2Esf/?t=2970" target="_blank" rel="noopener">回到原视频 (00:49:30)</a></p>
+</div>
+
+<h3 id="62">6.2 条件变量直接解决</h3>
+<p><em>(参考时间: 00:52)</em></p>
+<p>每把叉子有可用状态：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">bool</span><span class="w"> </span><span class="n">avail</span><span class="p">[</span><span class="n">N</span><span class="p">];</span>
+</code></pre></div>
+
+<p>吃饭条件：</p>
+<div class="highlight"><pre><span></span><code>avail[left] &amp;&amp; avail[right]
+</code></pre></div>
+
+<p>模板化实现：</p>
+<div class="highlight"><pre><span></span><code><span class="n">mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">avail</span><span class="p">[</span><span class="n">left</span><span class="p">]</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">avail</span><span class="p">[</span><span class="n">right</span><span class="p">]))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">cond_wait</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cv</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">avail</span><span class="p">[</span><span class="n">left</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">false</span><span class="p">;</span>
+<span class="n">avail</span><span class="p">[</span><span class="n">right</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">false</span><span class="p">;</span>
+<span class="n">mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+
+<span class="n">eat</span><span class="p">();</span>
+
+<span class="n">mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="n">avail</span><span class="p">[</span><span class="n">left</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">true</span><span class="p">;</span>
+<span class="n">avail</span><span class="p">[</span><span class="n">right</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">true</span><span class="p">;</span>
+<span class="n">cond_broadcast</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cv</span><span class="p">);</span>
+<span class="n">mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["lock 全局状态"] --&gt; B{"左右叉子都可用？"}
+    B -- "否" --&gt; C["cond_wait"]
+    C --&gt; B
+    B -- "是" --&gt; D["同时占用两把叉子"]
+    D --&gt; E["吃饭"]
+    E --&gt; F["释放两把叉子"]
+    F --&gt; G["broadcast"]
+    G --&gt; H["unlock"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_52_00.png" alt="用全局条件变量解决哲学家吃饭" loading="lazy">
+  <p class="video-caption">📷 用全局条件变量解决哲学家吃饭<br><a href="https://www.bilibili.com/video/BV1yQogB2Esf/?t=3120" target="_blank" rel="noopener">回到原视频 (00:52:00)</a></p>
+</div>
+
+<h3 id="63">6.3 最直接的信号量尝试会死锁</h3>
+<p><em>(参考时间: 00:55)</em></p>
+<p>把每把叉子建模为一个 <code>SEM_INIT(1)</code>：</p>
+<div class="highlight"><pre><span></span><code><span class="n">P</span><span class="p">(</span><span class="o">&amp;</span><span class="n">fork</span><span class="p">[</span><span class="n">left</span><span class="p">]);</span>
+<span class="n">P</span><span class="p">(</span><span class="o">&amp;</span><span class="n">fork</span><span class="p">[</span><span class="n">right</span><span class="p">]);</span>
+<span class="n">eat</span><span class="p">();</span>
+<span class="n">V</span><span class="p">(</span><span class="o">&amp;</span><span class="n">fork</span><span class="p">[</span><span class="n">right</span><span class="p">]);</span>
+<span class="n">V</span><span class="p">(</span><span class="o">&amp;</span><span class="n">fork</span><span class="p">[</span><span class="n">left</span><span class="p">]);</span>
+</code></pre></div>
+
+<p>如果所有人都先拿左手叉子：</p>
+<div class="highlight"><pre><span></span><code>P(left) 全部成功
+P(right) 全部等待
+</code></pre></div>
+
+<p>形成循环等待，系统死锁。</p>
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant P0
+    participant P1
+    participant P2
+    participant P3
+    participant P4
+    P0-&gt;&gt;P0: take left
+    P1-&gt;&gt;P1: take left
+    P2-&gt;&gt;P2: take left
+    P3-&gt;&gt;P3: take left
+    P4-&gt;&gt;P4: take left
+    Note over P0,P4: 所有人等待右手叉子
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_57_30.png" alt="五个哲学家各拿一把叉子形成死锁" loading="lazy">
+  <p class="video-caption">📷 五个哲学家各拿一把叉子形成死锁<br><a href="https://www.bilibili.com/video/BV1yQogB2Esf/?t=3450" target="_blank" rel="noopener">回到原视频 (00:57:30)</a></p>
+</div>
+
+<h3 id="64">6.4 从桌上赶走一个人</h3>
+<p><em>(参考时间: 01:00)</em></p>
+<p>增加一个初始值为 <code>N - 1</code> 的信号量：</p>
+<div class="highlight"><pre><span></span><code><span class="n">sem_t</span><span class="w"> </span><span class="n">table</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">SEM_INIT</span><span class="p">(</span><span class="n">N</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span>
+</code></pre></div>
+
+<p>哲学家先 <code>P(table)</code> 才能上桌，吃完 <code>V(table)</code>。</p>
+<p>五人中最多四人同时竞争叉子。四个人最多只可能持有四把左手叉子，剩下至少一把叉子可供某人完成左右配对。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["P(table)：最多 4 人上桌"] --&gt; B["P(left)"]
+    B --&gt; C["P(right)"]
+    C --&gt; D["吃饭"]
+    D --&gt; E["V(right)"]
+    E --&gt; F["V(left)"]
+    F --&gt; G["V(table)：离桌"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_00_00.png" alt="用 `N-1` 个上桌许可打破死锁" loading="lazy">
+  <p class="video-caption">📷 用 `N-1` 个上桌许可打破死锁<br><a href="https://www.bilibili.com/video/BV1yQogB2Esf/?t=3600" target="_blank" rel="noopener">回到原视频 (01:00:00)</a></p>
+</div>
+
+<h3 id="65-lock-ordering">6.5 Lock Ordering</h3>
+<p><em>(参考时间: 01:02)</em></p>
+<p>给叉子编号，所有哲学家总是先拿编号较小的叉子：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">int</span><span class="w"> </span><span class="n">first</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">min</span><span class="p">(</span><span class="n">left</span><span class="p">,</span><span class="w"> </span><span class="n">right</span><span class="p">);</span>
+<span class="kt">int</span><span class="w"> </span><span class="n">second</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">max</span><span class="p">(</span><span class="n">left</span><span class="p">,</span><span class="w"> </span><span class="n">right</span><span class="p">);</span>
+
+<span class="n">P</span><span class="p">(</span><span class="o">&amp;</span><span class="n">fork</span><span class="p">[</span><span class="n">first</span><span class="p">]);</span>
+<span class="n">P</span><span class="p">(</span><span class="o">&amp;</span><span class="n">fork</span><span class="p">[</span><span class="n">second</span><span class="p">]);</span>
+</code></pre></div>
+
+<p>这样不会出现所有人沿同一个环方向各持一把叉子的循环。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Fork 0"] --&gt; B["Fork 1"]
+    B --&gt; C["Fork 2"]
+    C --&gt; D["Fork 3"]
+    D --&gt; E["Fork 4"]
+    E --&gt; F["全局顺序"]
+    F --&gt; G["所有线程按相同顺序申请"]
+    G --&gt; H["避免循环等待"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_02_30.png" alt="给叉子编号并统一申请顺序" loading="lazy">
+  <p class="video-caption">📷 给叉子编号并统一申请顺序<br><a href="https://www.bilibili.com/video/BV1yQogB2Esf/?t=3750" target="_blank" rel="noopener">回到原视频 (01:02:30)</a></p>
+</div>
+
+<h3 id="66-workaround">6.6 Workaround 不是通用同步</h3>
+<p><em>(参考时间: 01:04)</em></p>
+<p>两种解决方式都可用，但正确性依赖额外证明：</p>
+<ul>
+<li>桌上最多四人；</li>
+<li>叉子全序和 lock ordering。</li>
+</ul>
+<p>如果需求变成“哲学家可以申请任意一组叉子”，计数技巧就不再直接适用。条件变量仍只需写出：</p>
+<div class="highlight"><pre><span></span><code>所有需要的叉子都 available
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["固定左右叉子"] --&gt; B["计数 workaround 可用"]
+    C["任意叉子集合"] --&gt; D["计数方案失去通用性"]
+    D --&gt; E["条件变量仍可直接检查全局条件"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_05_00.png" alt="哲学家问题暴露了信号量的非通用性" loading="lazy">
+  <p class="video-caption">📷 哲学家问题暴露了信号量的非通用性<br><a href="https://www.bilibili.com/video/BV1yQogB2Esf/?t=3900" target="_blank" rel="noopener">回到原视频 (01:05:00)</a></p>
+</div>
+
+<hr />
+<h2 id="7-waiter">7. 用 waiter 线程统一管理复杂同步</h2>
+<h3 id="71">7.1 把所有请求集中给一个调度者</h3>
+<p><em>(参考时间: 01:17)</em></p>
+<p>如果多个信号量互相协调很难，可以引入一个 <strong>waiter / scheduler</strong> 线程：</p>
+<ul>
+<li>所有哲学家只向 waiter 发请求；</li>
+<li>叉子等全局资源由 waiter 持有；</li>
+<li>waiter 串行检查全局状态并决定谁可以继续；</li>
+<li>请求队列本身是生产者消费者问题。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    P0["Philosopher 0"] --&gt; Q["Request Queue"]
+    P1["Philosopher 1"] --&gt; Q
+    P2["Philosopher 2"] --&gt; Q
+    Q --&gt; W["Waiter Thread"]
+    W --&gt; S["串行检查全局叉子状态"]
+    S --&gt; G0["Reply / Permission 0"]
+    S --&gt; G1["Reply / Permission 1"]
+    S --&gt; G2["Reply / Permission 2"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_17_50.png" alt="用 waiter 线程集中管理哲学家请求" loading="lazy">
+  <p class="video-caption">📷 用 waiter 线程集中管理哲学家请求<br><a href="https://www.bilibili.com/video/BV1yQogB2Esf/?t=4670" target="_blank" rel="noopener">回到原视频 (01:17:50)</a></p>
+</div>
+
+<h3 id="72">7.2 请求与许可仍然是信号量</h3>
+<p>哲学家发送请求后：</p>
+<div class="highlight"><pre><span></span><code><span class="n">send_request</span><span class="p">(</span><span class="n">tid</span><span class="p">,</span><span class="w"> </span><span class="n">needed_forks</span><span class="p">);</span>
+<span class="n">P</span><span class="p">(</span><span class="o">&amp;</span><span class="n">permission</span><span class="p">[</span><span class="n">tid</span><span class="p">]);</span>
+</code></pre></div>
+
+<p>waiter 处理完：</p>
+<div class="highlight"><pre><span></span><code><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">can_grant</span><span class="p">(</span><span class="n">request</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">grant_forks</span><span class="p">(</span><span class="n">request</span><span class="p">);</span>
+<span class="w">    </span><span class="n">V</span><span class="p">(</span><span class="o">&amp;</span><span class="n">permission</span><span class="p">[</span><span class="n">request</span><span class="p">.</span><span class="n">tid</span><span class="p">]);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant P as Philosopher
+    participant Q as Queue
+    participant W as Waiter
+    P-&gt;&gt;Q: request forks
+    W-&gt;&gt;Q: consume request
+    W-&gt;&gt;W: check global state
+    W-&gt;&gt;P: V(permission)
+    P-&gt;&gt;P: continue eating
+</code></pre></div>
+
+<h3 id="73">7.3 集中调度可以加入策略</h3>
+<p><em>(参考时间: 01:21)</em></p>
+<p>waiter 拥有全局信息，因此可以实现：</p>
+<ul>
+<li>公平性；</li>
+<li>防止饥饿；</li>
+<li>控制每个哲学家的吃饭频率；</li>
+<li>load balancing；</li>
+<li>超时与优先级。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Waiter 全局状态"] --&gt; B["记录请求时间"]
+    A --&gt; C["记录持有资源"]
+    A --&gt; D["记录历史授予次数"]
+    B --&gt; E["公平策略"]
+    C --&gt; E
+    D --&gt; E
+    E --&gt; F["选择下一个可继续线程"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_22_00.png" alt="集中调度器可以实施公平与资源分配策略" loading="lazy">
+  <p class="video-caption">📷 集中调度器可以实施公平与资源分配策略<br><a href="https://www.bilibili.com/video/BV1yQogB2Esf/?t=4920" target="_blank" rel="noopener">回到原视频 (01:22:00)</a></p>
+</div>
+
+<h3 id="74">7.4 性能开销</h3>
+<p>调度决策通常是对哈希表或小数据结构的 O(1) 检查，只需几纳秒到很短时间；而真实任务可能执行数毫秒到数秒。</p>
+<p>如果单 waiter 成为瓶颈，可以：</p>
+<ul>
+<li>使用多个 waiter；</li>
+<li>按资源分片；</li>
+<li>将任务切得更细；</li>
+<li>只把复杂同步交给全局调度者。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["复杂同步"] --&gt; B["集中 waiter"]
+    B --&gt; C["逻辑串行、易证明"]
+    C --&gt; D["任务粒度足够大"]
+    D --&gt; E["调度开销可忽略"]
+    E --&gt; F["必要时分片多个 waiter"]
+</code></pre></div>
+
+<hr />
+<h2 id="8">8. 信号量与条件变量的选择</h2>
+<h3 id="81">8.1 信号量适合的场景</h3>
+<p><em>(参考时间: 01:24)</em></p>
+<p>信号量非常适合：</p>
+<ul>
+<li>互斥锁；</li>
+<li>一次性的 <code>A → B</code>；</li>
+<li>计数型资源上限；</li>
+<li><code>join</code>；</li>
+<li>DAG 依赖计数；</li>
+<li>标准生产者消费者；</li>
+<li>固定协议的请求 / 许可。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Semaphore 适合"] --&gt; B["Mutex"]
+    A --&gt; C["One-shot happens-before"]
+    A --&gt; D["Counted resource"]
+    A --&gt; E["Join / DAG"]
+    A --&gt; F["Producer-Consumer"]
+</code></pre></div>
+
+<h3 id="82">8.2 条件变量适合的场景</h3>
+<p><em>(参考时间: 01:06)</em></p>
+<p>条件变量适合：</p>
+<ul>
+<li>任意全局状态条件；</li>
+<li>包含 AND / OR 的复杂布尔表达式；</li>
+<li>close/open 等生命周期；</li>
+<li>任意资源集合请求；</li>
+<li>无法用单一计数表示的问题。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Condition Variable 适合"] --&gt; B["任意布尔条件"]
+    A --&gt; C["OR 条件"]
+    A --&gt; D["close / open"]
+    A --&gt; E["任意资源集合"]
+    A --&gt; F["动态复杂状态"]
+</code></pre></div>
+
+<h3 id="83">8.3 优先保证正确性</h3>
+<p><em>(参考时间: 01:24)</em></p>
+<p>系统实现先要正确，再优化：</p>
+<ol>
+<li>先写清同步条件；</li>
+<li>条件变量模板直接给出可证明实现；</li>
+<li>如果问题天然符合计数模型，再换成信号量；</li>
+<li>只有确认瓶颈后再降低唤醒范围和优化调度。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["写清同步条件"] --&gt; B["用万能条件变量保证正确"]
+    B --&gt; C{"存在自然计数模型？"}
+    C -- "是" --&gt; D["改写为信号量，简化代码"]
+    C -- "否" --&gt; E["保留条件变量或 waiter"]
+    D --&gt; F["压力测试与性能分析"]
+    E --&gt; F
+</code></pre></div>
+
+<hr />
+<h2 id="9">9. 总结：信号量是计数资源的漂亮抽象</h2>
+<p>这一讲从计算图出发，得到了完整信号量知识体系：</p>
+<ul>
+<li>跨线程传递 token 可以建立 happens-before；</li>
+<li>互斥锁是计数为 1 的信号量；</li>
+<li>信号量计数表示剩余车位、手环或许可；</li>
+<li><code>P</code> 消耗 token，<code>V</code> 产生 token；</li>
+<li>一次 <code>A → B</code> 可以用 <code>SEM_INIT(0)</code> 实现；</li>
+<li><code>join</code> 可以用每线程一个信号量，也可以共用一个计数信号量；</li>
+<li>DAG 可以为每条边或每个节点维护计数；</li>
+<li>生产者消费者用 <code>empty</code> / <code>fill</code> 两表搬运 token；</li>
+<li>token 总量满足缓冲区不变量；</li>
+<li>复杂 OR 条件、close/open 和任意资源集合更难用信号量表达；</li>
+<li>哲学家吃饭问题暴露了循环等待与死锁；</li>
+<li>可增加 <code>table</code> 计数或使用 lock ordering 解决，但缺少通用性；</li>
+<li>用信号量实现条件变量会遇到释放锁与睡眠之间的唤醒丢失；</li>
+<li>实际条件变量依赖 futex 等原子等待；</li>
+<li>waiter / scheduler 线程可以把任意复杂同步转化为请求-许可的生产者消费者；</li>
+<li>最终应优先保证正确性，再根据 workload 优化。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["一把钥匙"] --&gt; B["多个 token"]
+    B --&gt; C["Semaphore"]
+    C --&gt; D["互斥 / 同步 / 限流"]
+    D --&gt; E["Producer-Consumer"]
+    E --&gt; F["Complex limits"]
+    F --&gt; G["Condition Variable / Waiter"]
+</code></pre></div>
+
+<p>最重要的结论是：</p>
+<blockquote>
+<p>信号量很优雅，但不是万能同步原语。真正关键的是理解线程继续执行的全局条件；条件变量可以表达任意条件，信号量则适合其中的计数型特例。</p>
+</blockquote>
+<hr />
+<h2 id="_3">附：官方参考与延伸阅读</h2>
+<p>以下链接来自官方讲义第 16 讲及课堂内容：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/cgraph-mutex">使用互斥锁实现计算图</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/join-sem">使用信号量实现 join</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/cgraph-sem">使用信号量实现计算图</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/pc-sem">使用信号量实现生产者消费者</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/philosophers">哲学家吃饭问题</a></li>
+<li><a href="http://birrell.org/andrew/papers/ImplementingCVs.pdf">Implementing Condition Variables with Semaphores</a></li>
+</ul>
+<p>阅读材料：</p>
+<ul>
+<li><em>Operating Systems: Three Easy Pieces</em> 第 31 章，Semaphores。</li>
+</ul>
+<p>官方课程资料：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/2026/">课程主页</a></li>
+<li><a href="https://jyywiki.cn/OS/2026/lect16.md">第 16 讲讲义：并发控制：同步 (2)</a></li>
+<li><a href="https://www.bilibili.com/video/BV1yQogB2Esf/">视频：16 - 并发控制：信号量</a></li>
+</ul>
+<blockquote>
+<p><strong>版权与署名</strong>：本讲课程材料由蒋炎岩（jyy）编写。课程讲义与幻灯片采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书保留课程出处、作者署名与许可说明。</p>
+</blockquote>
+    </article>
+
+    <!-- Mermaid 图表引擎初始化 -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            mermaid.initialize({ startOnLoad: false, theme: 'default' });
+            
+            // 兼容普通代码块以及丢失 language-mermaid 类名的情况 (CodeHilite 干扰)
+            const codeNodes = document.querySelectorAll('pre code, .highlight code');
+            codeNodes.forEach(function(node) {
+                const text = node.textContent.trim();
+                // 匹配常见的 mermaid 图表前缀
+                if (text.startsWith('graph ') || text.startsWith('flowchart ') || text.startsWith('sequenceDiagram') || text.startsWith('gantt') || text.startsWith('pie') || text.startsWith('classDiagram') || text.startsWith('stateDiagram') || text.startsWith('mindmap')) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.className = 'mermaid';
+                    tempDiv.textContent = text;
+                    
+                    // 获取需要替换的最外层父节点 (比如 div.highlight 或者 pre)
+                    const wrapper = node.closest('.highlight') || node.parentNode;
+                    wrapper.replaceWith(tempDiv); 
+                }
+            });
+            
+            // 所有节点转换完成，统一进行图表动态绘制
+            mermaid.run();
+        });
+    </script>
+    <!-- Lightbox：截图点击放大 -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const lightbox = document.createElement('div');
+            lightbox.className = 'lightbox';
+            lightbox.innerHTML = '<img alt=""><div class="lightbox-caption"></div>';
+            document.body.appendChild(lightbox);
+            const lbImg = lightbox.querySelector('img');
+            const lbCap = lightbox.querySelector('.lightbox-caption');
+            function openLightbox(src, alt) {
+                lbImg.src = src; lbImg.alt = alt || '';
+                lbCap.textContent = alt || '';
+                lightbox.classList.add('open');
+                document.body.style.overflow = 'hidden';
+            }
+            function closeLightbox() {
+                lightbox.classList.remove('open');
+                lbImg.src = '';
+                document.body.style.overflow = '';
+            }
+            document.querySelectorAll('.screenshot-card img').forEach(function(img) {
+                img.addEventListener('click', function() { openLightbox(img.src, img.alt); });
+            });
+            lightbox.addEventListener('click', closeLightbox);
+            document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
+        });
+    </script>
+</body>
+</html>
