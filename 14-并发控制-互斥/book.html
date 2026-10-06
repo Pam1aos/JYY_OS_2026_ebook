@@ -1,0 +1,1498 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>并发控制：互斥</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* ── 基础重置 ── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            color-scheme: light;
+            --bg-primary: #f7f7f8;
+            --bg-secondary: #ffffff;
+            --bg-card: #eef0f3;
+            --bg-code: #f2f3f5;
+            --text-primary: #1f2328;
+            --text-secondary: #57606a;
+            --text-muted: #6e7781;
+            --accent: #2563eb;
+            --accent-glow: rgba(37, 99, 235, 0.08);
+            --border: #d9dce1;
+            --border-subtle: #e7e9ec;
+            --radius: 12px;
+            --shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Serif SC', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.8;
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── 文章容器 ── */
+        .book-content {
+            max-width: 780px;
+            margin: 0 auto;
+            padding: 60px 32px 120px;
+        }
+
+        /* ── 标题 ── */
+        h1 {
+            font-size: 2.2em;
+            font-weight: 700;
+            margin: 0 0 12px;
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+        }
+
+        h2 {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 56px 0 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h3 {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: var(--accent);
+            margin: 36px 0 12px;
+        }
+
+        /* ── 段落与文字 ── */
+        p {
+            margin: 0 0 16px;
+            color: var(--text-primary);
+        }
+
+        strong {
+            color: #0f172a;
+            font-weight: 600;
+        }
+
+        em {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.2s;
+        }
+        a:hover {
+            border-bottom-color: var(--accent);
+        }
+
+        /* ── 引用 ── */
+        blockquote {
+            margin: 24px 0;
+            padding: 16px 20px;
+            background: var(--bg-secondary);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 var(--radius) var(--radius) 0;
+            color: var(--text-secondary);
+        }
+        blockquote p { margin: 0; }
+
+        /* ── 列表 ── */
+        ul, ol {
+            margin: 12px 0 20px 24px;
+            color: var(--text-primary);
+        }
+        li {
+            margin: 6px 0;
+        }
+
+        /* ── 分割线 ── */
+        hr {
+            border: none;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border), transparent);
+            margin: 48px 0;
+        }
+
+        /* ── 表格 ── */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 24px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+        thead {
+            background: var(--bg-card);
+        }
+        th {
+            padding: 12px 16px;
+            font-weight: 600;
+            text-align: left;
+            color: var(--accent);
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        td {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border-subtle);
+        }
+        tbody tr {
+            background: var(--bg-secondary);
+            transition: background 0.15s;
+        }
+        tbody tr:hover {
+            background: var(--bg-card);
+        }
+
+        /* ── 代码 ── */
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-code);
+            padding: 2px 7px;
+            border-radius: 5px;
+            font-size: 0.88em;
+            color: #6d28d9;
+        }
+
+        pre {
+            margin: 20px 0;
+            padding: 20px 24px;
+            background: var(--bg-code);
+            border-radius: var(--radius);
+            overflow-x: auto;
+            border: 1px solid var(--border);
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9em;
+            color: var(--text-primary);
+        }
+
+        /* ── 视频嵌入卡片 ── */
+        .video-card {
+            margin: 32px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .video-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(15, 23, 42, 0.12);
+        }
+
+        .video-wrapper {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 */
+            height: 0;
+            overflow: hidden;
+        }
+        .video-wrapper iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .video-card img {
+            width: 100%;
+            display: block;
+        }
+
+        .video-caption {
+            padding: 12px 16px;
+            font-size: 0.88em;
+            color: var(--text-secondary);
+            text-align: center;
+            line-height: 1.6;
+            margin: 0;
+        }
+        .video-caption a {
+            color: var(--accent);
+        }
+
+        .video-card.fallback {
+            padding: 20px;
+            text-align: center;
+        }
+
+        /* ── Lightbox：截图点击放大 ── */
+        .screenshot-card img { cursor: zoom-in; transition: opacity 0.15s; }
+        .screenshot-card img:hover { opacity: 0.9; }
+        .lightbox {
+            position: fixed; inset: 0; z-index: 999;
+            display: none; align-items: center; justify-content: center;
+            background: rgba(5, 5, 8, 0.92); backdrop-filter: blur(4px);
+            cursor: zoom-out; padding: 24px;
+        }
+        .lightbox.open { display: flex; }
+        .lightbox img {
+            max-width: 96vw; max-height: 90vh;
+            border-radius: 8px; box-shadow: 0 12px 60px rgba(0,0,0,0.7);
+        }
+        .lightbox-caption {
+            position: absolute; bottom: 14px; left: 0; right: 0;
+            text-align: center; color: var(--text-secondary); font-size: 0.85em;
+        }
+
+        /* ── 顶部信息栏 ── */
+        .book-content > blockquote:first-of-type {
+            background: var(--accent-glow);
+            border-left-color: var(--accent);
+            border-radius: var(--radius);
+            margin-bottom: 32px;
+        }
+
+        /* ── 图表居中 ── */
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            margin: 32px 0;
+            overflow-x: auto;
+        }
+
+        /* ── 滚动条 ── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* ── 响应式 ── */
+        @media (max-width: 640px) {
+            .book-content { padding: 32px 16px 80px; }
+            h1 { font-size: 1.7em; }
+            h2 { font-size: 1.3em; }
+        }
+    </style>
+</head>
+<body>
+    <article class="book-content">
+        <h1 id="_1">并发控制：互斥</h1>
+<blockquote>
+<p><strong>课程</strong>：2026 春季学期《操作系统原理》<br />
+<strong>讲师</strong>：蒋炎岩（jyy）<br />
+<strong>官方课程主页</strong>：<a href="https://jyywiki.cn/OS/2026/">https://jyywiki.cn/OS/2026/</a><br />
+<strong>官方讲义</strong>：<a href="https://jyywiki.cn/OS/2026/lect14.md">https://jyywiki.cn/OS/2026/lect14.md</a><br />
+<strong>视频来源</strong>：<a href="https://www.bilibili.com/video/BV1hNdhB1Efe/">Bilibili BV1hNdhB1Efe</a><br />
+<strong>版权说明</strong>：课程讲义与幻灯片归蒋炎岩所有，采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书是对课堂讲授的书面化重构，保留出处与许可说明。</p>
+</blockquote>
+<h2 id="_2">导语：把并发重新装回可控的盒子里</h2>
+<p><em>(参考时间: 00:00)</em></p>
+<p>上一讲已经证明：共享内存并发会打破确定性、顺序执行和指令顺序三个直觉。</p>
+<p>这一讲不再继续“玩火”，而是尝试把并发限制在明确边界内：</p>
+<div class="highlight"><pre><span></span><code>make_it_work {
+    sum++;
+}
+</code></pre></div>
+
+<p>如果一段代码在任何执行交错下都表现为“不与其他同类代码块并发执行”，就能把这段临界区退化成顺序代码。</p>
+<p>这个机制称为：</p>
+<blockquote>
+<p><strong>互斥（mutual exclusion / mutex）</strong></p>
+</blockquote>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["共享内存并发"] --&gt; B["非确定性与数据竞争"]
+    B --&gt; C["找出必须串行的代码"]
+    C --&gt; D["互斥：同一时间只允许一个线程"]
+    D --&gt; E["临界区重新获得顺序语义"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_02_10.png" alt="操作系统系统调用本身就是最早的共享内存并发程序" loading="lazy">
+  <p class="video-caption">📷 操作系统系统调用本身就是最早的共享内存并发程序<br><a href="https://www.bilibili.com/video/BV1hNdhB1Efe/?t=130" target="_blank" rel="noopener">回到原视频 (00:02:10)</a></p>
+</div>
+
+<hr />
+<h2 id="1">1. 为什么操作系统必须处理并发</h2>
+<h3 id="11-fork">1.1 <code>fork</code> 不共享内存，系统调用却共享内核</h3>
+<p><em>(参考时间: 00:01)</em></p>
+<p>早期 UNIX 中：</p>
+<ul>
+<li>一个进程执行 <code>fork</code> 后，父子进程是独立地址空间；</li>
+<li><code>execve</code> 也不默认共享用户态内存；</li>
+<li>可是系统调用会从用户态跳入同一份内核代码。</li>
+</ul>
+<p>因此：</p>
+<div class="highlight"><pre><span></span><code><span class="nl">P1</span><span class="p">:</span><span class="w"> </span><span class="n">read</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span><span class="w"> </span><span class="n">buf</span><span class="p">,</span><span class="w"> </span><span class="n">size</span><span class="p">);</span>
+<span class="nl">P2</span><span class="p">:</span><span class="w"> </span><span class="n">write</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span><span class="w"> </span><span class="n">buf</span><span class="p">,</span><span class="w"> </span><span class="n">size</span><span class="p">);</span>
+</code></pre></div>
+
+<p>两个进程在内核中可以被视为两个线程：</p>
+<ul>
+<li>用户态地址空间不同；</li>
+<li>内核对象与内核数据结构相同；</li>
+<li>中断或另一个 CPU 可能随时打断当前内核路径。</li>
+</ul>
+<p>所以操作系统是第一个真正严肃的大型并发程序，很多早期并发研究也来自操作系统。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    P1["进程 P1"] --&gt;|"syscall"| K["共享内核状态"]
+    P2["进程 P2"] --&gt;|"syscall"| K
+    I["中断"] --&gt; K
+    C["其他 CPU"] --&gt; K
+    K --&gt; D["同一文件 / 队列 / 页面 / 分配器"]
+    D --&gt; R["并发访问与一致性风险"]
+</code></pre></div>
+
+<h3 id="12-make-it-work">1.2 “make it work” 的历史方案</h3>
+<p><em>(参考时间: 00:04)</em></p>
+<p>我们希望有一个语言或系统机制，让一段代码：</p>
+<div class="highlight"><pre><span></span><code><span class="n">make_it_work</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">sum</span><span class="o">++</span><span class="p">;</span>
+<span class="w">    </span><span class="n">update_tree</span><span class="p">();</span>
+<span class="w">    </span><span class="n">append_log</span><span class="p">();</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>表现为统一的原子操作：</p>
+<ul>
+<li>要么全部完成；</li>
+<li>要么像从未执行；</li>
+<li>中间状态不对其他线程或事务可见。</li>
+</ul>
+<p>这接近 <strong>Transactional Memory</strong>。Intel 曾通过 <code>xbegin</code> / <code>xend</code> 提供 TSX，ARM 也有过类似事务扩展。但这类指令影响几乎全部指令语义，实现和维护复杂度极高，并曾牵涉安全问题。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["事务开始"] --&gt; B["执行多条读写"]
+    B --&gt; C{"冲突或失败？"}
+    C -- "否" --&gt; D["一次性提交全部写入"]
+    C -- "是" --&gt; E["回滚并重试 / 退避"]
+    D --&gt; F["其他线程看到完整结果"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_04_30.png" alt="Transactional Memory 的原子提交与回滚语义" loading="lazy">
+  <p class="video-caption">📷 Transactional Memory 的原子提交与回滚语义<br><a href="https://www.bilibili.com/video/BV1hNdhB1Efe/?t=270" target="_blank" rel="noopener">回到原视频 (00:04:30)</a></p>
+</div>
+
+<hr />
+<h2 id="2">2. 最简单的起点：单处理器关闭中断</h2>
+<h3 id="21-stop-the-world">2.1 内核中的 stop the world</h3>
+<p><em>(参考时间: 00:06)</em></p>
+<p>在单处理器内核中，可以在很短的关键区内关闭中断：</p>
+<div class="highlight"><pre><span></span><code><span class="n">disable_interrupt</span><span class="p">();</span>
+<span class="n">sum</span><span class="o">++</span><span class="p">;</span>
+<span class="n">enable_interrupt</span><span class="p">();</span>
+</code></pre></div>
+
+<p>关闭中断后：</p>
+<ul>
+<li>CPU 不再接收其他设备中断；</li>
+<li>不会发生中断驱动的线程切换；</li>
+<li>当前处理器上的执行暂时变成确定顺序。</li>
+</ul>
+<p>但这是操作系统内核的能力，而且必须很短。如果关闭中断后进入死循环，整台机器会失去响应。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["进入关键区"] --&gt; B["关闭中断"]
+    B --&gt; C["执行不可被打断的代码"]
+    C --&gt; D["打开中断"]
+    D --&gt; E["恢复调度与外部事件"]
+    C --&gt; F{"代码死循环？"}
+    F -- "是" --&gt; G["系统失去响应"]
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart LR
+    U["用户态程序"] --&gt; A["尝试执行 cli / MSR 中断控制"]
+    A --&gt; B["特权级检查失败"]
+    B --&gt; C["Illegal instruction / Segfault / Protection fault"]
+    C --&gt; D["用户程序无权关闭中断"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_06_50.png" alt="内核通过关闭中断保护短临界区" loading="lazy">
+  <p class="video-caption">📷 内核通过关闭中断保护短临界区<br><a href="https://www.bilibili.com/video/BV1hNdhB1Efe/?t=410" target="_blank" rel="noopener">回到原视频 (00:06:50)</a></p>
+</div>
+
+<h3 id="22">2.2 用户态执行特权指令会失败</h3>
+<p><em>(参考时间: 00:09)</em></p>
+<p>在用户态尝试关闭中断：</p>
+<div class="highlight"><pre><span></span><code><span class="nf">cli</span>
+</code></pre></div>
+
+<p>或通过 MSR 清除中断位，会被处理器拒绝。不同平台分别可能表现为：</p>
+<div class="highlight"><pre><span></span><code>Illegal instruction
+SIGSEGV
+Protection fault
+</code></pre></div>
+
+<p>这体现了操作系统与应用程序的权限边界：共享资源保护机制可以借助硬件特权，但不能让任意用户代码破坏整个系统。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_09_20.png" alt="用户态关闭中断触发非法指令或保护错误" loading="lazy">
+  <p class="video-caption">📷 用户态关闭中断触发非法指令或保护错误<br><a href="https://www.bilibili.com/video/BV1hNdhB1Efe/?t=560" target="_blank" rel="noopener">回到原视频 (00:09:20)</a></p>
+</div>
+
+<hr />
+<h2 id="3-api">3. 互斥 API</h2>
+<h3 id="31-lock-unlock">3.1 <code>lock</code> / <code>unlock</code></h3>
+<p><em>(参考时间: 00:10)</em></p>
+<p>标准形式：</p>
+<div class="highlight"><pre><span></span><code><span class="n">mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lock</span><span class="p">);</span>
+<span class="n">sum</span><span class="o">++</span><span class="p">;</span>
+<span class="n">mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lock</span><span class="p">);</span>
+</code></pre></div>
+
+<p>语义是：</p>
+<ul>
+<li><code>lock</code> 成功返回后，当前线程进入临界区；</li>
+<li>同一把锁保护的临界区不会同时执行；</li>
+<li><code>unlock</code> 释放锁，并保证临界区内的写在后续获取同一把锁的线程中可见；</li>
+<li>其他线程若有冲突访问，也必须使用同一把锁。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant T1 as Thread 1
+    participant L as Mutex
+    participant T2 as Thread 2
+    T1-&gt;&gt;L: lock
+    L--&gt;&gt;T1: acquired
+    T2-&gt;&gt;L: lock
+    Note over T2,L: 等待
+    T1-&gt;&gt;T1: critical section
+    T1-&gt;&gt;L: unlock
+    L--&gt;&gt;T2: acquired
+    T2-&gt;&gt;T2: critical section
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_11_20.png" alt="互斥把并发执行局部退化为顺序执行" loading="lazy">
+  <p class="video-caption">📷 互斥把并发执行局部退化为顺序执行<br><a href="https://www.bilibili.com/video/BV1hNdhB1Efe/?t=680" target="_blank" rel="noopener">回到原视频 (00:11:20)</a></p>
+</div>
+
+<h3 id="32">3.2 两种拟人视角</h3>
+<p><em>(参考时间: 00:13)</em></p>
+<p><strong>房间视角</strong>：</p>
+<ul>
+<li><code>lock</code>：进入只能容纳一人的房间并锁门；</li>
+<li><code>unlock</code>：离开房间，其他人可以进入。</li>
+</ul>
+<p><strong>钥匙视角</strong>：</p>
+<ul>
+<li>桌上只有一把钥匙；</li>
+<li><code>lock</code> / <code>acquire</code>：拿走钥匙才能继续；</li>
+<li><code>unlock</code> / <code>release</code>：把钥匙放回。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["线程到达 lock"] --&gt; B{"钥匙在桌上？"}
+    B -- "是" --&gt; C["拿走钥匙，进入临界区"]
+    B -- "否" --&gt; D["等待钥匙回来"]
+    C --&gt; E["执行共享内存操作"]
+    E --&gt; F["unlock：放回钥匙"]
+    F --&gt; B
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_13_40.png" alt="用宿舍单人间与钥匙理解互斥锁" loading="lazy">
+  <p class="video-caption">📷 用宿舍单人间与钥匙理解互斥锁<br><a href="https://www.bilibili.com/video/BV1hNdhB1Efe/?t=820" target="_blank" rel="noopener">回到原视频 (00:13:40)</a></p>
+</div>
+
+<h3 id="33-acquire-release">3.3 Acquire / Release 的内存语义</h3>
+<p><em>(参考时间: 00:14)</em></p>
+<p>锁不仅是“只允许一个线程进入”，它还必须提供可见性保证：</p>
+<ul>
+<li><strong>release</strong> 之前的写，在之后的 <strong>acquire</strong> 中可见；</li>
+<li>acquire 不能被重排到临界区读之后；</li>
+<li>release 不能被重排到临界区写之前；</li>
+<li>这建立了线程之间的同步关系。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["T1 critical writes"] --&gt; B["T1 release"]
+    B --&gt;|"synchronizes-with"| C["T2 acquire"]
+    C --&gt; D["T2 critical reads"]
+    D --&gt; E["T2 能看到 T1 的写入"]
+</code></pre></div>
+
+<h3 id="34">3.4 多把锁</h3>
+<p><em>(参考时间: 00:16)</em></p>
+<p>不同共享对象可以使用不同锁：</p>
+<div class="highlight"><pre><span></span><code><span class="n">mutex_t</span><span class="w"> </span><span class="n">lock_x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">MUTEX_INIT</span><span class="p">();</span>
+<span class="n">mutex_t</span><span class="w"> </span><span class="n">lock_y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">MUTEX_INIT</span><span class="p">();</span>
+
+<span class="n">mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lock_x</span><span class="p">);</span>
+<span class="n">x</span><span class="o">++</span><span class="p">;</span>
+<span class="n">mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lock_x</span><span class="p">);</span>
+
+<span class="n">mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lock_y</span><span class="p">);</span>
+<span class="n">y</span><span class="o">++</span><span class="p">;</span>
+<span class="n">mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lock_y</span><span class="p">);</span>
+</code></pre></div>
+
+<p>只要访问同一对象的代码都使用同一把锁，<code>x</code> 与 <code>y</code> 就可以独立并发。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["共享变量 x"] --&gt; LA["锁 A 保护"]
+    B["共享变量 y"] --&gt; LB["锁 B 保护"]
+    LA --&gt; C["x 的临界区互相排斥"]
+    LB --&gt; D["y 的临界区互相排斥"]
+    C --&gt; E["x 与 y 之间仍可并发"]
+    D --&gt; E
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_16_20.png" alt="用不同锁保护彼此独立的共享数据" loading="lazy">
+  <p class="video-caption">📷 用不同锁保护彼此独立的共享数据<br><a href="https://www.bilibili.com/video/BV1hNdhB1Efe/?t=980" target="_blank" rel="noopener">回到原视频 (00:16:20)</a></p>
+</div>
+
+<h3 id="35">3.5 用锁正确求和</h3>
+<p><em>(参考时间: 00:17)</em></p>
+<div class="highlight"><pre><span></span><code><span class="cp">#define N 1000000</span>
+<span class="kt">long</span><span class="w"> </span><span class="n">sum</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="n">mutex_t</span><span class="w"> </span><span class="n">lock</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">MUTEX_INIT</span><span class="p">();</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">T_sum</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">tid</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">N</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">2</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lock</span><span class="p">);</span>
+<span class="w">        </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">j</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">j</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">10</span><span class="p">;</span><span class="w"> </span><span class="n">j</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">sum</span><span class="o">++</span><span class="p">;</span>
+<span class="w">            </span><span class="k">asm</span><span class="w"> </span><span class="k">volatile</span><span class="p">(</span><span class="s">""</span><span class="w"> </span><span class="o">:::</span><span class="w"> </span><span class="s">"memory"</span><span class="p">);</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">        </span><span class="n">mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lock</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>编译器屏障防止十条 <code>sum++</code> 被合并成 <code>sum += 10</code>，使临界区足够长，也便于观察锁是否正确。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["T_sum 循环"] --&gt; B["lock"]
+    B --&gt; C["多次 load / add / store"]
+    C --&gt; D["unlock"]
+    D --&gt; E{"还有循环？"}
+    E -- "是" --&gt; A
+    E -- "否" --&gt; F["线程结束"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_18_20.png" alt="使用互斥锁和多线程求和" loading="lazy">
+  <p class="video-caption">📷 使用互斥锁和多线程求和<br><a href="https://www.bilibili.com/video/BV1hNdhB1Efe/?t=1100" target="_blank" rel="noopener">回到原视频 (00:18:20)</a></p>
+</div>
+
+<hr />
+<h2 id="4">4. 正确使用锁并不容易</h2>
+<h3 id="41-stop-the-world">4.1 Stop-the-world 只是正确使用时的抽象</h3>
+<p><em>(参考时间: 00:20)</em></p>
+<p>如果所有共享数据都被同一套锁正确保护，就可以把 <code>lock ... unlock</code> 理解为：</p>
+<div class="highlight"><pre><span></span><code>stop_the_world();
+critical_section();
+resume_the_world();
+</code></pre></div>
+
+<p>其他线程即使真的在并行，它们的执行效果也可以被理解为前后重排，不会插入当前临界区。</p>
+<p>所以使用锁后，程序的局部理解又回到顺序执行：</p>
+<ul>
+<li>编译器优化假设重新成立；</li>
+<li>临界区内不会看到并发写入；</li>
+<li>人类可以用顺序思维处理复杂代码。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["并行执行时间线"] --&gt; B["正确 lock / unlock"]
+    B --&gt; C["冲突临界区被串行化"]
+    C --&gt; D["可按顺序语义理解"]
+    D --&gt; E["旧有的编译器与程序直觉恢复"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_20_30.png" alt="互斥锁可抽象为局部 stop the world" loading="lazy">
+  <p class="video-caption">📷 互斥锁可抽象为局部 stop the world<br><a href="https://www.bilibili.com/video/BV1hNdhB1Efe/?t=1230" target="_blank" rel="noopener">回到原视频 (00:20:30)</a></p>
+</div>
+
+<h3 id="42">4.2 忘解锁、提前返回、用错锁</h3>
+<p><em>(参考时间: 00:24)</em></p>
+<p>锁的问题与 <code>malloc</code> / <code>free</code> 相似：</p>
+<blockquote>
+<p>一旦引入显式 acquire / release，程序员就必须在所有路径上维持配对关系。</p>
+</blockquote>
+<p>常见错误：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="nf">f</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">l</span><span class="p">);</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">error</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">return</span><span class="p">;</span><span class="w">   </span><span class="cm">/* 漏掉 unlock */</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="n">unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">l</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>另一种错误是用不同的锁保护同一变量：</p>
+<div class="highlight"><pre><span></span><code><span class="nl">T1</span><span class="p">:</span><span class="w"> </span><span class="n">lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">l</span><span class="p">);</span><span class="w"> </span><span class="n">sum</span><span class="o">++</span><span class="p">;</span><span class="w"> </span><span class="n">unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">l</span><span class="p">);</span>
+<span class="nl">T2</span><span class="p">:</span><span class="w"> </span><span class="n">lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">i</span><span class="p">);</span><span class="w"> </span><span class="n">sum</span><span class="o">++</span><span class="p">;</span><span class="w"> </span><span class="n">unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">i</span><span class="p">);</span>
+</code></pre></div>
+
+<p>两段看似都加锁，但 <code>l</code> 和 <code>i</code> 不是同一个互斥域，保护完全失效。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["显式锁协议"] --&gt; B["忘记 lock"]
+    A --&gt; C["忘记 unlock"]
+    A --&gt; D["提前 return"]
+    A --&gt; E["错误锁对象"]
+    A --&gt; F["锁顺序不一致"]
+    B --&gt; G["数据竞争"]
+    C --&gt; H["死锁或永久阻塞"]
+    D --&gt; H
+    E --&gt; G
+    F --&gt; I["死锁"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_24_40.png" alt="常见锁使用错误：提前返回和锁对象写错" loading="lazy">
+  <p class="video-caption">📷 常见锁使用错误：提前返回和锁对象写错<br><a href="https://www.bilibili.com/video/BV1hNdhB1Efe/?t=1480" target="_blank" rel="noopener">回到原视频 (00:24:40)</a></p>
+</div>
+
+<h3 id="43">4.3 细粒度链表锁非常复杂</h3>
+<p><em>(参考时间: 00:25)</em></p>
+<p>双向链表节点可能各自带锁：</p>
+<div class="highlight"><pre><span></span><code><span class="k">struct</span><span class="w"> </span><span class="nc">node</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">lock_t</span><span class="w"> </span><span class="n">lock</span><span class="p">;</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">node</span><span class="w"> </span><span class="o">*</span><span class="n">prev</span><span class="p">,</span><span class="w"> </span><span class="o">*</span><span class="n">next</span><span class="p">;</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<p>遍历时必须：</p>
+<ol>
+<li>持有当前节点锁；</li>
+<li>获取下一节点锁；</li>
+<li>确认链接关系；</li>
+<li>释放当前节点锁；</li>
+<li>继续向前。</li>
+</ol>
+<p>插入和删除需要同时持有：</p>
+<div class="highlight"><pre><span></span><code>prev.lock
+current.lock
+next.lock
+</code></pre></div>
+
+<p>删除后还要安全回收内存，不能有线程仍持有指向该节点的引用。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["遍历 current"] --&gt; B["获取 next 锁"]
+    B --&gt; C["确认 current-&gt;next 仍指向 next"]
+    C --&gt; D["释放 current 锁"]
+    D --&gt; E["继续遍历 next"]
+    F["删除节点"] --&gt; G["获取 prev / current / next 三把锁"]
+    G --&gt; H["修改链接"]
+    H --&gt; I["确认没有残留引用"]
+    I --&gt; J["安全回收"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_25_50.png" alt="并发链表需要维护跨节点锁协议" loading="lazy">
+  <p class="video-caption">📷 并发链表需要维护跨节点锁协议<br><a href="https://www.bilibili.com/video/BV1hNdhB1Efe/?t=1550" target="_blank" rel="noopener">回到原视频 (00:25:50)</a></p>
+</div>
+
+<h3 id="44">4.4 一把大锁保平安</h3>
+<p><em>(参考时间: 00:28)</em></p>
+<p>课程建议初次实现并发数据结构时，从一把大锁开始：</p>
+<ul>
+<li>所有共享访问都使用同一把锁；</li>
+<li>先保证正确性；</li>
+<li>充分压力测试；</li>
+<li>只有确认瓶颈后再拆锁。</li>
+</ul>
+<p>Linux 从单处理器迁移到 SMP 时，也长期依赖 <strong>Big Kernel Lock</strong>：</p>
+<ul>
+<li>一把大锁保证整体一致性；</li>
+<li>先完成从单核到多核的安全过渡；</li>
+<li>再逐步拆分关键子系统。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["单处理器：关中断"] --&gt; B["多处理器：一把大锁"]
+    B --&gt; C["正确但扩展性有限"]
+    C --&gt; D["识别热点路径"]
+    D --&gt; E["逐步拆成细粒度锁"]
+    E --&gt; F["压力测试与修复竞态"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_29_20.png" alt="从 Big Kernel Lock 开始逐步拆锁" loading="lazy">
+  <p class="video-caption">📷 从 Big Kernel Lock 开始逐步拆锁<br><a href="https://www.bilibili.com/video/BV1hNdhB1Efe/?t=1760" target="_blank" rel="noopener">回到原视频 (00:29:20)</a></p>
+</div>
+
+<h3 id="45">4.5 “都不并发了，为什么还要线程”</h3>
+<p><em>(参考时间: 00:32)</em></p>
+<p><strong>Amdahl’s Law</strong>：</p>
+<p>如果 <code>1/k</code> 的代码必须串行，即使并行部分无限快：</p>
+<div class="highlight"><pre><span></span><code>T_∞ ≥ T_1 / k
+</code></pre></div>
+
+<p>悲观地看，串行比例会限制最大加速。</p>
+<p>更细致的 <strong>Gustafson’s Law</strong> 强调：</p>
+<div class="highlight"><pre><span></span><code>T_p &lt; T_∞ + T_1 / p
+</code></pre></div>
+
+<p>只要可并行部分非常大，需要串行的关键区只占很小比例，增加处理器仍然可以获得接近线性的扩展。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["任务"] --&gt; B["小部分串行"]
+    A --&gt; C["大部分可并行"]
+    B --&gt; D["Amdahl 限制最大加速"]
+    C --&gt; E["Gustafson：问题随规模增长可保持扩展"]
+    D --&gt; F["优化串行瓶颈"]
+    E --&gt; G["扩大并行任务"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_33_30.png" alt="Amdahl 定律与 Gustafson 定律的不同视角" loading="lazy">
+  <p class="video-caption">📷 Amdahl 定律与 Gustafson 定律的不同视角<br><a href="https://www.bilibili.com/video/BV1hNdhB1Efe/?t=2010" target="_blank" rel="noopener">回到原视频 (00:33:30)</a></p>
+</div>
+
+<h3 id="46">4.6 局部性让世界天然可并行</h3>
+<p><em>(参考时间: 00:35)</em></p>
+<p>物理世界具有局部性：</p>
+<ul>
+<li>物体主要影响相邻区域；</li>
+<li>无法瞬移到宇宙任意位置；</li>
+<li>大部分计算只需访问本地数据；</li>
+<li>只有边界需要同步。</li>
+</ul>
+<p>典型 embarrassingly parallel 场景：</p>
+<ul>
+<li>图书馆借书：抢书时同步，读书时独立；</li>
+<li>分布式数据存储；</li>
+<li>天气预报与网格模拟；</li>
+<li>深度神经网络；</li>
+<li>NP-hard 搜索的不同分支；</li>
+<li><code>fork</code>-based DFS。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["大任务"] --&gt; B["切成独立块"]
+    B --&gt; C["每块读取本地数据"]
+    C --&gt; D["仅边界数据需要锁"]
+    D --&gt; E["大量计算并行"]
+    E --&gt; F["汇总结果"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_36_40.png" alt="局部性使绝大多数计算天然可并行" loading="lazy">
+  <p class="video-caption">📷 局部性使绝大多数计算天然可并行<br><a href="https://www.bilibili.com/video/BV1hNdhB1Efe/?t=2200" target="_blank" rel="noopener">回到原视频 (00:36:40)</a></p>
+</div>
+
+<hr />
+<h2 id="5-dekker-peterson">5. 纯软件互斥：Dekker 与 Peterson</h2>
+<h3 id="51-dekker">5.1 Dekker 算法</h3>
+<p><em>(参考时间: 00:39)</em></p>
+<p>1965 年，Dekker 提出第一个公开正确的两进程互斥算法。</p>
+<p>直观描述：</p>
+<blockquote>
+<p>一个进程可以在对方不想进入临界区时进入；否则，只有在轮到它时才能进入。</p>
+</blockquote>
+<p>它的状态空间有限，可以画出完整迁移图，但文字描述像绕口令，直接理解非常困难。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["进程 P"] --&gt; B{"对方想进入？"}
+    B -- "否" --&gt; C["P 可以进入"]
+    B -- "是" --&gt; D{"轮次属于 P？"}
+    D -- "是" --&gt; C
+    D -- "否" --&gt; E["等待"]
+    E --&gt; B
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_40_30.png" alt="Dekker 算法的状态空间与互斥证明" loading="lazy">
+  <p class="video-caption">📷 Dekker 算法的状态空间与互斥证明<br><a href="https://www.bilibili.com/video/BV1hNdhB1Efe/?t=2430" target="_blank" rel="noopener">回到原视频 (00:40:30)</a></p>
+</div>
+
+<h3 id="52-peterson">5.2 Peterson 算法：宿舍厕所协议</h3>
+<p><em>(参考时间: 00:41)</em></p>
+<p>Peterson 算法用三个变量：</p>
+<div class="highlight"><pre><span></span><code>flagA / flagB：两个人是否举手
+turn：门上的名字纸条
+</code></pre></div>
+
+<p>希望进入临界区：</p>
+<ol>
+<li>举起自己的旗子；</li>
+<li>把对方的名字贴到门上；</li>
+<li>观察对方是否举旗；</li>
+<li>如果对方没举旗，或者门上是自己的名字，就进入；</li>
+<li>否则继续观察；</li>
+<li>离开时放下自己的旗子。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["举起自己的 flag"] --&gt; B["turn = 对方"]
+    B --&gt; C{"对方 flag 未举？"}
+    C -- "是" --&gt; F["进入临界区"]
+    C -- "否" --&gt; D{"turn == 自己？"}
+    D -- "是" --&gt; F
+    D -- "否" --&gt; E["继续观察"]
+    E --&gt; C
+    F --&gt; G["离开：放下自己的 flag"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_42_30.png" alt="以宿舍单人间比喻 Peterson 协议" loading="lazy">
+  <p class="video-caption">📷 以宿舍单人间比喻 Peterson 协议<br><a href="https://www.bilibili.com/video/BV1hNdhB1Efe/?t=2550" target="_blank" rel="noopener">回到原视频 (00:42:30)</a></p>
+</div>
+
+<h3 id="53">5.3 两人同时想进入时谁赢</h3>
+<p><em>(参考时间: 00:43)</em></p>
+<p>如果 Alice 和 Bob 同时举旗：</p>
+<ul>
+<li>两人都会把对方名字写到 <code>turn</code>；</li>
+<li>后写的人覆盖先写的人；</li>
+<li>最终 <code>turn</code> 只保留一个名字；</li>
+<li>名字对应的线程进入，另一个等待。</li>
+</ul>
+<p>看似谦让，实际上是“手快有、手慢无”的优先级选择。</p>
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant A as Alice
+    participant X as turn
+    participant B as Bob
+    A-&gt;&gt;A: flagA = true
+    B-&gt;&gt;B: flagB = true
+    A-&gt;&gt;X: turn = B
+    B-&gt;&gt;X: turn = A
+    Note over X: 最后一次写决定前一个阶段
+    B-&gt;&gt;B: 观察到 turn == A 进入
+    A-&gt;&gt;A: 观察到 turn == B 等待
+</code></pre></div>
+
+<h3 id="54">5.4 模型检查器</h3>
+<p><em>(参考时间: 00:46)</em></p>
+<p>Peter 算法状态有限：</p>
+<div class="highlight"><pre><span></span><code>(flagA, flagB, turn, PC1, PC2)
+</code></pre></div>
+
+<p>可以在黑板上逐个状态推演，也可以在 Python 中实现状态机和模型检查器：</p>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">step</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">thread</span><span class="p">):</span>
+    <span class="o">...</span>
+
+<span class="n">frontier</span> <span class="o">=</span> <span class="p">{</span><span class="n">initial_state</span><span class="p">}</span>
+<span class="k">while</span> <span class="n">frontier</span><span class="p">:</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">frontier</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">thread</span> <span class="ow">in</span> <span class="n">threads</span><span class="p">:</span>
+        <span class="n">next_state</span> <span class="o">=</span> <span class="n">step</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">thread</span><span class="p">)</span>
+        <span class="n">check_invariant</span><span class="p">(</span><span class="n">next_state</span><span class="p">)</span>
+        <span class="n">frontier</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">next_state</span><span class="p">)</span>
+</code></pre></div>
+
+<p>程序可以验证：</p>
+<ul>
+<li>不会两个线程同时进入临界区；</li>
+<li>不会出现双方都永久无法进入；</li>
+<li>修改协议顺序后会触发反例。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["初始状态"] --&gt; B["选择线程执行一步"]
+    B --&gt; C["生成新状态"]
+    C --&gt; D{"违反互斥或进展性？"}
+    D -- "是" --&gt; E["输出反例路径"]
+    D -- "否" --&gt; F{"仍有未探索状态？"}
+    F -- "是" --&gt; B
+    F -- "否" --&gt; G["状态空间检查完成"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_49_30.png" alt="用模型检查器暴力验证 Peterson 协议" loading="lazy">
+  <p class="video-caption">📷 用模型检查器暴力验证 Peterson 协议<br><a href="https://www.bilibili.com/video/BV1hNdhB1Efe/?t=2970" target="_blank" rel="noopener">回到原视频 (00:49:30)</a></p>
+</div>
+
+<h3 id="55">5.5 修改协议就会出错</h3>
+<p><em>(参考时间: 00:49)</em></p>
+<p>可以测试许多变体：</p>
+<ul>
+<li>先写 <code>turn</code> 再举旗，是否正确；</li>
+<li>离开后擦掉 <code>turn</code>，是否正确；</li>
+<li>交换观察顺序，是否正确；</li>
+<li>是否可能出现双方都进不去；</li>
+<li>是否对某个线程不公平。</li>
+</ul>
+<p>直觉上很小的改动，可能破坏整套协议。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["原始 Peterson 协议"] --&gt; B["正确"]
+    A --&gt; C["交换发起操作顺序"]
+    A --&gt; D["离开时清空 turn"]
+    A --&gt; E["交换观察顺序"]
+    C --&gt; F["模型检查"]
+    D --&gt; F
+    E --&gt; F
+    F --&gt; G["发现死锁 / 同时进入 / 不公平反例"]
+</code></pre></div>
+
+<h3 id="56-peterson">5.6 Peterson 的时代假设已经不成立</h3>
+<p><em>(参考时间: 00:53)</em></p>
+<p>Peterson 算法证明了：</p>
+<ul>
+<li>只靠 load/store 也能逻辑上实现两个线程互斥；</li>
+<li>状态空间可以形式化验证；</li>
+<li>但互斥证明依赖两个关键假设。</li>
+</ul>
+<p>当时的假设：</p>
+<div class="highlight"><pre><span></span><code>load/store 瞬间完成并生效
+指令按程序顺序执行
+</code></pre></div>
+
+<p>现代系统违反了它们：</p>
+<ul>
+<li>编译器和 CPU 会重排；</li>
+<li>store 可能进入缓冲区后才传播；</li>
+<li>load 可能看到旧缓存；</li>
+<li>内存屏障需要额外指令；</li>
+<li>C/C++ 数据竞争是 undefined behavior。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Peterson 的逻辑证明"] --&gt; B["假设：顺序一致"]
+    B --&gt; C["现代编译器重排"]
+    B --&gt; D["现代 CPU 乱序"]
+    B --&gt; E["缓存与 store buffer"]
+    C --&gt; F["需要 compiler barrier"]
+    D --&gt; G["需要 memory barrier"]
+    E --&gt; G
+    F --&gt; H["实现复杂且低效"]
+    G --&gt; H
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_53_20.png" alt="Peterson 算法依赖的顺序一致假设" loading="lazy">
+  <p class="video-caption">📷 Peterson 算法依赖的顺序一致假设<br><a href="https://www.bilibili.com/video/BV1hNdhB1Efe/?t=3200" target="_blank" rel="noopener">回到原视频 (00:53:20)</a></p>
+</div>
+
+<h3 id="57">5.7 错误实现为何可能长期看似正确</h3>
+<p><em>(参考时间: 00:54)</em></p>
+<p>去掉所有 barrier 后，程序理论上错误，但可能在特定机器上长时间无法复现。</p>
+<p>错误运行需要非常窄的窗口：</p>
+<ul>
+<li>两个线程同时看到内存中的空闲状态；</li>
+<li>store 的传播顺序恰好违反预期；</li>
+<li>两次进入被原子计数器观察到。</li>
+</ul>
+<p>这种“看似通过”是最危险的状态，因为压力测试通过不代表协议正确。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["错误 Peterson 实现"] --&gt; B["触发窗口非常窄"]
+    B --&gt; C["测试 1 万次未复现"]
+    C --&gt; D["误以为正确"]
+    D --&gt; E["换机器 / 换编译器 / 换负载"]
+    E --&gt; F["突然失败"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_55_00.png" alt="错误 Peterson 实现在某些机器上难以复现" loading="lazy">
+  <p class="video-caption">📷 错误 Peterson 实现在某些机器上难以复现<br><a href="https://www.bilibili.com/video/BV1hNdhB1Efe/?t=3300" target="_blank" rel="noopener">回到原视频 (00:55:00)</a></p>
+</div>
+
+<h3 id="58">5.8 两线程限制与“智力体操”</h3>
+<p><em>(参考时间: 00:57)</em></p>
+<p>Peterson 只适用于已知的两个线程：</p>
+<ul>
+<li>需要知道“对方是谁”；</li>
+<li>动态创建和退出的线程数量使协议不再直接适用；</li>
+<li>扩展到多线程更多是智力体操。</li>
+</ul>
+<p>课程真正需要的是绝对正确、可工程化的机制。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Peterson 两线程协议"] --&gt; B["需要固定对手身份"]
+    B --&gt; C["动态产生 100 个线程"]
+    C --&gt; D["协议无法直接适用"]
+    D --&gt; E["需要硬件与操作系统帮助"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_57_20.png" alt="Peterson 算法只覆盖固定的两个线程" loading="lazy">
+  <p class="video-caption">📷 Peterson 算法只覆盖固定的两个线程<br><a href="https://www.bilibili.com/video/BV1hNdhB1Efe/?t=3440" target="_blank" rel="noopener">回到原视频 (00:57:20)</a></p>
+</div>
+
+<hr />
+<h2 id="6-load-store">6. 原子指令：把 load + store 变成不可分割操作</h2>
+<h3 id="61">6.1 错误锁的问题</h3>
+<p><em>(参考时间: 01:00)</em></p>
+<p>一个朴素的锁：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="nf">lock</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="nl">retry</span><span class="p">:</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">table</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">FREE</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">table</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">TAKEN</span><span class="p">;</span>
+<span class="w">        </span><span class="k">return</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="k">goto</span><span class="w"> </span><span class="n">retry</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">unlock</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">table</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">FREE</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>问题与并发支付完全相同：</p>
+<ol>
+<li>线程看到 <code>FREE</code>；</li>
+<li>还没写 <code>TAKEN</code> 时被切换；</li>
+<li>另一个线程也看到 <code>FREE</code>；</li>
+<li>两个线程都拿走钥匙。</li>
+</ol>
+<p>需要将“检查并拿走”变成一个不可分割操作。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["T1 load: FREE"] --&gt; B["T2 load: FREE"]
+    B --&gt; C["T1 判断可获取"]
+    C --&gt; D["T2 判断可获取"]
+    D --&gt; E["T1 store TAKEN"]
+    E --&gt; F["T2 store TAKEN"]
+    F --&gt; G["双方都认为自己获得锁"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_00_40.png" alt="朴素锁在检查与拿走之间产生竞态" loading="lazy">
+  <p class="video-caption">📷 朴素锁在检查与拿走之间产生竞态<br><a href="https://www.bilibili.com/video/BV1hNdhB1Efe/?t=3640" target="_blank" rel="noopener">回到原视频 (01:00:40)</a></p>
+</div>
+
+<h3 id="62-compare-and-swap">6.2 原子交换与 Compare-and-Swap</h3>
+<p><em>(参考时间: 01:03)</em></p>
+<p>硬件提供两种典型原语：</p>
+<p><strong>Atomic exchange</strong></p>
+<div class="highlight"><pre><span></span><code><span class="n">old</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">atomic_exchange</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lock</span><span class="p">,</span><span class="w"> </span><span class="n">TAKEN</span><span class="p">);</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">old</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">FREE</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="cm">/* acquired */</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>Compare-and-swap</strong></p>
+<div class="highlight"><pre><span></span><code><span class="kt">int</span><span class="w"> </span><span class="n">expected</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">FREE</span><span class="p">;</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">atomic_compare_exchange</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lock</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">expected</span><span class="p">,</span><span class="w"> </span><span class="n">TAKEN</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="cm">/* acquired */</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>CAS 只有在当前值等于 <code>expected</code> 时才写入：</p>
+<ul>
+<li>成功：完成比较和交换；</li>
+<li>失败：返回当前值，通常不写入；</li>
+<li>整个过程对系统其他处理器表现为原子。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["CAS(lock, expected=FREE, desired=TAKEN)"] --&gt; B{"lock == FREE？"}
+    B -- "是" --&gt; C["lock = TAKEN"]
+    C --&gt; D["返回成功"]
+    B -- "否" --&gt; E["返回失败和当前值"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_04_00.png" alt="x86 `lock cmpxchg` 实现原子比较交换" loading="lazy">
+  <p class="video-caption">📷 x86 `lock cmpxchg` 实现原子比较交换<br><a href="https://www.bilibili.com/video/BV1hNdhB1Efe/?t=3840" target="_blank" rel="noopener">回到原视频 (01:04:00)</a></p>
+</div>
+
+<h3 id="63">6.3 硬件如何提供原子性</h3>
+<p>不同体系结构有不同方法：</p>
+<ul>
+<li>x86：<code>lock</code> 前缀、总线锁或缓存锁、<code>lock cmpxchg</code>；</li>
+<li>ARM：<code>ldxr</code> / <code>stxr</code>、原子算术扩展；</li>
+<li>RISC-V：LR / SC；</li>
+<li>C/C++：<code>atomic_compare_exchange_*</code>、<code>atomic_exchange_*</code>。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["需要原子读改写"] --&gt; B["x86: locked instruction"]
+    A --&gt; C["ARM: exclusive load/store"]
+    A --&gt; D["RISC-V: LR / SC"]
+    A --&gt; E["C/C++ 原子库"]
+    B --&gt; F["编译器生成平台指令"]
+    C --&gt; F
+    D --&gt; F
+    E --&gt; F
+</code></pre></div>
+
+<hr />
+<h2 id="7">7. 自旋锁：正确但有性能问题</h2>
+<h3 id="71">7.1 自旋锁实现</h3>
+<p><em>(参考时间: 01:06)</em></p>
+<div class="highlight"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="nf">spin_lock</span><span class="p">(</span><span class="n">spinlock_t</span><span class="w"> </span><span class="o">*</span><span class="n">lk</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">expected</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">FREE</span><span class="p">;</span>
+<span class="w">    </span><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">atomic_compare_exchange_weak</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="o">-&gt;</span><span class="n">value</span><span class="p">,</span>
+<span class="w">                                         </span><span class="o">&amp;</span><span class="n">expected</span><span class="p">,</span><span class="w"> </span><span class="n">TAKEN</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">expected</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">FREE</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="n">atomic_thread_fence</span><span class="p">(</span><span class="n">memory_order_acquire</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">spin_unlock</span><span class="p">(</span><span class="n">spinlock_t</span><span class="w"> </span><span class="o">*</span><span class="n">lk</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">atomic_thread_fence</span><span class="p">(</span><span class="n">memory_order_release</span><span class="p">);</span>
+<span class="w">    </span><span class="n">atomic_store</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="o">-&gt;</span><span class="n">value</span><span class="p">,</span><span class="w"> </span><span class="n">FREE</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>自旋锁与 mutex 的使用方法相同，但失败线程不会睡眠，而是在 CPU 上不断重试。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["spin_lock"] --&gt; B["CAS FREE → TAKEN"]
+    B --&gt; C{"成功？"}
+    C -- "是" --&gt; D["获得锁"]
+    C -- "否" --&gt; E["重置 expected"]
+    E --&gt; B
+    D --&gt; F["critical section"]
+    F --&gt; G["release fence"]
+    G --&gt; H["store FREE"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_07_20.png" alt="用原子交换实现自旋锁" loading="lazy">
+  <p class="video-caption">📷 用原子交换实现自旋锁<br><a href="https://www.bilibili.com/video/BV1hNdhB1Efe/?t=4040" target="_blank" rel="noopener">回到原视频 (01:07:20)</a></p>
+</div>
+
+<h3 id="72">7.2 “一核有难，八核围观”</h3>
+<p><em>(参考时间: 01:08)</em></p>
+<p>只有获得锁的线程能推进，其他线程在 CPU 上空转：</p>
+<ul>
+<li>消耗核心；</li>
+<li>产生大量缓存一致性流量；</li>
+<li>不执行有效计算；</li>
+<li>如果临界区较长，浪费尤其严重。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["CPU 0：持锁执行"] --&gt; C["共享锁缓存行"]
+    B1["CPU 1：CAS 自旋"] --&gt; C
+    B2["CPU 2：CAS 自旋"] --&gt; C
+    B3["CPU 3：CAS 自旋"] --&gt; C
+    C --&gt; D["大量无效流量与空转"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_08_40.png" alt="一个线程持锁时其他处理器持续自旋" loading="lazy">
+  <p class="video-caption">📷 一个线程持锁时其他处理器持续自旋<br><a href="https://www.bilibili.com/video/BV1hNdhB1Efe/?t=4120" target="_blank" rel="noopener">回到原视频 (01:08:40)</a></p>
+</div>
+
+<h3 id="73">7.3 持锁线程被调度出去</h3>
+<p><em>(参考时间: 01:09)</em></p>
+<p>更严重的问题：</p>
+<ol>
+<li>线程 A 获得自旋锁；</li>
+<li>时间片到期，A 被操作系统切换出去；</li>
+<li>同一 CPU 上运行线程 B；</li>
+<li>B 尝试获取锁，开始自旋；</li>
+<li>A 得不到 CPU，无法释放锁；</li>
+<li>全部计算资源都被浪费。</li>
+</ol>
+<p>用户态程序不能关闭中断，无法阻止自己被调度，也无法直接告诉内核“我在等这把锁”。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["T1 获得锁"] --&gt; B["T1 被操作系统抢占"]
+    B --&gt; C["T2 在同一 CPU 运行"]
+    C --&gt; D["T2 自旋等待锁"]
+    D --&gt; E["T1 无法运行"]
+    E --&gt; F["T1 无法释放锁"]
+    F --&gt; D
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_10_20.png" alt="持锁线程被换出后，自旋线程无法取得进展" loading="lazy">
+  <p class="video-caption">📷 持锁线程被换出后，自旋线程无法取得进展<br><a href="https://www.bilibili.com/video/BV1hNdhB1Efe/?t=4220" target="_blank" rel="noopener">回到原视频 (01:10:20)</a></p>
+</div>
+
+<hr />
+<h2 id="8-futex">8. 内核协助与 <code>futex</code></h2>
+<h3 id="81">8.1 把锁的实现交给操作系统</h3>
+<p><em>(参考时间: 01:11)</em></p>
+<p>理想接口：</p>
+<div class="highlight"><pre><span></span><code><span class="n">syscall</span><span class="p">(</span><span class="n">SYSCALL_acquire</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">lock</span><span class="p">);</span>
+<span class="n">syscall</span><span class="p">(</span><span class="n">SYSCALL_release</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">lock</span><span class="p">);</span>
+</code></pre></div>
+
+<ul>
+<li>acquire 成功：返回用户态；</li>
+<li>acquire 失败：内核把线程设为阻塞；</li>
+<li>release：内核唤醒等待该锁的线程；</li>
+<li>内核内部可以用关中断和短自旋锁保护自己的数据结构。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["用户线程 acquire"] --&gt; B["进入内核"]
+    B --&gt; C{"锁空闲？"}
+    C -- "是" --&gt; D["获得锁，返回用户态"]
+    C -- "否" --&gt; E["标记等待该锁"]
+    E --&gt; F["线程睡眠，调度别的线程"]
+    G["持锁线程 release"] --&gt; H["进入内核"]
+    H --&gt; I["唤醒等待者"]
+    I --&gt; J["被唤醒线程重新竞争锁"]
+</code></pre></div>
+
+<h3 id="82-futexfast-userspace-mutex">8.2 <code>futex</code>：Fast Userspace Mutex</h3>
+<p><em>(参考时间: 01:12)</em></p>
+<p>Linux 没有为每个等待都无条件执行两个系统调用，而是使用 <strong>futex</strong>：</p>
+<ul>
+<li><strong>Fast path</strong>：无竞争时完全在用户态原子操作，不进入内核；</li>
+<li><strong>Slow path</strong>：发生竞争时执行 futex 系统调用，让等待线程睡眠；</li>
+<li>内核只在确实需要睡眠或唤醒时介入。</li>
+</ul>
+<p>概念上的状态：</p>
+<div class="highlight"><pre><span></span><code>FREE
+LOCKED_NO_WAITERS
+LOCKED_WITH_WAITERS
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["futex_lock"] --&gt; B["原子 CAS FREE → LOCKED"]
+    B --&gt; C{"成功？"}
+    C -- "是" --&gt; D["Fast path：直接进入临界区"]
+    C -- "否" --&gt; E["设置 WAITERS 标志"]
+    E --&gt; F["FUTEX_WAIT 睡眠"]
+    G["futex_unlock"] --&gt; H{"有 WAITERS？"}
+    H -- "否" --&gt; I["直接 store FREE"]
+    H -- "是" --&gt; J["FUTEX_WAKE"]
+    J --&gt; K["唤醒等待者"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_12_40.png" alt="futex 的用户态快路径与内核慢路径" loading="lazy">
+  <p class="video-caption">📷 futex 的用户态快路径与内核慢路径<br><a href="https://www.bilibili.com/video/BV1hNdhB1Efe/?t=4360" target="_blank" rel="noopener">回到原视频 (01:12:40)</a></p>
+</div>
+
+<h3 id="83-futexes-are-tricky">8.3 “Futexes are tricky”</h3>
+<p><em>(参考时间: 01:13)</em></p>
+<p><code>futex</code> 的难点在于：</p>
+<ul>
+<li>用户态和内核态共享一个整数的状态；</li>
+<li>acquire 与 release 都可能需要避免不必要的系统调用；</li>
+<li>等待者可能在状态变化窗口内重新睡眠；</li>
+<li>唤醒、丢失唤醒和虚假唤醒都要正确处理；</li>
+<li>不同内存序与原子状态转换必须匹配。</li>
+</ul>
+<p>这类代码极为微妙，连有经验的系统开发者也可能第一次写错。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["futex 状态"] --&gt; B["用户态原子操作"]
+    A --&gt; C["内核等待队列"]
+    B --&gt; D["状态变化"]
+    D --&gt; E["FUTEX_WAIT / FUTEX_WAKE"]
+    E --&gt; F["缺少状态检查可能丢唤醒"]
+    E --&gt; G["检查与睡眠之间必须原子化"]
+    G --&gt; H["Futexes are tricky"]
+</code></pre></div>
+
+<hr />
+<h2 id="9">9. 定量比较不同互斥实现</h2>
+<h3 id="91">9.1 控制变量实验</h3>
+<p><em>(参考时间: 01:15)</em></p>
+<p>比较三种实现：</p>
+<ul>
+<li>原子指令直接 <code>sum++</code>；</li>
+<li>mutex；</li>
+<li>自旋锁；</li>
+<li>每次都进入内核的 naive futex。</li>
+</ul>
+<p>控制变量：</p>
+<div class="highlight"><pre><span></span><code>总 sum++ 次数固定
+线程数 T = 1, 2, 4, 8, 16
+每种配置重复 5 次
+记录每次操作的纳秒数和每秒操作数
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["固定总 sum++ 次数"] --&gt; B["分配线程 1 / 2 / 4 / 8 / 16"]
+    B --&gt; C["运行 atomic / mutex / spin / futex"]
+    C --&gt; D["每种组合重复 5 次"]
+    D --&gt; E["记录原始 CSV"]
+    E --&gt; F["计算平均值与误差"]
+    F --&gt; G["生成带 error bar 的图"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_15_00.png" alt="对比原子指令、mutex、自旋锁和 futex 的实验代码" loading="lazy">
+  <p class="video-caption">📷 对比原子指令、mutex、自旋锁和 futex 的实验代码<br><a href="https://www.bilibili.com/video/BV1hNdhB1Efe/?t=4500" target="_blank" rel="noopener">回到原视频 (01:15:00)</a></p>
+</div>
+
+<h3 id="92">9.2 单线程与系统调用成本</h3>
+<p><em>(参考时间: 01:18)</em></p>
+<p>单线程最快，因为没有原子竞争和锁等待。但在不同实现之间：</p>
+<ul>
+<li>普通原子指令只增加少量开销；</li>
+<li>mutex 无竞争时主要在用户态快速完成；</li>
+<li>自旋锁在无竞争时也很快；</li>
+<li>每次都进入内核的 futex 慢几百纳秒。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["单线程 sum++"] --&gt; B["最快基线"]
+    B --&gt; C["atomic：少量额外开销"]
+    B --&gt; D["uncontended mutex：用户态 fast path"]
+    B --&gt; E["spinlock：原子交换"]
+    B --&gt; F["forced futex syscall：数百 ns 内核成本"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_20_40.png" alt="每次 sum++ 平均时间的实验结果" loading="lazy">
+  <p class="video-caption">📷 每次 sum++ 平均时间的实验结果<br><a href="https://www.bilibili.com/video/BV1hNdhB1Efe/?t=4840" target="_blank" rel="noopener">回到原视频 (01:20:40)</a></p>
+</div>
+
+<h3 id="93">9.3 扩展性</h3>
+<p><em>(参考时间: 01:20)</em></p>
+<p>线程数超过 CPU 数量后：</p>
+<ul>
+<li>mutex 可以让等待者睡眠，平台扩展性明显优于自旋锁；</li>
+<li>自旋锁因线程被抢占而急剧变差；</li>
+<li>原子指令在低竞争时最快，但高竞争仍有缓存流量问题；</li>
+<li>强制每次 <code>futex</code> 系统调用的版本始终受内核切换成本限制。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["线程数 ≤ CPU 数"] --&gt; B["自旋锁表现尚可"]
+    C["线程数 &gt; CPU 数"] --&gt; D["持锁线程被抢占概率增加"]
+    D --&gt; E["自旋线程浪费 CPU"]
+    E --&gt; F["spinlock 扩展性急剧下降"]
+    C --&gt; G["mutex 将等待者睡眠"]
+    G --&gt; H["扩展性更稳定"]
+</code></pre></div>
+
+<h3 id="94-benchmarking-crimes">9.4 Benchmarking Crimes</h3>
+<p><em>(参考时间: 01:22)</em></p>
+<p>课程要求先阅读：</p>
+<ul>
+<li><a href="https://gernot-heiser.org/benchmarking-crimes.html">Systems Benchmarking Crimes</a></li>
+</ul>
+<p>常见错误：</p>
+<ul>
+<li>selective data：只展示有利数据；</li>
+<li>隐藏缺陷：只在有利配置下测试；</li>
+<li>混淆启动、编译和运行时间；</li>
+<li>不做重复实验；</li>
+<li>不报告误差和原始数据；</li>
+<li>用不可复现的环境比较；</li>
+<li>cherry-picking 最好的一次结果。</li>
+</ul>
+<p>系统研究需要：</p>
+<ul>
+<li>明确控制变量；</li>
+<li>保存原始数据；</li>
+<li>多次重复；</li>
+<li>报告分布与误差；</li>
+<li>让实验可复现。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Benchmarking Crime"] --&gt; B["精选数据"]
+    A --&gt; C["隐藏不利结果"]
+    A --&gt; D["不重复实验"]
+    A --&gt; E["隐藏环境差异"]
+    A --&gt; F["只报告最好一次"]
+    B --&gt; G["错误结论"]
+    C --&gt; G
+    D --&gt; G
+    E --&gt; G
+    F --&gt; G
+    G --&gt; H["可复现实验与原始数据"]
+    H --&gt; I["可信性能结论"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_23_10.png" alt="Systems Benchmarking Crimes 的反面案例" loading="lazy">
+  <p class="video-caption">📷 Systems Benchmarking Crimes 的反面案例<br><a href="https://www.bilibili.com/video/BV1hNdhB1Efe/?t=4990" target="_blank" rel="noopener">回到原视频 (01:23:10)</a></p>
+</div>
+
+<hr />
+<h2 id="10">10. 总结：互斥让复杂并发退回顺序世界</h2>
+<p>这一讲从未解决的 <code>sum++</code> 出发，逐步建立完整路线：</p>
+<ul>
+<li>操作系统系统调用是共享内核状态上的多线程程序；</li>
+<li>单处理器内核可以用关中断实现极短互斥；</li>
+<li>用户态无权关中断；</li>
+<li>mutex 通过 <code>lock</code> / <code>unlock</code> 定义临界区；</li>
+<li>acquire / release 同时提供互斥与内存可见性；</li>
+<li>锁的求值、配对所有路径、多把锁和细粒度结构都很难；</li>
+<li>工程上先从一把大锁保证正确，再逐步优化；</li>
+<li>Amdahl 与 Gustafson 说明串行部分必须足够小；</li>
+<li>局部性和 embarrassingly parallel 任务仍然可以大规模并行；</li>
+<li>Peterson 用纯 load/store 实现两线程互斥，但依赖顺序一致；</li>
+<li>模型检查可以穷举有限状态并验证协议；</li>
+<li>原子 CAS / exchange 提供硬件级不可分割读改写；</li>
+<li>自旋锁正确但空转，且会因持锁线程被抢占而灾难性退化；</li>
+<li>futex 用用户态快路径和内核慢路径实现可睡眠 mutex；</li>
+<li>定量实验可以帮助理解不同实现的成本与扩展性。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["共享内存并发"] --&gt; B["定义临界区"]
+    B --&gt; C["互斥 API"]
+    C --&gt; D["Peterson / 纯软件尝试"]
+    D --&gt; E["原子指令"]
+    E --&gt; F["自旋锁"]
+    F --&gt; G["内核协助 / futex"]
+    G --&gt; H["可扩展、可睡眠的互斥"]
+</code></pre></div>
+
+<p>最终的核心思想是：</p>
+<blockquote>
+<p>互斥不消灭多线程，而是把必须串行的一小部分明确隔离出来，让其余绝大部分代码继续安全并行。</p>
+</blockquote>
+<p>从下一讲开始，互斥将扩展为条件同步、信号量、读写锁以及更复杂的并发控制原语。</p>
+<hr />
+<h2 id="_3">附：官方参考与延伸阅读</h2>
+<p>以下链接来自官方讲义第 14 讲及课堂内容：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/cli">尝试关闭中断 demo</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/sum-mutexapi">Mutex API 求和</a></li>
+<li><a href="https://zoo.cs.yale.edu/classes/cs323/doc/Peterson.pdf">Peterson paper, Myths about the mutual exclusion problem</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/mosaic">Moore 状态机检查器</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/peterson">Peterson 算法 demo</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/sum-spinlock">Spinlock 求和</a></li>
+<li><a href="https://man7.org/linux/man-pages/man7/futex.7.html"><code>futex(7)</code></a></li>
+<li><a href="https://lwn.net/Articles/360699/">LWN: A futex overview and update</a></li>
+<li><a href="https://cis.temple.edu/~giorgio/cis307/readings/futex.pdf">Futexes Are Tricky</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/sum-experiment">不同方式的并发求和实验</a></li>
+<li><a href="https://gernot-heiser.org/benchmarking-crimes.html">Systems Benchmarking Crimes</a></li>
+</ul>
+<p>阅读材料：</p>
+<ul>
+<li><em>Operating Systems: Three Easy Pieces</em> 第 29 章，Locked Data Structures。</li>
+</ul>
+<p>官方课程资料：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/2026/">课程主页</a></li>
+<li><a href="https://jyywiki.cn/OS/2026/lect14.md">第 14 讲讲义：并发控制：互斥</a></li>
+<li><a href="https://www.bilibili.com/video/BV1hNdhB1Efe/">视频：14 - 并发控制：互斥</a></li>
+</ul>
+<blockquote>
+<p><strong>版权与署名</strong>：本讲课程材料由蒋炎岩（jyy）编写。课程讲义与幻灯片采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书保留课程出处、作者署名与许可说明。</p>
+</blockquote>
+    </article>
+
+    <!-- Mermaid 图表引擎初始化 -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            mermaid.initialize({ startOnLoad: false, theme: 'default' });
+            
+            // 兼容普通代码块以及丢失 language-mermaid 类名的情况 (CodeHilite 干扰)
+            const codeNodes = document.querySelectorAll('pre code, .highlight code');
+            codeNodes.forEach(function(node) {
+                const text = node.textContent.trim();
+                // 匹配常见的 mermaid 图表前缀
+                if (text.startsWith('graph ') || text.startsWith('flowchart ') || text.startsWith('sequenceDiagram') || text.startsWith('gantt') || text.startsWith('pie') || text.startsWith('classDiagram') || text.startsWith('stateDiagram') || text.startsWith('mindmap')) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.className = 'mermaid';
+                    tempDiv.textContent = text;
+                    
+                    // 获取需要替换的最外层父节点 (比如 div.highlight 或者 pre)
+                    const wrapper = node.closest('.highlight') || node.parentNode;
+                    wrapper.replaceWith(tempDiv); 
+                }
+            });
+            
+            // 所有节点转换完成，统一进行图表动态绘制
+            mermaid.run();
+        });
+    </script>
+    <!-- Lightbox：截图点击放大 -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const lightbox = document.createElement('div');
+            lightbox.className = 'lightbox';
+            lightbox.innerHTML = '<img alt=""><div class="lightbox-caption"></div>';
+            document.body.appendChild(lightbox);
+            const lbImg = lightbox.querySelector('img');
+            const lbCap = lightbox.querySelector('.lightbox-caption');
+            function openLightbox(src, alt) {
+                lbImg.src = src; lbImg.alt = alt || '';
+                lbCap.textContent = alt || '';
+                lightbox.classList.add('open');
+                document.body.style.overflow = 'hidden';
+            }
+            function closeLightbox() {
+                lightbox.classList.remove('open');
+                lbImg.src = '';
+                document.body.style.overflow = '';
+            }
+            document.querySelectorAll('.screenshot-card img').forEach(function(img) {
+                img.addEventListener('click', function() { openLightbox(img.src, img.alt); });
+            });
+            lightbox.addEventListener('click', closeLightbox);
+            document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
+        });
+    </script>
+</body>
+</html>
