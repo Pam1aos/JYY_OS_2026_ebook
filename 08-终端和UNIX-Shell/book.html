@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>终端和 UNIX Shell：从打字机到 Job Control</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* ── 基础重置 ── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            color-scheme: light;
+            --bg-primary: #f7f7f8;
+            --bg-secondary: #ffffff;
+            --bg-card: #eef0f3;
+            --bg-code: #f2f3f5;
+            --text-primary: #1f2328;
+            --text-secondary: #57606a;
+            --text-muted: #6e7781;
+            --accent: #2563eb;
+            --accent-glow: rgba(37, 99, 235, 0.08);
+            --border: #d9dce1;
+            --border-subtle: #e7e9ec;
+            --radius: 12px;
+            --shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Serif SC', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.8;
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── 文章容器 ── */
+        .book-content {
+            max-width: 780px;
+            margin: 0 auto;
+            padding: 60px 32px 120px;
+        }
+
+        /* ── 标题 ── */
+        h1 {
+            font-size: 2.2em;
+            font-weight: 700;
+            margin: 0 0 12px;
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+        }
+
+        h2 {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 56px 0 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h3 {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: var(--accent);
+            margin: 36px 0 12px;
+        }
+
+        /* ── 段落与文字 ── */
+        p {
+            margin: 0 0 16px;
+            color: var(--text-primary);
+        }
+
+        strong {
+            color: #0f172a;
+            font-weight: 600;
+        }
+
+        em {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.2s;
+        }
+        a:hover {
+            border-bottom-color: var(--accent);
+        }
+
+        /* ── 引用 ── */
+        blockquote {
+            margin: 24px 0;
+            padding: 16px 20px;
+            background: var(--bg-secondary);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 var(--radius) var(--radius) 0;
+            color: var(--text-secondary);
+        }
+        blockquote p { margin: 0; }
+
+        /* ── 列表 ── */
+        ul, ol {
+            margin: 12px 0 20px 24px;
+            color: var(--text-primary);
+        }
+        li {
+            margin: 6px 0;
+        }
+
+        /* ── 分割线 ── */
+        hr {
+            border: none;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border), transparent);
+            margin: 48px 0;
+        }
+
+        /* ── 表格 ── */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 24px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+        thead {
+            background: var(--bg-card);
+        }
+        th {
+            padding: 12px 16px;
+            font-weight: 600;
+            text-align: left;
+            color: var(--accent);
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        td {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border-subtle);
+        }
+        tbody tr {
+            background: var(--bg-secondary);
+            transition: background 0.15s;
+        }
+        tbody tr:hover {
+            background: var(--bg-card);
+        }
+
+        /* ── 代码 ── */
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-code);
+            padding: 2px 7px;
+            border-radius: 5px;
+            font-size: 0.88em;
+            color: #6d28d9;
+        }
+
+        pre {
+            margin: 20px 0;
+            padding: 20px 24px;
+            background: var(--bg-code);
+            border-radius: var(--radius);
+            overflow-x: auto;
+            border: 1px solid var(--border);
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9em;
+            color: var(--text-primary);
+        }
+
+        /* ── 视频嵌入卡片 ── */
+        .video-card {
+            margin: 32px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .video-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(15, 23, 42, 0.12);
+        }
+
+        .video-wrapper {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 */
+            height: 0;
+            overflow: hidden;
+        }
+        .video-wrapper iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .video-card img {
+            width: 100%;
+            display: block;
+        }
+
+        .video-caption {
+            padding: 12px 16px;
+            font-size: 0.88em;
+            color: var(--text-secondary);
+            text-align: center;
+            line-height: 1.6;
+            margin: 0;
+        }
+        .video-caption a {
+            color: var(--accent);
+        }
+
+        .video-card.fallback {
+            padding: 20px;
+            text-align: center;
+        }
+
+        /* ── Lightbox：截图点击放大 ── */
+        .screenshot-card img { cursor: zoom-in; transition: opacity 0.15s; }
+        .screenshot-card img:hover { opacity: 0.9; }
+        .lightbox {
+            position: fixed; inset: 0; z-index: 999;
+            display: none; align-items: center; justify-content: center;
+            background: rgba(5, 5, 8, 0.92); backdrop-filter: blur(4px);
+            cursor: zoom-out; padding: 24px;
+        }
+        .lightbox.open { display: flex; }
+        .lightbox img {
+            max-width: 96vw; max-height: 90vh;
+            border-radius: 8px; box-shadow: 0 12px 60px rgba(0,0,0,0.7);
+        }
+        .lightbox-caption {
+            position: absolute; bottom: 14px; left: 0; right: 0;
+            text-align: center; color: var(--text-secondary); font-size: 0.85em;
+        }
+
+        /* ── 顶部信息栏 ── */
+        .book-content > blockquote:first-of-type {
+            background: var(--accent-glow);
+            border-left-color: var(--accent);
+            border-radius: var(--radius);
+            margin-bottom: 32px;
+        }
+
+        /* ── 图表居中 ── */
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            margin: 32px 0;
+            overflow-x: auto;
+        }
+
+        /* ── 滚动条 ── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* ── 响应式 ── */
+        @media (max-width: 640px) {
+            .book-content { padding: 32px 16px 80px; }
+            h1 { font-size: 1.7em; }
+            h2 { font-size: 1.3em; }
+        }
+    </style>
+</head>
+<body>
+    <article class="book-content">
+        <h1 id="unix-shell-job-control">终端和 UNIX Shell：从打字机到 Job Control</h1>
+<blockquote>
+<p><strong>课程</strong>：2026 春季学期《操作系统原理》，Hacking Day 选讲<br />
+<strong>讲师</strong>：蒋炎岩（jyy）<br />
+<strong>官方课程主页</strong>：<a href="https://jyywiki.cn/OS/2026/">https://jyywiki.cn/OS/2026/</a><br />
+<strong>官方讲义</strong>：<a href="https://jyywiki.cn/OS/2026/lect8.md">https://jyywiki.cn/OS/2026/lect8.md</a><br />
+<strong>视频来源</strong>：<a href="https://www.bilibili.com/video/BV1nQXsBuEUz/">Bilibili BV1nQXsBuEUz</a><br />
+<strong>版权说明</strong>：课程讲义与幻灯片归蒋炎岩所有，采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书是对课堂讲授的书面化重构，保留出处与许可说明。</p>
+</blockquote>
+<h2 id="_1">导语：键盘与终端的漫长演化</h2>
+<p>今天使用的终端看起来像软件界面，但它的祖先可以追溯到：</p>
+<ul>
+<li>管风琴与水风琴键盘；</li>
+<li>机械打字机；</li>
+<li>电传打字机；</li>
+<li>Video Teletypewriter；</li>
+<li>VT100 终端；</li>
+<li>伪终端与终端模拟器。</li>
+</ul>
+<p>很多今天看似奇怪的行为，都来自这段历史：</p>
+<ul>
+<li><code>Shift</code> 和 <code>Caps Lock</code>；</li>
+<li><code>CR</code> 与 <code>LF</code>；</li>
+<li><code>Tab</code> 与等宽字体；</li>
+<li><code>Ctrl-C</code>、<code>Ctrl-D</code>、<code>Ctrl-Z</code>；</li>
+<li>ANSI Escape Sequence；</li>
+<li>Session、Process Group 与 Job Control。</li>
+</ul>
+<p>本讲从一个核心事实出发：</p>
+<blockquote>
+<p>终端本质上只是和操作系统交换字符。</p>
+</blockquote>
+<p>一切更复杂的行为，其实都是操作系统、终端驱动和应用程序共同解释这些字节的结果。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_00_50.png" alt="键盘从乐器到计算机输入设备的历史" loading="lazy">
+  <p class="video-caption">📷 键盘从乐器到计算机输入设备的历史<br><a href="https://www.bilibili.com/video/BV1nQXsBuEUz/?t=50" target="_blank" rel="noopener">回到原视频 (00:00:50)</a></p>
+</div>
+
+<hr />
+<h2 id="1">1. 打字机留下的遗产</h2>
+<h3 id="11">1.1 机械打字机</h3>
+<p>打字机把按键动作转变为：</p>
+<ol>
+<li>字锤或字模击打色带；</li>
+<li>纸张留下字符；</li>
+<li>擒纵机构把字车向右移动一格。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    K["按键"] --&gt; M["字锤 / 字模"]
+    M --&gt; R["色带"]
+    R --&gt; P["纸张"]
+    K --&gt; E["擒纵机构"]
+    E --&gt; C["字车右移一格"]
+</code></pre></div>
+
+<p>早期机械结构同时按下两个键容易卡住。QWERTY 布局在 1860 年代被设计出来，目标之一就是降低相邻字锤冲突和打字速度。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_03_10.png" alt="打字机的字锤、色带与擒纵机构" loading="lazy">
+  <p class="video-caption">📷 打字机的字锤、色带与擒纵机构<br><a href="https://www.bilibili.com/video/BV1nQXsBuEUz/?t=190" target="_blank" rel="noopener">回到原视频 (00:03:10)</a></p>
+</div>
+
+<h3 id="12-shiftcaps-locktab">1.2 Shift、Caps Lock、Tab</h3>
+<p>这些键都保留了机械时代的操作模型：</p>
+<ul>
+<li><code>Shift</code>：把字模或字锤向上移动，切换字符集；</li>
+<li><code>Caps Lock</code>：把档位锁定在上方；</li>
+<li><code>Tab</code>：移动到下一个 tab stop；</li>
+<li>等宽字体：每个字符推进相同距离，便于对齐表格。</li>
+</ul>
+<h3 id="13-cr-lf">1.3 CR 与 LF</h3>
+<div class="highlight"><pre><span></span><code>\r = Carriage Return：打印头回到行首
+\n = Line Feed：纸张向上移动一行
+</code></pre></div>
+
+<p>终端中，<code>\r</code> 不换行，只回到行首，所以后输出的字符会覆盖前一行。</p>
+<p>UNIX 的文本换行通常只用 <code>\n</code>，终端驱动和显示系统负责组合出“回车 + 换行”效果；Windows 文本格式常见 <code>\r\n</code>。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    CR["\\r&lt;br/&gt;回到行首"] --&gt; T["同一行覆盖"]
+    LF["\\n&lt;br/&gt;换到下一行"] --&gt; N["新行"]
+    CRLF["\\r\\n"] --&gt; T2["回到行首并换行"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_06_20.png" alt="CR 与 LF 在终端中的不同效果" loading="lazy">
+  <p class="video-caption">📷 CR 与 LF 在终端中的不同效果<br><a href="https://www.bilibili.com/video/BV1nQXsBuEUz/?t=380" target="_blank" rel="noopener">回到原视频 (00:06:20)</a></p>
+</div>
+
+<h3 id="14-space-backspace">1.4 Space 与 Backspace</h3>
+<ul>
+<li><code>Space</code>：光标右移一格；</li>
+<li><code>Backspace</code>：光标左移一格。</li>
+</ul>
+<p>机械打字机不能真正删除字符，只能退格后重新敲击或打印“-”划掉。这一模型也影响了现代键盘命名。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_04_10.png" alt="QWERTY 布局与等宽字体遗产" loading="lazy">
+  <p class="video-caption">📷 QWERTY 布局与等宽字体遗产<br><a href="https://www.bilibili.com/video/BV1nQXsBuEUz/?t=250" target="_blank" rel="noopener">回到原视频 (00:04:10)</a></p>
+</div>
+
+<hr />
+<h2 id="2-vt100">2. 电传打字机与 VT100</h2>
+<h3 id="21-teletypewriter">2.1 Teletypewriter</h3>
+<p>电传打字机允许多个终端通过线路通信：</p>
+<ul>
+<li>本地按键编码后发送；</li>
+<li>远端打印文字；</li>
+<li>使用 Baudot Code 等 5-bit 编码。</li>
+</ul>
+<p>当计算机接入电传打字机后，人可以通过键盘输入，并通过打印机看到输出。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_11_50.png" alt="Baudot Code 与电传打字机通信" loading="lazy">
+  <p class="video-caption">📷 Baudot Code 与电传打字机通信<br><a href="https://www.bilibili.com/video/BV1nQXsBuEUz/?t=710" target="_blank" rel="noopener">回到原视频 (00:11:50)</a></p>
+</div>
+
+<h3 id="22-tty">2.2 TTY 名称的由来</h3>
+<p><code>TTY</code> 来自 <strong>Teletypewriter</strong>。终端对操作系统最核心的接口可以理解为：</p>
+<div class="highlight"><pre><span></span><code><span class="n">putchar</span><span class="p">(</span><span class="n">c</span><span class="p">);</span>
+</code></pre></div>
+
+<p>操作系统向终端写入一个字符；终端根据字符含义移动光标、换行、响铃或解释控制代码。</p>
+<h3 id="23-vt100">2.3 VT100</h3>
+<p>1978 年的 VT100 是终端历史里程碑：</p>
+<ul>
+<li>完整支持 ANSI Escape Sequence；</li>
+<li>使用 80×24 字符布局；</li>
+<li>支持光标移动、颜色、清屏和滚动；</li>
+<li>成为事实上的行业标准。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["ASCII 字符"] --&gt; V["VT100 终端"]
+    E["Escape Sequence"] --&gt; V
+    V --&gt; D["显示 / 光标 / 颜色控制"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_15_00.png" alt="VT100 与 ANSI Escape Sequence" loading="lazy">
+  <p class="video-caption">📷 VT100 与 ANSI Escape Sequence<br><a href="https://www.bilibili.com/video/BV1nQXsBuEUz/?t=900" target="_blank" rel="noopener">回到原视频 (00:15:00)</a></p>
+</div>
+
+<h3 id="24-unicode">2.4 Unicode 让终端重新繁荣</h3>
+<p>Unicode 提供大量符号：</p>
+<ul>
+<li>不同高度的块字符；</li>
+<li>线条与箭头；</li>
+<li>Emoji；</li>
+<li>Powerline 状态栏符号。</li>
+</ul>
+<p>这些字符可以组合成图形、进度条、树状结构和终端界面。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_19_20.png" alt="使用 Unicode 字符绘制状态栏和图形" loading="lazy">
+  <p class="video-caption">📷 使用 Unicode 字符绘制状态栏和图形<br><a href="https://www.bilibili.com/video/BV1nQXsBuEUz/?t=1160" target="_blank" rel="noopener">回到原视频 (00:19:20)</a></p>
+</div>
+
+<hr />
+<h2 id="3">3. 终端作为输入设备</h2>
+<h3 id="31">3.1 原始字符流</h3>
+<p>终端将按键转换成字节：</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    K["键盘"] --&gt; T["终端 / 终端模拟器"]
+    T --&gt; B["字节流"]
+    B --&gt; O["操作系统终端驱动"]
+    O --&gt; P["进程"]
+</code></pre></div>
+
+<p>特殊键不会发送自己的状态：</p>
+<ul>
+<li>按下 <code>Shift</code> 不会发送任何字节；</li>
+<li>只有 <code>Shift + A</code> 才发送大写 <code>A</code>；</li>
+<li>按下 <code>Ctrl</code> 本身也不会发送字节；</li>
+<li><code>Ctrl-C</code> 发送 ASCII <code>0x03</code>；</li>
+<li><code>Ctrl-D</code> 发送 ASCII <code>0x04</code>。</li>
+</ul>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_23_25.png" alt="直接读取终端原始按键字节" loading="lazy">
+  <p class="video-caption">📷 直接读取终端原始按键字节<br><a href="https://www.bilibili.com/video/BV1nQXsBuEUz/?t=1405" target="_blank" rel="noopener">回到原视频 (00:23:25)</a></p>
+</div>
+
+<h3 id="32-ctrl-c">3.2 Ctrl-C 首先只是一个字节</h3>
+<p>终端本身并不知道“Ctrl-C 应该杀进程”。它只发送 <code>0x03</code>。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    K["Ctrl-C"] --&gt; B["字节 0x03"]
+    B --&gt; D["终端驱动"]
+    D --&gt; I{"interpretation mode"}
+    I --&gt;|"canonical"| S["生成 SIGINT"]
+    I --&gt;|"raw"| R["交给程序读取"]
+</code></pre></div>
+
+<p>如果程序把终端配置为 raw mode，<code>0x03</code> 会直接进入程序，<code>Ctrl-C</code> 就不会自动终止它。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_24_17.png" alt="Ctrl-C 在 raw mode 下只是普通控制字符" loading="lazy">
+  <p class="video-caption">📷 Ctrl-C 在 raw mode 下只是普通控制字符<br><a href="https://www.bilibili.com/video/BV1nQXsBuEUz/?t=1457" target="_blank" rel="noopener">回到原视频 (00:24:17)</a></p>
+</div>
+
+<h3 id="33-escape-sequence">3.3 Escape Sequence</h3>
+<p>ASCII 没有“上、下、左、右”和颜色等控制能力，于是终端使用：</p>
+<div class="highlight"><pre><span></span><code>ESC + 其他字符
+</code></pre></div>
+
+<p>组成 Escape Sequence。</p>
+<p>例如方向键会发送多字节序列，应用解析后执行移动或历史命令操作。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_25_52.png" alt="方向键通过 Escape Sequence 编码" loading="lazy">
+  <p class="video-caption">📷 方向键通过 Escape Sequence 编码<br><a href="https://www.bilibili.com/video/BV1nQXsBuEUz/?t=1552" target="_blank" rel="noopener">回到原视频 (00:25:52)</a></p>
+</div>
+
+<h3 id="34-canonical-mode">3.4 Canonical Mode</h3>
+<p>当运行 <code>cat</code> 并输入文字时，<code>read()</code> 不会在每次按键后立即返回：</p>
+<ul>
+<li>终端驱动维护行缓冲；</li>
+<li>退格会在驱动中编辑缓冲区；</li>
+<li>回车后整行才交给程序；</li>
+<li>回显由终端驱动控制。</li>
+</ul>
+<p>这就是 <strong>canonical mode（行编辑模式）</strong>。</p>
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant U as 用户
+    participant D as TTY 驱动
+    participant P as cat
+    U-&gt;&gt;D: A B C Backspace D Enter
+    D-&gt;&gt;D: 编辑行为 ABD
+    D-&gt;&gt;D: 回显
+    D--&gt;&gt;P: read 返回 "ABD\n"
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_41_20.png" alt="canonical mode 在驱动中进行行编辑" loading="lazy">
+  <p class="video-caption">📷 canonical mode 在驱动中进行行编辑<br><a href="https://www.bilibili.com/video/BV1nQXsBuEUz/?t=2480" target="_blank" rel="noopener">回到原视频 (00:41:20)</a></p>
+</div>
+
+<hr />
+<h2 id="4">4. 伪终端与终端模拟器</h2>
+<h3 id="41">4.1 想要多少终端就有多少</h3>
+<p>现代系统通过 <strong>Pseudo Terminal（PTY）</strong> 虚拟化终端设备：</p>
+<ul>
+<li>PTY master：连接终端模拟器；</li>
+<li>PTY slave：连接 Shell 或其他程序；</li>
+<li>两侧形成双向字符通道。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    E["Terminal Emulator"] --&gt; M["PTY Master"]
+    M &lt;--&gt; S["PTY Slave"]
+    S &lt;--&gt; P["Shell / Application"]
+</code></pre></div>
+
+<p>创建 PTY 通常会打开 <code>/dev/ptmx</code>，再执行授权和解锁操作，最终得到对应的 <code>/dev/pts/N</code> 从设备。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_29_20.png" alt="伪终端主从设备和终端模拟器" loading="lazy">
+  <p class="video-caption">📷 伪终端主从设备和终端模拟器<br><a href="https://www.bilibili.com/video/BV1nQXsBuEUz/?t=1760" target="_blank" rel="noopener">回到原视频 (00:29:20)</a></p>
+</div>
+
+<h3 id="42-ttyrec">4.2 ttyrec</h3>
+<p>如果记录 PTY 中流动的所有字符和时间戳，就可以重放终端会话：</p>
+<div class="highlight"><pre><span></span><code>ttyrec<span class="w"> </span>session.rec
+ttyplay<span class="w"> </span>session.rec
+</code></pre></div>
+
+<p>终端界面本质上仍是字符和控制序列，因此记录字符流比录制视频更轻量。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_32_50.png" alt="ttyrec 记录并重放终端字符流" loading="lazy">
+  <p class="video-caption">📷 ttyrec 记录并重放终端字符流<br><a href="https://www.bilibili.com/video/BV1nQXsBuEUz/?t=1970" target="_blank" rel="noopener">回到原视频 (00:32:50)</a></p>
+</div>
+
+<h3 id="43-sixel">4.3 Sixel</h3>
+<p>VT200 时代出现了 Sixel：</p>
+<ul>
+<li>一个字节编码 6×1 个像素是否点亮；</li>
+<li>使用调色板提供颜色；</li>
+<li>现代部分终端重新支持。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    I["位图"] --&gt; S["Sixel 编码"]
+    S --&gt; E["Escape Sequence"]
+    E --&gt; T["支持 Sixel 的终端"]
+    T --&gt; O["显示图像"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_36_40.png" alt="Sixel 在字符终端中显示位图" loading="lazy">
+  <p class="video-caption">📷 Sixel 在字符终端中显示位图<br><a href="https://www.bilibili.com/video/BV1nQXsBuEUz/?t=2200" target="_blank" rel="noopener">回到原视频 (00:36:40)</a></p>
+</div>
+
+<hr />
+<h2 id="5">5. 终端与系统登录</h2>
+<h3 id="51-getty-login">5.1 getty 与 login</h3>
+<p>系统初始化时，<code>init</code> 会在不同终端上启动 <code>getty</code>：</p>
+<ol>
+<li>打开 TTY 设备；</li>
+<li>配置波特率等终端参数；</li>
+<li>把标准输入、输出、错误指向该终端；</li>
+<li>提示输入用户名；</li>
+<li>运行 <code>login</code> 建立用户会话。</li>
+</ol>
+<p>远程 SSH 登录也会分配 PTY，然后执行类似流程。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    K["Kernel / init"] --&gt; G["getty"]
+    G --&gt; O["open /dev/ttyN"]
+    O --&gt; F["FD 0/1/2 -&gt; TTY"]
+    F --&gt; L["login"]
+    L --&gt; S["用户 Shell / Session"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_42_43.png" alt="getty 初始化终端并启动 login" loading="lazy">
+  <p class="video-caption">📷 getty 初始化终端并启动 login<br><a href="https://www.bilibili.com/video/BV1nQXsBuEUz/?t=2563" target="_blank" rel="noopener">回到原视频 (00:42:43)</a></p>
+</div>
+
+<h3 id="52-tui">5.2 TUI</h3>
+<p>字符终端可以构建完整用户界面：</p>
+<ul>
+<li>文本框、按钮和复选框；</li>
+<li>表格与滚动条；</li>
+<li>主题与动画；</li>
+<li>Mouse Tracking；</li>
+<li>终端模拟器中的各种应用。</li>
+</ul>
+<p>Python <code>textual</code> 等框架利用 Unicode 和 ANSI Escape Sequence 构建 TUI。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_48_30.png" alt="Unicode 与 Escape Sequence 构建完整 TUI" loading="lazy">
+  <p class="video-caption">📷 Unicode 与 Escape Sequence 构建完整 TUI<br><a href="https://www.bilibili.com/video/BV1nQXsBuEUz/?t=2910" target="_blank" rel="noopener">回到原视频 (00:48:30)</a></p>
+</div>
+
+<hr />
+<h2 id="6-ctrl-c">6. Ctrl-C、信号与前台进程</h2>
+<h3 id="61">6.1 信号机制</h3>
+<p>应用程序可以注册信号处理器：</p>
+<div class="highlight"><pre><span></span><code><span class="n">signal</span><span class="p">(</span><span class="n">SIGINT</span><span class="p">,</span><span class="w"> </span><span class="n">handler</span><span class="p">);</span>
+<span class="n">sigaction</span><span class="p">(...);</span>
+</code></pre></div>
+
+<p>信号会在程序任意位置打断当前执行，并跳转到处理器。处理器可以：</p>
+<ul>
+<li>清理资源后退出；</li>
+<li>忽略信号；</li>
+<li>设置标志继续执行；</li>
+<li>改变程序状态。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    R["程序正常执行"] --&gt;|"SIGINT"| H["Signal Handler"]
+    H --&gt; C["清理 / 修改状态 / 忽略"]
+    C --&gt; R2["返回或退出"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_01_00.png" alt="程序注册 SIGINT 处理器后可以自定义 Ctrl-C 行为" loading="lazy">
+  <p class="video-caption">📷 程序注册 SIGINT 处理器后可以自定义 Ctrl-C 行为<br><a href="https://www.bilibili.com/video/BV1nQXsBuEUz/?t=3660" target="_blank" rel="noopener">回到原视频 (01:01:00)</a></p>
+</div>
+
+<h3 id="62-ctrl-c">6.2 Ctrl-C 应该发送给谁？</h3>
+<p>一个终端上可能运行庞大进程树：</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    S["Shell"] --&gt; P1["程序 A"]
+    P1 --&gt; P2["子进程 A2"]
+    S --&gt; P3["后台程序 B"]
+    P3 --&gt; P4["子进程 B2"]
+</code></pre></div>
+
+<p>如果简单地向进程树所有节点发送 <code>SIGINT</code>：</p>
+<ul>
+<li>可能误伤后台任务；</li>
+<li>可能因孤儿进程而找不到部分后代；</li>
+<li>多终端和后台任务使父子关系不足以确定目标。</li>
+</ul>
+<p>UNIX 引入两个额外分组：</p>
+<ul>
+<li><strong>Session</strong>：最大的终端会话分组；</li>
+<li><strong>Process Group</strong>：前台或后台任务分组。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    S["Session&lt;br/&gt;关联一个控制终端"] --&gt; G1["前台进程组"]
+    S --&gt; G2["后台进程组 1"]
+    S --&gt; G3["后台进程组 2"]
+    G1 --&gt;|"Ctrl-C"| I["SIGINT"]
+</code></pre></div>
+
+<p>Ctrl-C 发送给前台进程组中的全部进程。后台进程组不会收到。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_05_40.png" alt="Session 与 Process Group 的前后台划分" loading="lazy">
+  <p class="video-caption">📷 Session 与 Process Group 的前后台划分<br><a href="https://www.bilibili.com/video/BV1nQXsBuEUz/?t=3940" target="_blank" rel="noopener">回到原视频 (01:05:40)</a></p>
+</div>
+
+<h3 id="63-api">6.3 相关 API</h3>
+<div class="highlight"><pre><span></span><code><span class="n">setsid</span><span class="p">();</span>
+<span class="n">getsid</span><span class="p">();</span>
+<span class="n">setpgid</span><span class="p">();</span>
+<span class="n">getpgid</span><span class="p">();</span>
+<span class="n">tcsetpgrp</span><span class="p">();</span>
+<span class="n">tcgetpgrp</span><span class="p">();</span>
+</code></pre></div>
+
+<p>这些 API 不够优雅，但支撑了终端多任务：</p>
+<ul>
+<li>创建或查询 Session；</li>
+<li>设置 Process Group；</li>
+<li>设置终端前台进程组。</li>
+</ul>
+<p>系统复杂性还体现在 UID 演化：</p>
+<ul>
+<li>real UID；</li>
+<li>effective UID；</li>
+<li>saved UID。</li>
+</ul>
+<p>这些都是历史与安全需求不断叠加的结果。</p>
+<h3 id="64-job-control">6.4 Job Control</h3>
+<p>终端中的 Job Control 类似窗口管理器：</p>
+<table>
+<thead>
+<tr>
+<th>图形界面</th>
+<th>Shell</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>最小化</td>
+<td><code>Ctrl-Z</code></td>
+</tr>
+<tr>
+<td>恢复窗口</td>
+<td><code>fg</code></td>
+</tr>
+<tr>
+<td>后台继续</td>
+<td><code>bg</code></td>
+</tr>
+<tr>
+<td>查看窗口列表</td>
+<td><code>jobs</code></td>
+</tr>
+<tr>
+<td>关闭程序</td>
+<td><code>Ctrl-C</code> / <code>kill</code></td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>stateDiagram-v2
+    [*] --&gt; Foreground
+    Foreground --&gt; Stopped: Ctrl-Z / SIGTSTP
+    Stopped --&gt; Background: bg / SIGCONT
+    Background --&gt; Foreground: fg / tcsetpgrp
+    Foreground --&gt; [*]: Ctrl-C
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_07_20.png" alt="使用 Ctrl-Z、jobs、bg、fg 管理终端任务" loading="lazy">
+  <p class="video-caption">📷 使用 Ctrl-Z、jobs、bg、fg 管理终端任务<br><a href="https://www.bilibili.com/video/BV1nQXsBuEUz/?t=4040" target="_blank" rel="noopener">回到原视频 (01:07:20)</a></p>
+</div>
+
+<h3 id="65-sighup">6.5 SIGHUP 与远程连接</h3>
+<p>Session 通常关联一个控制终端。Session Leader 退出或终端断开时，会话内进程可能收到：</p>
+<div class="highlight"><pre><span></span><code>SIGHUP
+</code></pre></div>
+
+<p>这解释了为什么 SSH 断开后，远程长任务有时也会终止。</p>
+<p>解决办法：</p>
+<div class="highlight"><pre><span></span><code>nohup<span class="w"> </span>long-task<span class="w"> </span><span class="p">&amp;</span>
+tmux
+screen
+</code></pre></div>
+
+<p>也可以使用 systemd、容器或任务队列管理长期服务。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_12_00.png" alt="SSH 断开导致进程收到 SIGHUP" loading="lazy">
+  <p class="video-caption">📷 SSH 断开导致进程收到 SIGHUP<br><a href="https://www.bilibili.com/video/BV1nQXsBuEUz/?t=4320" target="_blank" rel="noopener">回到原视频 (01:12:00)</a></p>
+</div>
+
+<h3 id="66">6.6 历史方案的现代替代</h3>
+<p>现代系统有多种隔离和管理进程的方法：</p>
+<ul>
+<li>tmux / Sway 管理多个 PTY；</li>
+<li>Android 为每个应用分配独立 UID；</li>
+<li>Snap 使用 AppArmor、seccomp、namespaces；</li>
+<li>容器与虚拟机用整体生命周期管理所有进程。</li>
+</ul>
+<p>这些方案说明：将进程绑定到设备的旧设计并非唯一答案，但在 POSIX 兼容生态中仍然必须实现。</p>
+<hr />
+<h2 id="7-unix-shell">7. UNIX Shell：一门编程语言</h2>
+<p><em>(参考时间: 01:18:06)</em></p>
+<p>Shell 不只是“输入命令的地方”，它是一门极简的编程语言：</p>
+<ul>
+<li>只有字符串数据类型；</li>
+<li>支持文本替换；</li>
+<li>支持顺序、逻辑与管道；</li>
+<li>支持重定向；</li>
+<li>支持变量、循环、条件；</li>
+<li>支持命令替换与进程替换。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    C["命令行文本"] --&gt; P["解析与展开"]
+    P --&gt; F["fork / execve"]
+    P --&gt; R["open / dup2 重定向"]
+    P --&gt; Q["pipe 管道"]
+    P --&gt; W["waitpid 等待"]
+</code></pre></div>
+
+<h3 id="71-shell">7.1 只有一个 Shell 循环</h3>
+<p>最小 Shell 的模型接近：</p>
+<div class="highlight"><pre><span></span><code><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">print_prompt</span><span class="p">();</span>
+<span class="w">    </span><span class="n">read_command</span><span class="p">();</span>
+<span class="w">    </span><span class="n">execute_command</span><span class="p">();</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>如果暂时不考虑 Job Control，一个零依赖 Shell 可以只有几百行代码，直接建立在 <code>fork</code>、<code>execve</code>、<code>pipe</code>、<code>dup2</code> 和 <code>waitpid</code> 之上。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_19_00.png" alt="最小 Shell 的主循环和系统调用组合" loading="lazy">
+  <p class="video-caption">📷 最小 Shell 的主循环和系统调用组合<br><a href="https://www.bilibili.com/video/BV1nQXsBuEUz/?t=4740" target="_blank" rel="noopener">回到原视频 (01:19:00)</a></p>
+</div>
+
+<h3 id="72">7.2 文本替换与命令替换</h3>
+<p>Shell 的核心是分阶段文本展开：</p>
+<ul>
+<li>变量替换：<code>$HOME</code></li>
+<li>命令替换：<code>$(command)</code></li>
+<li>算术命令：<code>$((1 + 2))</code></li>
+<li>进程替换：<code>&lt;(command)</code>、<code>&gt;(command)</code></li>
+<li>通配符展开：<code>*.c</code></li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    T["原始命令文本"] --&gt; V["变量替换"]
+    V --&gt; C["命令替换"]
+    C --&gt; G["通配符展开"]
+    G --&gt; W["拆分参数"]
+    W --&gt; E["执行命令"]
+</code></pre></div>
+
+<p>早期 Shell 没有整数类型，算术甚至需要调用外部 <code>expr</code>：</p>
+<div class="highlight"><pre><span></span><code>expr<span class="w"> </span><span class="m">1</span><span class="w"> </span>+<span class="w"> </span><span class="m">2</span>
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_23_00.png" alt="Shell 基于文本替换而非类型系统" loading="lazy">
+  <p class="video-caption">📷 Shell 基于文本替换而非类型系统<br><a href="https://www.bilibili.com/video/BV1nQXsBuEUz/?t=4980" target="_blank" rel="noopener">回到原视频 (01:23:00)</a></p>
+</div>
+
+<h3 id="73">7.3 重定向</h3>
+<p>Shell 先由父进程打开文件，再让子进程继承描述符：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">int</span><span class="w"> </span><span class="n">fd_in</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="n">open</span><span class="p">(</span><span class="n">in</span><span class="p">,</span><span class="w">  </span><span class="n">O_RDONLY</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="n">O_CLOEXEC</span><span class="p">);</span>
+<span class="kt">int</span><span class="w"> </span><span class="n">fd_out</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">open</span><span class="p">(</span><span class="n">out</span><span class="p">,</span><span class="w"> </span><span class="n">O_WRONLY</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="n">O_CREAT</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="n">O_TRUNC</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="n">O_CLOEXEC</span><span class="p">);</span>
+
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">fork</span><span class="p">()</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">dup2</span><span class="p">(</span><span class="n">fd_in</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">);</span>
+<span class="w">    </span><span class="n">dup2</span><span class="p">(</span><span class="n">fd_out</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span>
+<span class="w">    </span><span class="n">execve</span><span class="p">(...);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart LR
+    F["open output file"] --&gt; FD["临时 FD"]
+    FD --&gt; D["dup2(fd, 1)"]
+    D --&gt; E["execve(program)"]
+    E --&gt; O["程序 stdout -&gt; 文件"]
+</code></pre></div>
+
+<p>常见重定向：</p>
+<div class="highlight"><pre><span></span><code>cmd<span class="w"> </span>&gt;<span class="w"> </span>file
+cmd<span class="w"> </span>&gt;&gt;<span class="w"> </span>file
+cmd<span class="w"> </span>&lt;<span class="w"> </span>file
+cmd<span class="w"> </span><span class="m">2</span>&gt;<span class="w"> </span>error.log
+cmd<span class="w"> </span>&gt;<span class="w"> </span>file<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span>
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_26_30.png" alt="通过 dup2 实现标准输出重定向" loading="lazy">
+  <p class="video-caption">📷 通过 dup2 实现标准输出重定向<br><a href="https://www.bilibili.com/video/BV1nQXsBuEUz/?t=5190" target="_blank" rel="noopener">回到原视频 (01:26:30)</a></p>
+</div>
+
+<h3 id="74">7.4 管道</h3>
+<p>Shell 管道的系统调用流程：</p>
+<ol>
+<li><code>pipe()</code>；</li>
+<li>创建左右两个子进程；</li>
+<li>左子进程关闭读端，把 stdout 指向写端；</li>
+<li>右子进程关闭写端，把 stdin 指向读端；</li>
+<li>分别 <code>execve</code>；</li>
+<li>父进程关闭两端并等待。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant S as Shell
+    participant L as 左命令
+    participant R as 右命令
+    S-&gt;&gt;S: pipe()
+    S-&gt;&gt;L: fork + dup2(stdout, write)
+    S-&gt;&gt;R: fork + dup2(stdin, read)
+    L-&gt;&gt;R: 通过 pipe 传输
+    S-&gt;&gt;S: close + waitpid
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_29_30.png" alt="Shell 通过 pipe 和 dup2 连接两个进程" loading="lazy">
+  <p class="video-caption">📷 Shell 通过 pipe 和 dup2 连接两个进程<br><a href="https://www.bilibili.com/video/BV1nQXsBuEUz/?t=5370" target="_blank" rel="noopener">回到原视频 (01:29:30)</a></p>
+</div>
+
+<h3 id="75">7.5 逻辑控制与短路</h3>
+<div class="highlight"><pre><span></span><code>cmd1<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>cmd2<span class="w">   </span><span class="c1"># cmd1 成功才执行 cmd2</span>
+cmd1<span class="w"> </span><span class="o">||</span><span class="w"> </span>cmd2<span class="w">   </span><span class="c1"># cmd1 失败才执行 cmd2</span>
+cmd1<span class="w"> </span><span class="p">;</span><span class="w"> </span>cmd2<span class="w">    </span><span class="c1"># 顺序执行</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["执行 cmd1"] --&gt; S{"退出状态"}
+    S --&gt;|"0，成功"| B["&amp;&amp; 执行 cmd2"]
+    S --&gt;|"非 0，失败"| C["|| 执行 fallback"]
+</code></pre></div>
+
+<h3 id="76-shell">7.6 Shell 的缺点</h3>
+<p>Shell 是 1970 年代算力和工程能力下的折中：</p>
+<ul>
+<li>没有强类型；</li>
+<li>空格、引号和文件名容易导致解析问题；</li>
+<li>不同 Shell 对边缘语法行为不同；</li>
+<li>复杂逻辑很快变得难以维护；</li>
+<li><code>sudo echo &gt; file</code> 不生效，因为重定向由当前 Shell 完成，而不是 <code>sudo</code> 程序完成。</li>
+</ul>
+<p>示例：</p>
+<div class="highlight"><pre><span></span><code>sudo<span class="w"> </span><span class="nb">echo</span><span class="w"> </span>hello<span class="w"> </span>&gt;<span class="w"> </span>/etc/a.txt
+</code></pre></div>
+
+<p>Shell 会先以当前用户权限打开 <code>/etc/a.txt</code>，所以重定向仍然失败。</p>
+<p>正确思路是让拥有权限的程序处理整个写入流程，或使用支持直接写文件的工具。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_33_20.png" alt="Shell 文本接口的兼容性与转义问题" loading="lazy">
+  <p class="video-caption">📷 Shell 文本接口的兼容性与转义问题<br><a href="https://www.bilibili.com/video/BV1nQXsBuEUz/?t=5600" target="_blank" rel="noopener">回到原视频 (01:33:20)</a></p>
+</div>
+
+<h3 id="77">7.7 阅读手册仍然是获得想象力的来源</h3>
+<div class="highlight"><pre><span></span><code>man<span class="w"> </span>-P<span class="w"> </span>cat<span class="w"> </span>sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>claude<span class="w"> </span><span class="s2">"Make a comprehensive summary"</span>
+</code></pre></div>
+
+<p>AI 可以快速总结手册，但人的目标仍是建立“什么事情可以做到”的完整概念。Shell 手册中的特殊参数、循环、重定向和 Job Control 都能扩展想象空间。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_31_56.png" alt="将 man 手册交给 AI 生成摘要" loading="lazy">
+  <p class="video-caption">📷 将 man 手册交给 AI 生成摘要<br><a href="https://www.bilibili.com/video/BV1nQXsBuEUz/?t=5516" target="_blank" rel="noopener">回到原视频 (01:31:56)</a></p>
+</div>
+
+<h3 id="78-shebang">7.8 Shebang</h3>
+<p>脚本以：</p>
+<div class="highlight"><pre><span></span><code>#!/bin/sh
+</code></pre></div>
+
+<p>开头时，内核会读取第一行，执行指定解释器，并把脚本路径作为参数传入。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    X["./script"] --&gt; K["Kernel 读取 #!"]
+    K --&gt; I["execve(/bin/sh, script)"]
+    I --&gt; R["解释器执行脚本"]
+</code></pre></div>
+
+<p>Shebang 使文本文件成为可直接执行的脚本，是 UNIX 组合哲学的重要组成部分。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_34_30.png" alt="Shebang 指定脚本解释器" loading="lazy">
+  <p class="video-caption">📷 Shebang 指定脚本解释器<br><a href="https://www.bilibili.com/video/BV1nQXsBuEUz/?t=5670" target="_blank" rel="noopener">回到原视频 (01:34:30)</a></p>
+</div>
+
+<hr />
+<h2 id="8-unix-shell">8. 一个零依赖 UNIX Shell</h2>
+<p>XV6 等项目提供了极小 Shell 实现：</p>
+<ul>
+<li>不依赖 libc；</li>
+<li>使用 <code>-ffreestanding</code> 编译；</li>
+<li>直接链接系统调用接口；</li>
+<li>支持重定向、管道、后台执行和命令组合。</li>
+</ul>
+<p>它证明：</p>
+<blockquote>
+<p>Shell 是 Kernel 之外的“壳”，而整个 Shell 应用世界可以只建立在少量系统调用之上。</p>
+</blockquote>
+<div class="highlight"><pre><span></span><code>mindmap
+  root((Zero-dependency Shell))
+    进程
+      fork
+      execve
+      waitpid
+    文件描述符
+      open
+      close
+      dup2
+    管道
+      pipe
+      左右进程连接
+    控制
+      顺序
+      AND / OR
+      后台
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_34_30.png" alt="零依赖 Shell 直接建立在系统调用上" loading="lazy">
+  <p class="video-caption">📷 零依赖 Shell 直接建立在系统调用上<br><a href="https://www.bilibili.com/video/BV1nQXsBuEUz/?t=5670" target="_blank" rel="noopener">回到原视频 (01:34:30)</a></p>
+</div>
+
+<hr />
+<h2 id="9">9. 本讲总结</h2>
+<ol>
+<li>终端的历史来自管风琴、打字机和电传打字机。</li>
+<li><code>CR</code>、<code>LF</code>、<code>Shift</code>、<code>Tab</code> 都保留打字机语义。</li>
+<li>TTY 是 Teletypewriter 缩写。</li>
+<li>ASCII 控制字符最初为电传设备设计。</li>
+<li>VT100 和 ANSI Escape Sequence 奠定现代终端。</li>
+<li>Unicode 让终端可以绘制复杂字符界面。</li>
+<li><code>Ctrl-C</code> 在 raw mode 下只是字节 <code>0x03</code>。</li>
+<li>canonical mode 由终端驱动执行行编辑和回显。</li>
+<li>PTY 让系统可以创建任意数量的虚拟终端。</li>
+<li>信号允许外部事件打断程序并跳转到处理函数。</li>
+<li>Ctrl-C 向前台进程组发送 <code>SIGINT</code>。</li>
+<li>Session 和 Process Group 解决“谁属于同一个终端任务”的问题。</li>
+<li>Job Control 用 <code>Ctrl-Z</code>、<code>bg</code>、<code>fg</code> 模拟终端窗口管理器。</li>
+<li>Session 断开可能发送 <code>SIGHUP</code>。</li>
+<li>Shell 是一门以字符串和文本替换为核心的编程语言。</li>
+<li>重定向、管道和逻辑控制最终都被翻译成系统调用。</li>
+<li><code>sudo echo &gt; file</code> 失败是 Shell 和权限边界共同作用的结果。</li>
+<li>零依赖 Shell 展示了系统调用如何支撑整个应用生态。</li>
+</ol>
+<blockquote>
+<p>终端只交换字符。<br />
+所有复杂的输入编辑、信号、任务控制与 Shell 语法，都是建立在这些字符之上的系统设计。</p>
+</blockquote>
+<hr />
+<h2 id="_2">附：官方参考与延伸阅读</h2>
+<p>课程与讲义：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/2026/">《操作系统原理》2026 课程主页</a></li>
+<li><a href="https://jyywiki.cn/OS/2026/lect8.md">第 8 讲讲义：终端和 UNIX Shell</a></li>
+<li><a href="https://jyywiki.cn/OS/2026/video/BV1nQXsBuEUz/">本讲视频</a></li>
+</ul>
+<p>历史与终端资料：</p>
+<ul>
+<li><a href="https://www.bilibili.com/video/BV1Zg411P7GQ/">机械键盘与击奏弦鸣乐器演示</a></li>
+<li><a href="http://www.samhallas.co.uk/repository/telegraph/teletype_28_tech_data.pdf">Teletype Model 28 Technical Data Sheet</a></li>
+<li><a href="https://github.com/powerline/powerline">Powerline Status Bar</a></li>
+<li><a href="https://a2ui.org/">Google A2UI</a></li>
+</ul>
+<p>课程演示：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/demos/virtualization/tty">理解终端</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/virtualization/signal">信号处理</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/virtualization/shebang">Shebang</a></li>
+</ul>
+<p>标准与阅读材料：</p>
+<ul>
+<li><a href="https://www.usenix.org/conference/11th-usenix-security-symposium/setuid-demystified">Setuid Demystified</a></li>
+<li>POSIX <code>sh</code> 手册：<code>man 1 sh</code></li>
+<li><code>man 2 setsid</code></li>
+<li><code>man 2 setpgid</code></li>
+<li><code>man 3 tcsetpgrp</code></li>
+<li><code>man 7 signal</code></li>
+<li><code>man 4 tty</code></li>
+<li><code>man 4 pts</code></li>
+<li><code>man 2 ioctl_tty</code></li>
+</ul>
+<blockquote>
+<p><strong>版权说明</strong>：课程讲义与幻灯片的著作权归蒋炎岩所有，采用 Creative Commons BY-NC 4.0 许可。电子书正文为课堂内容的书面化重构，脚本占位符已替换为视频画面或官方资料渲染图；引用与来源链接均保留在本页。</p>
+</blockquote>
+    </article>
+
+    <!-- Mermaid 图表引擎初始化 -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            mermaid.initialize({ startOnLoad: false, theme: 'default' });
+            
+            // 兼容普通代码块以及丢失 language-mermaid 类名的情况 (CodeHilite 干扰)
+            const codeNodes = document.querySelectorAll('pre code, .highlight code');
+            codeNodes.forEach(function(node) {
+                const text = node.textContent.trim();
+                // 匹配常见的 mermaid 图表前缀
+                if (text.startsWith('graph ') || text.startsWith('flowchart ') || text.startsWith('sequenceDiagram') || text.startsWith('gantt') || text.startsWith('pie') || text.startsWith('classDiagram') || text.startsWith('stateDiagram') || text.startsWith('mindmap')) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.className = 'mermaid';
+                    tempDiv.textContent = text;
+                    
+                    // 获取需要替换的最外层父节点 (比如 div.highlight 或者 pre)
+                    const wrapper = node.closest('.highlight') || node.parentNode;
+                    wrapper.replaceWith(tempDiv); 
+                }
+            });
+            
+            // 所有节点转换完成，统一进行图表动态绘制
+            mermaid.run();
+        });
+    </script>
+    <!-- Lightbox：截图点击放大 -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const lightbox = document.createElement('div');
+            lightbox.className = 'lightbox';
+            lightbox.innerHTML = '<img alt=""><div class="lightbox-caption"></div>';
+            document.body.appendChild(lightbox);
+            const lbImg = lightbox.querySelector('img');
+            const lbCap = lightbox.querySelector('.lightbox-caption');
+            function openLightbox(src, alt) {
+                lbImg.src = src; lbImg.alt = alt || '';
+                lbCap.textContent = alt || '';
+                lightbox.classList.add('open');
+                document.body.style.overflow = 'hidden';
+            }
+            function closeLightbox() {
+                lightbox.classList.remove('open');
+                lbImg.src = '';
+                document.body.style.overflow = '';
+            }
+            document.querySelectorAll('.screenshot-card img').forEach(function(img) {
+                img.addEventListener('click', function() { openLightbox(img.src, img.alt); });
+            });
+            lightbox.addEventListener('click', closeLightbox);
+            document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
+        });
+    </script>
+</body>
+</html>
