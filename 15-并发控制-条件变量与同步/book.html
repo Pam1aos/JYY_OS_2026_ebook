@@ -1,0 +1,1411 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>并发控制：条件变量和万能同步方法</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* ── 基础重置 ── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            color-scheme: light;
+            --bg-primary: #f7f7f8;
+            --bg-secondary: #ffffff;
+            --bg-card: #eef0f3;
+            --bg-code: #f2f3f5;
+            --text-primary: #1f2328;
+            --text-secondary: #57606a;
+            --text-muted: #6e7781;
+            --accent: #2563eb;
+            --accent-glow: rgba(37, 99, 235, 0.08);
+            --border: #d9dce1;
+            --border-subtle: #e7e9ec;
+            --radius: 12px;
+            --shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Serif SC', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.8;
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── 文章容器 ── */
+        .book-content {
+            max-width: 780px;
+            margin: 0 auto;
+            padding: 60px 32px 120px;
+        }
+
+        /* ── 标题 ── */
+        h1 {
+            font-size: 2.2em;
+            font-weight: 700;
+            margin: 0 0 12px;
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+        }
+
+        h2 {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 56px 0 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h3 {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: var(--accent);
+            margin: 36px 0 12px;
+        }
+
+        /* ── 段落与文字 ── */
+        p {
+            margin: 0 0 16px;
+            color: var(--text-primary);
+        }
+
+        strong {
+            color: #0f172a;
+            font-weight: 600;
+        }
+
+        em {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.2s;
+        }
+        a:hover {
+            border-bottom-color: var(--accent);
+        }
+
+        /* ── 引用 ── */
+        blockquote {
+            margin: 24px 0;
+            padding: 16px 20px;
+            background: var(--bg-secondary);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 var(--radius) var(--radius) 0;
+            color: var(--text-secondary);
+        }
+        blockquote p { margin: 0; }
+
+        /* ── 列表 ── */
+        ul, ol {
+            margin: 12px 0 20px 24px;
+            color: var(--text-primary);
+        }
+        li {
+            margin: 6px 0;
+        }
+
+        /* ── 分割线 ── */
+        hr {
+            border: none;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border), transparent);
+            margin: 48px 0;
+        }
+
+        /* ── 表格 ── */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 24px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+        thead {
+            background: var(--bg-card);
+        }
+        th {
+            padding: 12px 16px;
+            font-weight: 600;
+            text-align: left;
+            color: var(--accent);
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        td {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border-subtle);
+        }
+        tbody tr {
+            background: var(--bg-secondary);
+            transition: background 0.15s;
+        }
+        tbody tr:hover {
+            background: var(--bg-card);
+        }
+
+        /* ── 代码 ── */
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-code);
+            padding: 2px 7px;
+            border-radius: 5px;
+            font-size: 0.88em;
+            color: #6d28d9;
+        }
+
+        pre {
+            margin: 20px 0;
+            padding: 20px 24px;
+            background: var(--bg-code);
+            border-radius: var(--radius);
+            overflow-x: auto;
+            border: 1px solid var(--border);
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9em;
+            color: var(--text-primary);
+        }
+
+        /* ── 视频嵌入卡片 ── */
+        .video-card {
+            margin: 32px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .video-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(15, 23, 42, 0.12);
+        }
+
+        .video-wrapper {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 */
+            height: 0;
+            overflow: hidden;
+        }
+        .video-wrapper iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .video-card img {
+            width: 100%;
+            display: block;
+        }
+
+        .video-caption {
+            padding: 12px 16px;
+            font-size: 0.88em;
+            color: var(--text-secondary);
+            text-align: center;
+            line-height: 1.6;
+            margin: 0;
+        }
+        .video-caption a {
+            color: var(--accent);
+        }
+
+        .video-card.fallback {
+            padding: 20px;
+            text-align: center;
+        }
+
+        /* ── Lightbox：截图点击放大 ── */
+        .screenshot-card img { cursor: zoom-in; transition: opacity 0.15s; }
+        .screenshot-card img:hover { opacity: 0.9; }
+        .lightbox {
+            position: fixed; inset: 0; z-index: 999;
+            display: none; align-items: center; justify-content: center;
+            background: rgba(5, 5, 8, 0.92); backdrop-filter: blur(4px);
+            cursor: zoom-out; padding: 24px;
+        }
+        .lightbox.open { display: flex; }
+        .lightbox img {
+            max-width: 96vw; max-height: 90vh;
+            border-radius: 8px; box-shadow: 0 12px 60px rgba(0,0,0,0.7);
+        }
+        .lightbox-caption {
+            position: absolute; bottom: 14px; left: 0; right: 0;
+            text-align: center; color: var(--text-secondary); font-size: 0.85em;
+        }
+
+        /* ── 顶部信息栏 ── */
+        .book-content > blockquote:first-of-type {
+            background: var(--accent-glow);
+            border-left-color: var(--accent);
+            border-radius: var(--radius);
+            margin-bottom: 32px;
+        }
+
+        /* ── 图表居中 ── */
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            margin: 32px 0;
+            overflow-x: auto;
+        }
+
+        /* ── 滚动条 ── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* ── 响应式 ── */
+        @media (max-width: 640px) {
+            .book-content { padding: 32px 16px 80px; }
+            h1 { font-size: 1.7em; }
+            h2 { font-size: 1.3em; }
+        }
+    </style>
+</head>
+<body>
+    <article class="book-content">
+        <h1 id="_1">并发控制：条件变量和万能同步方法</h1>
+<blockquote>
+<p><strong>课程</strong>：2026 春季学期《操作系统原理》<br />
+<strong>讲师</strong>：蒋炎岩（jyy）<br />
+<strong>官方课程主页</strong>：<a href="https://jyywiki.cn/OS/2026/">https://jyywiki.cn/OS/2026/</a><br />
+<strong>官方讲义</strong>：<a href="https://jyywiki.cn/OS/2026/lect15.md">https://jyywiki.cn/OS/2026/lect15.md</a><br />
+<strong>视频来源</strong>：<a href="https://www.bilibili.com/video/BV1t3dQBAEzd/">Bilibili BV1t3dQBAEzd</a><br />
+<strong>版权说明</strong>：课程讲义与幻灯片归蒋炎岩所有，采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书是对课堂讲授的书面化重构，保留出处与许可说明。</p>
+</blockquote>
+<h2 id="_2">导语：从“不能同时做”到“必须按顺序做”</h2>
+<p><em>(参考时间: 00:00)</em></p>
+<p>前面的并发路线已经建立了两块基础：</p>
+<ol>
+<li><code>spawn</code> / <code>join</code> 创建和等待线程；</li>
+<li><code>mutex_lock</code> / <code>mutex_unlock</code> 保护临界区，解决 <code>sum++</code> 丢失更新。</li>
+</ol>
+<p>互斥给出的保证是：</p>
+<div class="highlight"><pre><span></span><code>要么 A → B
+要么 B → A
+</code></pre></div>
+
+<p>但很多问题需要更强、更确定的顺序：</p>
+<div class="highlight"><pre><span></span><code>必须 A → B
+</code></pre></div>
+
+<p>例如：</p>
+<ul>
+<li>所有计算线程结束后，<code>join</code> 才能返回；</li>
+<li>指挥给出下一拍后，乐手才能演奏；</li>
+<li>生产者先放入对象，消费者之后才能取出；</li>
+<li>计算图中所有前驱节点完成后，当前节点才能开始。</li>
+</ul>
+<p>这就是 <strong>同步（synchronization）</strong>。它通过等待条件、实现握手，建立确定的 <strong>happens-before</strong> 关系。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["异步：各自向前执行"] --&gt; B["约定同步条件"]
+    B --&gt; C["先到达者等待"]
+    C --&gt; D["条件满足，形成同步点"]
+    D --&gt; E["建立 happens-before"]
+    E --&gt; F["再各自分叉执行"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_02_10.png" alt="回顾互斥锁提供的串行化与可见性" loading="lazy">
+  <p class="video-caption">📷 回顾互斥锁提供的串行化与可见性<br><a href="https://www.bilibili.com/video/BV1t3dQBAEzd/?t=130" target="_blank" rel="noopener">回到原视频 (00:02:10)</a></p>
+</div>
+
+<hr />
+<h2 id="1">1. 同步的本质</h2>
+<h3 id="11-join">1.1 <code>join</code> 就是一个同步机制</h3>
+<p><em>(参考时间: 00:03)</em></p>
+<p>创建线程：</p>
+<div class="highlight"><pre><span></span><code><span class="n">spawn</span><span class="p">(</span><span class="n">T1</span><span class="p">);</span>
+<span class="n">spawn</span><span class="p">(</span><span class="n">T2</span><span class="p">);</span>
+<span class="n">spawn</span><span class="p">(</span><span class="n">T3</span><span class="p">);</span>
+
+<span class="n">join</span><span class="p">();</span>
+<span class="n">printf</span><span class="p">(</span><span class="s">"sum = %ld</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span><span class="w"> </span><span class="n">sum</span><span class="p">);</span>
+</code></pre></div>
+
+<p><code>join</code> 返回时满足：</p>
+<ul>
+<li>所有被等待线程已结束；</li>
+<li>这些线程对共享内存的写对当前线程可见；</li>
+<li><code>join</code> 之后的代码 happens-after 所有目标线程。</li>
+</ul>
+<p>所以库函数 <code>join</code> 本身也可以由同步原语实现。它的同步条件是：</p>
+<div class="highlight"><pre><span></span><code>仍在运行的线程数量 == 0
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    M["主线程 spawn T1/T2/T3"] --&gt; W["等待所有线程结束"]
+    T1["T1 结束"] --&gt; W
+    T2["T2 结束"] --&gt; W
+    T3["T3 结束"] --&gt; W
+    W --&gt; R["join 返回"]
+    R --&gt; P["安全读取共享结果"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_03_30.png" alt="`join` 实现“所有线程结束后主线程再继续”" loading="lazy">
+  <p class="video-caption">📷 `join` 实现“所有线程结束后主线程再继续”<br><a href="https://www.bilibili.com/video/BV1t3dQBAEzd/?t=210" target="_blank" rel="noopener">回到原视频 (00:03:30)</a></p>
+</div>
+
+<h3 id="12">1.2 异步与同步</h3>
+<p><em>(参考时间: 00:04)</em></p>
+<p>把线程想象成人，把共享内存想象成物理空间：</p>
+<ul>
+<li><strong>异步</strong>：每个人各自行动，不知道彼此进度；</li>
+<li><strong>同步</strong>：多个变化过程在某个时刻保持确定关系。</li>
+</ul>
+<p>现实中的同步方式：</p>
+<ul>
+<li>同步电机：磁场锁定；</li>
+<li>同步电路：时钟上升沿；</li>
+<li>人：约定 wall-clock time；</li>
+<li>外卖：送达通知；</li>
+<li>不见不散：双方在指定位置握手。</li>
+</ul>
+<p>物理世界可以用时间和空间实现同步，但线程内部没有自然时间概念。等待同步条件时，也不能让 CPU 一直空转。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["多个异步实体"] --&gt; B["约定同步事件"]
+    B --&gt; C{"事件已发生？"}
+    C -- "否" --&gt; D["等待"]
+    D --&gt; C
+    C -- "是" --&gt; E["达成同步点"]
+    E --&gt; F["继续各自执行"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_04_30.png" alt="从异步到同步：多个独立执行流建立相对关系" loading="lazy">
+  <p class="video-caption">📷 从异步到同步：多个独立执行流建立相对关系<br><a href="https://www.bilibili.com/video/BV1t3dQBAEzd/?t=270" target="_blank" rel="noopener">回到原视频 (00:04:30)</a></p>
+</div>
+
+<h3 id="13">1.3 同步电路与乐团</h3>
+<p><em>(参考时间: 00:06)</em></p>
+<p>同步电路的触发器等待时钟上升沿：</p>
+<div class="highlight"><pre><span></span><code><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">posedge</span><span class="p">(</span><span class="n">clk</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="cm">/* await */</span>
+<span class="p">}</span>
+<span class="n">ff_out</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ff_in</span><span class="p">;</span>
+</code></pre></div>
+
+<p>乐团演奏则等待指挥给出的下一拍：</p>
+<div class="highlight"><pre><span></span><code><span class="n">wait_for_beat</span><span class="p">();</span>
+<span class="n">play_note</span><span class="p">();</span>
+</code></pre></div>
+
+<p>人耳对节奏不同步的容忍大约只有 20 到 30 毫秒。对现代 CPU，这已经是上亿条指令的时间，因此软件线程之间无法依赖“感觉同时发生”。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["指挥挥拍"] --&gt; B["发出同步信号"]
+    B --&gt; C["所有演奏线程条件成立"]
+    C --&gt; D["同时进入下一拍"]
+    D --&gt; E["各自演奏音符"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_06_40.png" alt="同步电路、乐团与程序线程的共同等待模式" loading="lazy">
+  <p class="video-caption">📷 同步电路、乐团与程序线程的共同等待模式<br><a href="https://www.bilibili.com/video/BV1t3dQBAEzd/?t=400" target="_blank" rel="noopener">回到原视频 (00:06:40)</a></p>
+</div>
+
+<h3 id="14">1.4 所有例子都在实现握手</h3>
+<p><em>(参考时间: 00:09)</em></p>
+<p>几个看似不同的场景都遵循同一模式：</p>
+<div class="highlight"><pre><span></span><code>等待某个条件发生
+如果现在没有发生，就等待
+一定有另一个操作会使它发生
+条件满足后继续
+</code></pre></div>
+
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>同步条件</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>同步电路</td>
+<td>时钟上升沿到来</td>
+</tr>
+<tr>
+<td><code>join</code></td>
+<td>所有线程结束</td>
+</tr>
+<tr>
+<td>不见不散</td>
+<td>对方到达</td>
+</tr>
+<tr>
+<td>乐团</td>
+<td>指挥发出下一拍</td>
+</tr>
+<tr>
+<td>生产者消费者</td>
+<td>有对象 / 有空位</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["先到达的线程"] --&gt; B["检查同步条件"]
+    B --&gt; C{"条件成立？"}
+    C -- "否" --&gt; D["等待"]
+    D --&gt; B
+    E["另一线程使条件成立"] --&gt; B
+    C -- "是" --&gt; F["继续执行"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_11_00.png" alt="同步点建立全局可见、容易理解的状态" loading="lazy">
+  <p class="video-caption">📷 同步点建立全局可见、容易理解的状态<br><a href="https://www.bilibili.com/video/BV1t3dQBAEzd/?t=660" target="_blank" rel="noopener">回到原视频 (00:11:00)</a></p>
+</div>
+
+<h3 id="15-happens-before">1.5 Happens-before</h3>
+<p><em>(参考时间: 00:14)</em></p>
+<p>同步点给程序建立了一个确定的全局状态：</p>
+<div class="highlight"><pre><span></span><code>条件发生 → 后续代码
+</code></pre></div>
+
+<p>例如：</p>
+<ul>
+<li>时钟上升沿 happens-before 触发器更新；</li>
+<li>最后一个线程结束 happens-before <code>join</code> 返回；</li>
+<li>生产者放入对象 happens-before 消费者取出；</li>
+<li>所有前驱节点完成 happens-before 当前 DAG 节点开始。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["事件 A"] --&gt;|"happens-before"| S["同步点"]
+    S --&gt;|"happens-before"| B["事件 B"]
+    A --&gt; M["A 对共享内存的写可见"]
+    M --&gt; B
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_14_30.png" alt="同步点为并发执行建立确定的时间隔断" loading="lazy">
+  <p class="video-caption">📷 同步点为并发执行建立确定的时间隔断<br><a href="https://www.bilibili.com/video/BV1t3dQBAEzd/?t=870" target="_blank" rel="noopener">回到原视频 (00:14:30)</a></p>
+</div>
+
+<hr />
+<h2 id="2">2. 用自旋等待实现同步</h2>
+<h3 id="21">2.1 乐团版本</h3>
+<p><em>(参考时间: 00:17)</em></p>
+<p>可以用共享变量表示当前节拍：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">int</span><span class="w"> </span><span class="n">beat</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="n">mutex_t</span><span class="w"> </span><span class="n">lk</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">MUTEX_INIT</span><span class="p">();</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">player</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">tid</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kt">int</span><span class="w"> </span><span class="n">my_beat</span><span class="p">;</span>
+
+<span class="w">        </span><span class="n">mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="w">        </span><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="n">beat</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">last_played</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="w">            </span><span class="n">mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">        </span><span class="n">my_beat</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">beat</span><span class="p">;</span>
+<span class="w">        </span><span class="n">mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+
+<span class="w">        </span><span class="n">play_note</span><span class="p">(</span><span class="n">tid</span><span class="p">,</span><span class="w"> </span><span class="n">my_beat</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>这实现了同步，但等待线程不断获得、检查、释放锁，本质是 <strong>自旋等待</strong>。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["乐手线程"] --&gt; B["lock"]
+    B --&gt; C["检查 beat 是否更新"]
+    C -- "否" --&gt; D["unlock"]
+    D --&gt; E["再次 lock"]
+    E --&gt; C
+    C -- "是" --&gt; F["演奏音符"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_17_20.png" alt="乐团在线程中等待指挥的下一拍" loading="lazy">
+  <p class="video-caption">📷 乐团在线程中等待指挥的下一拍<br><a href="https://www.bilibili.com/video/BV1t3dQBAEzd/?t=1040" target="_blank" rel="noopener">回到原视频 (00:17:20)</a></p>
+</div>
+
+<h3 id="22">2.2 自旋等待的问题</h3>
+<p><em>(参考时间: 00:23)</em></p>
+<p>如果同步条件可能几分钟甚至几天后才成立，不断检查就是浪费 CPU：</p>
+<ul>
+<li>占着处理器但无有效工作；</li>
+<li>产生缓存一致性和调度开销；</li>
+<li>无法把 CPU 让给真正需要运行的线程。</li>
+</ul>
+<p>理想行为是：</p>
+<ol>
+<li>条件不成立；</li>
+<li>原子地释放锁；</li>
+<li>让线程睡眠；</li>
+<li>条件可能成立时唤醒。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["条件不成立"] --&gt; B["自旋循环"]
+    B --&gt; C["反复读共享状态"]
+    C --&gt; D["浪费 CPU 与缓存带宽"]
+    D --&gt; B
+    A --&gt; E["理想的睡眠等待"]
+    E --&gt; F["条件成立后唤醒"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_25_30.png" alt="同步条件是长期事件时，自旋等待浪费 CPU" loading="lazy">
+  <p class="video-caption">📷 同步条件是长期事件时，自旋等待浪费 CPU<br><a href="https://www.bilibili.com/video/BV1t3dQBAEzd/?t=1530" target="_blank" rel="noopener">回到原视频 (00:25:30)</a></p>
+</div>
+
+<hr />
+<h2 id="3">3. 条件变量</h2>
+<h3 id="31-cond_wait">3.1 <code>cond_wait</code> 的核心思想</h3>
+<p><em>(参考时间: 00:26)</em></p>
+<p>标准模板：</p>
+<div class="highlight"><pre><span></span><code><span class="n">mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">sync_condition</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">cond_wait</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cv</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="p">}</span>
+<span class="n">assert</span><span class="p">(</span><span class="n">sync_condition</span><span class="p">());</span>
+<span class="n">mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+</code></pre></div>
+
+<p><code>cond_wait(cv, lk)</code> 原子地完成：</p>
+<ol>
+<li>释放 <code>lk</code>；</li>
+<li>把当前线程放入 <code>cv</code> 的等待队列并睡眠。</li>
+</ol>
+<p>当线程被唤醒时，<code>cond_wait</code> 返回前必须重新获得 <code>lk</code>。</p>
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant W as Waiting Thread
+    participant M as Mutex
+    participant Q as Condition Queue
+    W-&gt;&gt;M: lock
+    W-&gt;&gt;W: condition false
+    W-&gt;&gt;M: unlock as part of wait
+    W-&gt;&gt;Q: sleep on condition
+    Note over Q: another thread signals
+    Q--&gt;&gt;W: wake
+    W-&gt;&gt;M: reacquire lock
+    W-&gt;&gt;W: check condition again
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_26_30.png" alt="条件变量让等待线程睡眠并自动重获锁" loading="lazy">
+  <p class="video-caption">📷 条件变量让等待线程睡眠并自动重获锁<br><a href="https://www.bilibili.com/video/BV1t3dQBAEzd/?t=1590" target="_blank" rel="noopener">回到原视频 (00:26:30)</a></p>
+</div>
+
+<h3 id="32-wait">3.2 <code>wait</code> 释放锁与睡眠必须原子</h3>
+<p><em>(参考时间: 00:28)</em></p>
+<p>如果“释放锁”和“进入睡眠”之间能被插入：</p>
+<ol>
+<li>等待线程释放锁；</li>
+<li>另一个线程修改条件并发出唤醒；</li>
+<li>唤醒丢失；</li>
+<li>原线程才真正睡下；</li>
+<li>它可能永远不再被唤醒。</li>
+</ol>
+<p>因此条件变量实现必须保证这两个动作对同步协议来说是原子的。</p>
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant W as Waiter
+    participant R as Waker
+    W-&gt;&gt;W: unlock
+    R-&gt;&gt;R: condition becomes true
+    R-&gt;&gt;W: signal
+    Note over W: 还未真正睡眠，信号丢失
+    W-&gt;&gt;W: sleep forever
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_28_10.png" alt="`wait` 必须原子地释放锁并进入睡眠" loading="lazy">
+  <p class="video-caption">📷 `wait` 必须原子地释放锁并进入睡眠<br><a href="https://www.bilibili.com/video/BV1t3dQBAEzd/?t=1690" target="_blank" rel="noopener">回到原视频 (00:28:10)</a></p>
+</div>
+
+<h3 id="33-signal-broadcast">3.3 Signal 与 Broadcast</h3>
+<p><em>(参考时间: 00:29)</em></p>
+<p>唤醒操作：</p>
+<ul>
+<li><code>cond_signal(cv)</code>：唤醒等待队列中的一个线程；</li>
+<li><code>cond_broadcast(cv)</code>：唤醒等待队列中的所有线程。</li>
+</ul>
+<p><code>broadcast</code> 可能唤醒条件仍不满足的线程，但它们会重新检查 <code>while</code> 条件并再次睡眠。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["状态可能使条件成立"] --&gt; B{"选择唤醒策略"}
+    B -- "signal" --&gt; C["唤醒一个等待者"]
+    B -- "broadcast" --&gt; D["唤醒所有等待者"]
+    C --&gt; E["被唤醒者重新检查条件"]
+    D --&gt; E
+    E --&gt; F{"条件成立？"}
+    F -- "是" --&gt; G["继续"]
+    F -- "否" --&gt; H["再次 wait"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_30_30.png" alt="`signal` 与 `broadcast` 唤醒条件变量上的等待者" loading="lazy">
+  <p class="video-caption">📷 `signal` 与 `broadcast` 唤醒条件变量上的等待者<br><a href="https://www.bilibili.com/video/BV1t3dQBAEzd/?t=1830" target="_blank" rel="noopener">回到原视频 (00:30:30)</a></p>
+</div>
+
+<h3 id="34">3.4 万能模板</h3>
+<p><em>(参考时间: 00:31)</em></p>
+<p><strong>修改共享状态并唤醒：</strong></p>
+<div class="highlight"><pre><span></span><code><span class="n">mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="cm">/* 修改可能使 sync_condition() 成立的共享状态 */</span>
+<span class="n">cond_broadcast</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cv</span><span class="p">);</span>
+<span class="n">mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+</code></pre></div>
+
+<p><strong>等待条件：</strong></p>
+<div class="highlight"><pre><span></span><code><span class="n">mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">sync_condition</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">cond_wait</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cv</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="p">}</span>
+<span class="n">assert</span><span class="p">(</span><span class="n">sync_condition</span><span class="p">());</span>
+<span class="n">mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+</code></pre></div>
+
+<p>这套模板被称为“万能”，因为它适用于任意复杂的同步条件。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["先问：线程继续执行的条件是什么？"] --&gt; B["用共享状态表达条件"]
+    B --&gt; C["等待方：lock + while + wait"]
+    C --&gt; D["唤醒方：lock + 修改状态 + broadcast + unlock"]
+    D --&gt; E["条件成立者继续，其他人重新等待"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_31_30.png" alt="条件变量万能模板：while 检查、broadcast 唤醒" loading="lazy">
+  <p class="video-caption">📷 条件变量万能模板：while 检查、broadcast 唤醒<br><a href="https://www.bilibili.com/video/BV1t3dQBAEzd/?t=1890" target="_blank" rel="noopener">回到原视频 (00:31:30)</a></p>
+</div>
+
+<h3 id="35-while-if">3.5 为什么必须是 <code>while</code>，不能是 <code>if</code></h3>
+<p><em>(参考时间: 00:32)</em></p>
+<p>被唤醒不等于条件一定成立：</p>
+<ul>
+<li><code>broadcast</code> 会唤醒不满足条件的线程；</li>
+<li>多个等待者可能在竞争同一对象；</li>
+<li>另一个线程可能先抢到锁并消耗条件；</li>
+<li>可能出现虚假唤醒。</li>
+</ul>
+<p><code>while</code> 的语义保证：</p>
+<blockquote>
+<p>退出循环时持有锁，且条件在持有锁的状态下成立。</p>
+</blockquote>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["线程被唤醒并重新获得锁"] --&gt; B["再次检查条件"]
+    B --&gt; C{"条件成立？"}
+    C -- "是" --&gt; D["安全进入临界操作"]
+    C -- "否" --&gt; E["再次 wait"]
+    E --&gt; A
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_32_10.png" alt="`while` 保证退出等待时条件与锁同时成立" loading="lazy">
+  <p class="video-caption">📷 `while` 保证退出等待时条件与锁同时成立<br><a href="https://www.bilibili.com/video/BV1t3dQBAEzd/?t=1930" target="_blank" rel="noopener">回到原视频 (00:32:10)</a></p>
+</div>
+
+<h3 id="36-join">3.6 用条件变量实现 <code>join</code></h3>
+<p><em>(参考时间: 00:34)</em></p>
+<p>共享状态：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">int</span><span class="w"> </span><span class="n">running_threads</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="n">mutex_t</span><span class="w"> </span><span class="n">lk</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">MUTEX_INIT</span><span class="p">();</span>
+<span class="n">cond_t</span><span class="w"> </span><span class="n">cv</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">COND_INIT</span><span class="p">();</span>
+</code></pre></div>
+
+<p>创建线程时：</p>
+<div class="highlight"><pre><span></span><code><span class="n">mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="n">running_threads</span><span class="o">++</span><span class="p">;</span>
+<span class="n">mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+</code></pre></div>
+
+<p>线程退出时：</p>
+<div class="highlight"><pre><span></span><code><span class="n">mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="n">running_threads</span><span class="o">--</span><span class="p">;</span>
+<span class="n">cond_broadcast</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cv</span><span class="p">);</span>
+<span class="n">mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+</code></pre></div>
+
+<p>等待线程：</p>
+<div class="highlight"><pre><span></span><code><span class="n">mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="n">running_threads</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">cond_wait</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cv</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="p">}</span>
+<span class="n">mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["spawn：threads++"] --&gt; B["运行线程"]
+    B --&gt; C["退出：threads--"]
+    C --&gt; D["broadcast(cv)"]
+    E["join：while threads != 0"] --&gt; F["cond_wait(cv, lk)"]
+    D --&gt; G["join 重新检查并返回"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_34_50.png" alt="用共享计数器和条件变量实现 `join`" loading="lazy">
+  <p class="video-caption">📷 用共享计数器和条件变量实现 `join`<br><a href="https://www.bilibili.com/video/BV1t3dQBAEzd/?t=2090" target="_blank" rel="noopener">回到原视频 (00:34:50)</a></p>
+</div>
+
+<hr />
+<h2 id="4">4. 生产者消费者</h2>
+<h3 id="41">4.1 经典模型</h3>
+<p><em>(参考时间: 00:38)</em></p>
+<p>共享一个有界缓冲区：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="nf">produce</span><span class="p">(</span><span class="n">Object</span><span class="w"> </span><span class="n">obj</span><span class="p">);</span>
+<span class="n">Object</span><span class="w"> </span><span class="nf">consume</span><span class="p">(</span><span class="kt">void</span><span class="p">);</span>
+</code></pre></div>
+
+<p>生产者：</p>
+<ul>
+<li>缓冲区有空位时放入对象；</li>
+<li>缓冲区满时等待。</li>
+</ul>
+<p>消费者：</p>
+<ul>
+<li>缓冲区有对象时取走；</li>
+<li>缓冲区空时等待。</li>
+</ul>
+<p>该模型可以表示 scheduler–worker、HTTP gateway–backend、任务队列等大量系统。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    P1["Producer 1"] --&gt; Q["有界缓冲区"]
+    P2["Producer 2"] --&gt; Q
+    Q --&gt; C1["Consumer 1"]
+    Q --&gt; C2["Consumer 2"]
+    P1 --&gt;|"有空间才放入"| Q
+    Q --&gt;|"有对象才取出"| C1
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_38_30.png" alt="生产者消费者共享有界缓冲区" loading="lazy">
+  <p class="video-caption">📷 生产者消费者共享有界缓冲区<br><a href="https://www.bilibili.com/video/BV1t3dQBAEzd/?t=2310" target="_blank" rel="noopener">回到原视频 (00:38:30)</a></p>
+</div>
+
+<h3 id="42">4.2 简化为括号序列</h3>
+<p><em>(参考时间: 00:42)</em></p>
+<p>可以把生产对象看作打印左括号，消费对象看作打印右括号：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="nf">producer</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">tid</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">printf</span><span class="p">(</span><span class="s">"("</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">consumer</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">tid</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">printf</span><span class="p">(</span><span class="s">")"</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>约束：</p>
+<ul>
+<li>任意前缀中，右括号不能多于左括号；</li>
+<li>当前嵌套深度不能超过缓冲区大小 <code>n</code>；</li>
+<li>最终括号应当配对。</li>
+</ul>
+<p>例如 <code>n = 3</code>：</p>
+<div class="highlight"><pre><span></span><code>((())())(((   ✅
+(((()))), (())) ❌
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["打印 '('"] --&gt; B["深度 d++"]
+    C["打印 ')'"] --&gt; D["深度 d--"]
+    B --&gt; E{"d &lt;= n 且最终配对？"}
+    D --&gt; E
+    E -- "是" --&gt; F["合法运行"]
+    E -- "否" --&gt; G["超过容量或右括号非法"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_42_30.png" alt="用括号序列直观表示有界缓冲区" loading="lazy">
+  <p class="video-caption">📷 用括号序列直观表示有界缓冲区<br><a href="https://www.bilibili.com/video/BV1t3dQBAEzd/?t=2550" target="_blank" rel="noopener">回到原视频 (00:42:30)</a></p>
+</div>
+
+<h3 id="43">4.3 同步条件</h3>
+<p><em>(参考时间: 00:43)</em></p>
+<p>生产者可以继续的条件：</p>
+<div class="highlight"><pre><span></span><code>depth &lt; n
+</code></pre></div>
+
+<p>消费者可以继续的条件：</p>
+<div class="highlight"><pre><span></span><code>depth &gt; 0
+</code></pre></div>
+
+<p>生产者更新共享状态：</p>
+<div class="highlight"><pre><span></span><code><span class="n">mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">depth</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">n</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">cond_wait</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cv</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="p">}</span>
+<span class="n">assert</span><span class="p">(</span><span class="n">depth</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">n</span><span class="p">);</span>
+<span class="n">depth</span><span class="o">++</span><span class="p">;</span>
+<span class="n">printf</span><span class="p">(</span><span class="s">"("</span><span class="p">);</span>
+<span class="n">cond_broadcast</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cv</span><span class="p">);</span>
+<span class="n">mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+</code></pre></div>
+
+<p>消费者：</p>
+<div class="highlight"><pre><span></span><code><span class="n">mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">depth</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">cond_wait</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cv</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="p">}</span>
+<span class="n">assert</span><span class="p">(</span><span class="n">depth</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="p">);</span>
+<span class="n">depth</span><span class="o">--</span><span class="p">;</span>
+<span class="n">printf</span><span class="p">(</span><span class="s">")"</span><span class="p">);</span>
+<span class="n">cond_broadcast</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cv</span><span class="p">);</span>
+<span class="n">mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    P["Producer"] --&gt; PC{"depth &lt; n？"}
+    PC -- "否" --&gt; PW["cond_wait"]
+    PW --&gt; PC
+    PC -- "是" --&gt; PI["depth++ / 放入对象"]
+    C["Consumer"] --&gt; CC{"depth &gt; 0？"}
+    CC -- "否" --&gt; CW["cond_wait"]
+    CW --&gt; CC
+    CC -- "是" --&gt; CI["depth-- / 取出对象"]
+    PI --&gt; BC["broadcast"]
+    CI --&gt; BC
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_44_10.png" alt="生产者和消费者只等待各自的缓冲区条件" loading="lazy">
+  <p class="video-caption">📷 生产者和消费者只等待各自的缓冲区条件<br><a href="https://www.bilibili.com/video/BV1t3dQBAEzd/?t=2650" target="_blank" rel="noopener">回到原视频 (00:44:10)</a></p>
+</div>
+
+<h3 id="44">4.4 检查器验证</h3>
+<p><em>(参考时间: 00:47)</em></p>
+<p>打印序列可以通过简单检查器验证：</p>
+<div class="highlight"><pre><span></span><code><span class="n">depth</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="k">for</span> <span class="n">ch</span> <span class="ow">in</span> <span class="n">sys</span><span class="o">.</span><span class="n">stdin</span><span class="o">.</span><span class="n">read</span><span class="p">():</span>
+    <span class="k">if</span> <span class="n">ch</span> <span class="o">==</span> <span class="s2">"("</span><span class="p">:</span>
+        <span class="n">depth</span> <span class="o">+=</span> <span class="mi">1</span>
+    <span class="k">elif</span> <span class="n">ch</span> <span class="o">==</span> <span class="s2">")"</span><span class="p">:</span>
+        <span class="n">depth</span> <span class="o">-=</span> <span class="mi">1</span>
+    <span class="k">assert</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">depth</span> <span class="o">&lt;=</span> <span class="n">n</span>
+</code></pre></div>
+
+<p>运行程序并长期检查输出，可以辅助发现明显协议错误。但它不能替代形式化证明，也不能保证所有执行交错都被覆盖。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["并发程序输出括号流"] --&gt; B["Check.py"]
+    B --&gt; C["维护 depth"]
+    C --&gt; D{"0 &lt;= depth &lt;= n？"}
+    D -- "是" --&gt; E["继续检查"]
+    D -- "否" --&gt; F["报告非法运行"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_48_20.png" alt="用独立检查器验证括号深度与配对" loading="lazy">
+  <p class="video-caption">📷 用独立检查器验证括号深度与配对<br><a href="https://www.bilibili.com/video/BV1t3dQBAEzd/?t=2900" target="_blank" rel="noopener">回到原视频 (00:48:20)</a></p>
+</div>
+
+<h3 id="45-broadcast-signal">4.5 把 <code>broadcast</code> 改成 <code>signal</code> 的危险</h3>
+<p><em>(参考时间: 00:49)</em></p>
+<p>一个生产者唤醒等待者时，若使用 <code>cond_signal</code>：</p>
+<ul>
+<li>可能唤醒生产者，而不是消费者；</li>
+<li>被唤醒的生产者发现缓冲区仍满，重新睡眠；</li>
+<li>真正可以继续的消费者仍在等待；</li>
+<li>系统可能停滞。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant C as Consumer
+    participant P as Producer
+    participant CV as Condition
+    C-&gt;&gt;CV: wait because depth = 0
+    P-&gt;&gt;P: depth++
+    P-&gt;&gt;CV: signal
+    CV--&gt;&gt;P: wakes another producer
+    P-&gt;&gt;CV: full, wait again
+    Note over C: Consumer still asleep
+</code></pre></div>
+
+<p>课堂建议先用 <code>broadcast</code> 建立绝对正确性；确认性能瓶颈后，再考虑更精确的唤醒策略。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_50_20.png" alt="错误的 `signal` 可能唤醒同类线程导致停滞" loading="lazy">
+  <p class="video-caption">📷 错误的 `signal` 可能唤醒同类线程导致停滞<br><a href="https://www.bilibili.com/video/BV1t3dQBAEzd/?t=3020" target="_blank" rel="noopener">回到原视频 (00:50:20)</a></p>
+</div>
+
+<h3 id="46-while-broadcast">4.6 <code>while</code> + <code>broadcast</code> 是安全起步</h3>
+<p><em>(参考时间: 00:51)</em></p>
+<p>两个基础动作：</p>
+<ol>
+<li>所有等待使用 <code>while (!condition)</code>；</li>
+<li>任何可能使条件成立的共享状态变更后使用 <code>broadcast</code>。</li>
+</ol>
+<p>可能多唤醒一些线程，但正确性容易保证。性能优化应建立在正确实现和测量之上。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["等待者"] --&gt; W["while (!condition) cond_wait"]
+    B["状态修改者"] --&gt; M["修改共享状态"]
+    M --&gt; C["cond_broadcast"]
+    W --&gt; R["重新检查条件"]
+    C --&gt; R
+    R --&gt; S{"成立？"}
+    S -- "是" --&gt; T["继续"]
+    S -- "否" --&gt; W
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_51_30.png" alt="万能安全策略：`while` 等待配合 `broadcast` 唤醒" loading="lazy">
+  <p class="video-caption">📷 万能安全策略：`while` 等待配合 `broadcast` 唤醒<br><a href="https://www.bilibili.com/video/BV1t3dQBAEzd/?t=3090" target="_blank" rel="noopener">回到原视频 (00:51:30)</a></p>
+</div>
+
+<hr />
+<h2 id="5">5. 更奇怪的同步问题：括号鱼</h2>
+<h3 id="51">5.1 水分子问题</h3>
+<p><em>(参考时间: 00:52)</em></p>
+<p>类似生成水分子的同步问题：</p>
+<ul>
+<li>两个氢线程、一个氧线程组成一个水分子；</li>
+<li>任意时刻不能出现超过两个氢或超过一个氧等待；</li>
+<li>分子完整后一起继续。</li>
+</ul>
+<p>这比普通生产者消费者有更复杂的全局条件。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    H1["H thread"] --&gt; S["水分子同步状态"]
+    H2["H thread"] --&gt; S
+    O["O thread"] --&gt; S
+    S --&gt; R{"H=2 且 O=1？"}
+    R -- "否" --&gt; W["等待"]
+    R -- "是" --&gt; G["组成水分子并继续"]
+</code></pre></div>
+
+<h3 id="52">5.2 用字符打印两条“鱼”</h3>
+<p><em>(参考时间: 00:52)</em></p>
+<p>三种线程分别打印：</p>
+<div class="highlight"><pre><span></span><code>&lt;
+&gt;
+_
+</code></pre></div>
+
+<p>任务要求输出始终由两种合法模式组成：</p>
+<div class="highlight"><pre><span></span><code>&lt;&gt;&lt;_
+&gt;&lt;&gt;_
+</code></pre></div>
+
+<p>即两个方向的鱼形图案。</p>
+<div class="highlight"><pre><span></span><code>stateDiagram-v2
+    [*] --&gt; A
+    A --&gt; B: print "&lt;"
+    B --&gt; C: print "&gt;"
+    C --&gt; D: print "&lt;"
+    D --&gt; A: print "_"
+
+    A --&gt; E: print "&gt;"
+    E --&gt; F: print "&lt;"
+    F --&gt; D: print "&gt;"
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_54_20.png" alt="用状态机描述左右两条括号鱼" loading="lazy">
+  <p class="video-caption">📷 用状态机描述左右两条括号鱼<br><a href="https://www.bilibili.com/video/BV1t3dQBAEzd/?t=3260" target="_blank" rel="noopener">回到原视频 (00:54:20)</a></p>
+</div>
+
+<h3 id="53">5.3 条件变量解决方案</h3>
+<p><em>(参考时间: 00:55)</em></p>
+<p>共享：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">char</span><span class="w"> </span><span class="n">current_state</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="sc">'A'</span><span class="p">;</span>
+<span class="kt">int</span><span class="w"> </span><span class="n">printing</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+</code></pre></div>
+
+<p>线程能继续的条件是：</p>
+<div class="highlight"><pre><span></span><code>当前允许打印该字符
+且没有其他线程正在打印
+</code></pre></div>
+
+<p>每个线程等待自己对应状态：</p>
+<div class="highlight"><pre><span></span><code><span class="n">mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">can_print</span><span class="p">(</span><span class="n">my_char</span><span class="p">,</span><span class="w"> </span><span class="n">current_state</span><span class="p">)</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="o">!</span><span class="n">printing</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">cond_wait</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cv</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">printing</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+<span class="n">printf</span><span class="p">(</span><span class="s">"%c"</span><span class="p">,</span><span class="w"> </span><span class="n">my_char</span><span class="p">);</span>
+<span class="n">current_state</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">next_state</span><span class="p">(</span><span class="n">current_state</span><span class="p">,</span><span class="w"> </span><span class="n">my_char</span><span class="p">);</span>
+<span class="n">printing</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+
+<span class="n">cond_broadcast</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cv</span><span class="p">);</span>
+<span class="n">mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["线程持有锁"] --&gt; B{"当前状态允许我打印？"}
+    B -- "否" --&gt; C["cond_wait"]
+    C --&gt; B
+    B -- "是" --&gt; D{"没有其他打印者？"}
+    D -- "否" --&gt; C
+    D -- "是" --&gt; E["打印字符"]
+    E --&gt; F["更新状态机"]
+    F --&gt; G["broadcast"]
+    G --&gt; H["unlock"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_56_40.png" alt="把同步条件直接编码为字符与状态的关系" loading="lazy">
+  <p class="video-caption">📷 把同步条件直接编码为字符与状态的关系<br><a href="https://www.bilibili.com/video/BV1t3dQBAEzd/?t=3400" target="_blank" rel="noopener">回到原视频 (00:56:40)</a></p>
+</div>
+
+<h3 id="54">5.4 “万能”的含义</h3>
+<p>条件变量并没有为每种问题提供专用 API。通用步骤只有：</p>
+<ol>
+<li>找到共享状态；</li>
+<li>写出线程继续所需的条件；</li>
+<li>用 <code>while + wait</code> 等待；</li>
+<li>改变状态后 <code>broadcast</code>；</li>
+<li>被唤醒后持有锁重新检查。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["识别共享状态"] --&gt; B["定义同步条件"]
+    B --&gt; C["等待：while + wait"]
+    B --&gt; D["唤醒：修改状态 + broadcast"]
+    C --&gt; E["条件成立，持有锁继续"]
+    D --&gt; E
+</code></pre></div>
+
+<hr />
+<h2 id="6">6. 计算图：通用并行模型</h2>
+<h3 id="61">6.1 有向无环图</h3>
+<p><em>(参考时间: 00:58)</em></p>
+<p>计算图 <code>G(V, E)</code>：</p>
+<ul>
+<li>节点表示计算任务；</li>
+<li>边 <code>u → v</code> 表示 <code>v</code> 依赖 <code>u</code> 的结果；</li>
+<li>必须是 DAG，不能有依赖环；</li>
+<li>边同时代表 happens-before 关系。</li>
+</ul>
+<p>节点完成时，它对共享内存的写必须对后继节点可见。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["节点 u"] --&gt;|"依赖"| B["节点 v"]
+    A --&gt;|"共享结果可见"| M["共享内存"]
+    M --&gt; B
+    B --&gt; C["节点 w"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_59_30.png" alt="DAG 节点表示计算，边表示依赖与 happens-before" loading="lazy">
+  <p class="video-caption">📷 DAG 节点表示计算，边表示依赖与 happens-before<br><a href="https://www.bilibili.com/video/BV1t3dQBAEzd/?t=3570" target="_blank" rel="noopener">回到原视频 (00:59:30)</a></p>
+</div>
+
+<h3 id="62">6.2 无处不在</h3>
+<p><em>(参考时间: 01:00)</em></p>
+<p>计算图模型可以描述：</p>
+<ul>
+<li>神经网络的数据流与 autograd；</li>
+<li>Makefile 的编译依赖；</li>
+<li>电路模拟；</li>
+<li>动态规划；</li>
+<li>任务的动态生成；</li>
+<li>编译、构建、工作流和数据流水线。</li>
+</ul>
+<p>如果每个节点的独立计算时间足够长，图管理开销可以忽略。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["DAG 计算模型"] --&gt; B["神经网络"]
+    A --&gt; C["Makefile"]
+    A --&gt; D["电路仿真"]
+    A --&gt; E["动态规划"]
+    A --&gt; F["任务工作流"]
+    A --&gt; G["动态任务生成"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_02_30.png" alt="神经网络与 Makefile 都可以视为 DAG" loading="lazy">
+  <p class="video-caption">📷 神经网络与 Makefile 都可以视为 DAG<br><a href="https://www.bilibili.com/video/BV1t3dQBAEzd/?t=3750" target="_blank" rel="noopener">回到原视频 (01:02:30)</a></p>
+</div>
+
+<h3 id="63">6.3 最长公共子序列</h3>
+<p><em>(参考时间: 01:03)</em></p>
+<p>动态规划 <code>dp[i][j]</code> 的每个状态依赖：</p>
+<div class="highlight"><pre><span></span><code>dp[i-1][j]
+dp[i][j-1]
+dp[i-1][j-1]
+</code></pre></div>
+
+<p>因此二维表格可以看成 DAG：</p>
+<ul>
+<li>节点是 <code>dp[i][j]</code>；</li>
+<li>边表示计算依赖；</li>
+<li>同一对角线上的状态可能互相独立；</li>
+<li>可以按层次并行计算。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["dp[i-1][j-1]"] --&gt; D["dp[i][j]"]
+    B["dp[i-1][j]"] --&gt; D
+    C["dp[i][j-1]"] --&gt; D
+    D --&gt; E["下一层状态"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_04_30.png" alt="最长公共子序列的二维依赖图" loading="lazy">
+  <p class="video-caption">📷 最长公共子序列的二维依赖图<br><a href="https://www.bilibili.com/video/BV1t3dQBAEzd/?t=3870" target="_blank" rel="noopener">回到原视频 (01:04:30)</a></p>
+</div>
+
+<hr />
+<h2 id="7">7. 实现任意计算图</h2>
+<h3 id="71">7.1 方法一：每个节点一个线程和条件变量</h3>
+<p><em>(参考时间: 01:06)</em></p>
+<div class="highlight"><pre><span></span><code><span class="k">struct</span><span class="w"> </span><span class="nc">node</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">pending</span><span class="p">;</span>
+<span class="w">    </span><span class="n">mutex_t</span><span class="w"> </span><span class="n">lk</span><span class="p">;</span>
+<span class="w">    </span><span class="n">cond_t</span><span class="w"> </span><span class="n">cv</span><span class="p">;</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<p>完成节点 <code>u</code> 后，通知所有后继：</p>
+<div class="highlight"><pre><span></span><code><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">v</span><span class="w"> </span><span class="n">in</span><span class="w"> </span><span class="n">successors</span><span class="p">(</span><span class="n">u</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="o">-&gt;</span><span class="n">lk</span><span class="p">);</span>
+<span class="w">    </span><span class="n">v</span><span class="o">-&gt;</span><span class="n">pending</span><span class="o">--</span><span class="p">;</span>
+<span class="w">    </span><span class="n">cond_signal</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="o">-&gt;</span><span class="n">cv</span><span class="p">);</span>
+<span class="w">    </span><span class="n">mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="o">-&gt;</span><span class="n">lk</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>节点 <code>v</code> 等待所有前驱：</p>
+<div class="highlight"><pre><span></span><code><span class="n">mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="o">-&gt;</span><span class="n">lk</span><span class="p">);</span>
+<span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="n">v</span><span class="o">-&gt;</span><span class="n">pending</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">cond_wait</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="o">-&gt;</span><span class="n">cv</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">v</span><span class="o">-&gt;</span><span class="n">lk</span><span class="p">);</span>
+<span class="p">}</span>
+<span class="n">mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="o">-&gt;</span><span class="n">lk</span><span class="p">);</span>
+
+<span class="n">compute</span><span class="p">(</span><span class="n">v</span><span class="p">);</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    U["u 完成"] --&gt; V["v.pending--"]
+    W["w 完成"] --&gt; V
+    V --&gt; C{"v.pending == 0？"}
+    C -- "否" --&gt; X["继续等待"]
+    C -- "是" --&gt; S["signal(v.cv)"]
+    S --&gt; Y["v 开始计算"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_07_30.png" alt="每个 DAG 节点使用独立线程和条件变量" loading="lazy">
+  <p class="video-caption">📷 每个 DAG 节点使用独立线程和条件变量<br><a href="https://www.bilibili.com/video/BV1t3dQBAEzd/?t=4050" target="_blank" rel="noopener">回到原视频 (01:07:30)</a></p>
+</div>
+
+<h3 id="72">7.2 边完成标志或前驱计数</h3>
+<p><em>(参考时间: 01:08)</em></p>
+<p>每条边可以维护一个布尔值：</p>
+<div class="highlight"><pre><span></span><code>done(e1) &amp;&amp; done(e2) &amp;&amp; done(e3)
+</code></pre></div>
+
+<p>更常见的是为每个节点保存“尚未完成的入边数量”：</p>
+<div class="highlight"><pre><span></span><code>pending[v] = number of incoming edges
+</code></pre></div>
+
+<p>前驱完成时递减；减到零时唤醒节点。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["u1"] --&gt; P["pending[v]"]
+    B["u2"] --&gt; P
+    C["u3"] --&gt; P
+    P --&gt; D{"pending[v] == 0？"}
+    D -- "是" --&gt; E["v ready"]
+    D -- "否" --&gt; F["继续等待"]
+</code></pre></div>
+
+<h3 id="73-executor-pool">7.3 方法二：Executor Pool</h3>
+<p><em>(参考时间: 01:09)</em></p>
+<p>如果节点有数百万个，为每个节点创建线程成本过高。可以使用：</p>
+<ul>
+<li>一个 ready queue；</li>
+<li>固定数量的 worker 线程；</li>
+<li>scheduler 或 worker 将新就绪节点放回队列。</li>
+</ul>
+<p>worker 的同步条件：</p>
+<div class="highlight"><pre><span></span><code>队列非空，或者所有任务已经完成
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    S["Scheduler / Ready Nodes"] --&gt; Q["Ready Queue"]
+    Q --&gt; W1["Worker 1"]
+    Q --&gt; W2["Worker 2"]
+    Q --&gt; W3["Worker 3"]
+    W1 --&gt; R["完成节点，更新后继"]
+    W2 --&gt; R
+    W3 --&gt; R
+    R --&gt; Q
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_10_20.png" alt="Executor Pool 用任务队列消费就绪节点" loading="lazy">
+  <p class="video-caption">📷 Executor Pool 用任务队列消费就绪节点<br><a href="https://www.bilibili.com/video/BV1t3dQBAEzd/?t=4220" target="_blank" rel="noopener">回到原视频 (01:10:20)</a></p>
+</div>
+
+<h3 id="74-worker">7.4 Worker 的等待模板</h3>
+<div class="highlight"><pre><span></span><code><span class="n">mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">all_done</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">has_job</span><span class="p">(</span><span class="n">tid</span><span class="p">)))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">cond_wait</span><span class="p">(</span><span class="o">&amp;</span><span class="n">worker_cv</span><span class="p">[</span><span class="n">tid</span><span class="p">],</span><span class="w"> </span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="p">}</span>
+<span class="n">mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">all_done</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">return</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="n">process_job</span><span class="p">(</span><span class="n">tid</span><span class="p">);</span>
+</code></pre></div>
+
+<p>任务完成后再加锁更新依赖，并把可能的就绪任务放回队列。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Worker 循环"] --&gt; B["lock"]
+    B --&gt; C{"有任务或全部完成？"}
+    C -- "否" --&gt; D["cond_wait"]
+    D --&gt; C
+    C -- "有任务" --&gt; E["unlock + 执行任务"]
+    C -- "全部完成" --&gt; F["退出"]
+    E --&gt; G["lock 更新 DAG"]
+    G --&gt; H["向后继队列添加就绪任务"]
+    H --&gt; I["signal / broadcast"]
+    I --&gt; A
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_13_00.png" alt="Executor Pool 的 worker 条件等待与任务完成通知" loading="lazy">
+  <p class="video-caption">📷 Executor Pool 的 worker 条件等待与任务完成通知<br><a href="https://www.bilibili.com/video/BV1t3dQBAEzd/?t=4380" target="_blank" rel="noopener">回到原视频 (01:13:00)</a></p>
+</div>
+
+<h3 id="75">7.5 锁的范围</h3>
+<p><em>(参考时间: 01:13)</em></p>
+<p>真实 DAG 调度中：</p>
+<ul>
+<li>从队列取任务、更新依赖时持锁；</li>
+<li>真正计算任务时不持全局锁；</li>
+<li>每个任务拥有自己的私有数据；</li>
+<li>只对共享依赖图进行受保护访问。</li>
+</ul>
+<p>这样既保证正确性，也保留多处理器并行度。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["lock：取任务"] --&gt; B["unlock"]
+    B --&gt; C["并行执行计算"]
+    C --&gt; D["lock：更新依赖"]
+    D --&gt; E["unlock"]
+    E --&gt; F["继续循环"]
+</code></pre></div>
+
+<hr />
+<h2 id="8">8. 总结：同步是并发的另一半</h2>
+<p>这一讲从互斥的局限出发，建立了完整同步机制：</p>
+<ul>
+<li>互斥只保证 A、B 不并发，不能强制 A happens-before B；</li>
+<li>同步通过等待条件建立确定的 happens-before；</li>
+<li><code>join</code>、同步电路、乐团和约定见面都是“条件握手”；</li>
+<li>自旋等待实现简单，但长期等待会浪费 CPU；</li>
+<li>条件变量让线程在条件不成立时睡眠；</li>
+<li><code>cond_wait</code> 原子地释放锁并睡眠，唤醒后重新获得锁；</li>
+<li>万能模板是 <code>lock + while + wait</code> 与 <code>lock + update + broadcast + unlock</code>；</li>
+<li>生产者消费者是绝大多数实际同步问题的基础模型；</li>
+<li>有界缓冲区的条件分别是“有空位”和“有对象”；</li>
+<li><code>signal</code> 可能唤醒错误线程，安全起步应使用 <code>broadcast</code>；</li>
+<li>水分子、括号鱼等奇怪问题只需写清同步条件；</li>
+<li>DAG 是理解并行计算的通用模型；</li>
+<li>DAG 可以用“每节点线程 + 条件变量”或 Executor Pool 实现。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["互斥：解决数据竞争"] --&gt; B["同步：控制事件顺序"]
+    B --&gt; C["条件变量"]
+    C --&gt; D["生产者消费者"]
+    C --&gt; E["任意复杂同步条件"]
+    C --&gt; F["DAG / 计算图"]
+    F --&gt; G["节点线程模型"]
+    F --&gt; H["Executor Pool"]
+</code></pre></div>
+
+<p>最终可以记住一句话：</p>
+<blockquote>
+<p>无论同步问题多奇怪，先写出“当前线程继续执行的条件”，然后套用条件变量模板。</p>
+</blockquote>
+<hr />
+<h2 id="_3">附：官方参考与延伸阅读</h2>
+<p>以下链接来自官方讲义第 15 讲及课堂内容：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/orchestra">同步乐团 demo</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/producer-consumer">生产者消费者 demo</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/fish">括号鱼同步问题</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/cgraph-mutex">使用互斥锁实现计算图</a></li>
+<li><a href="https://strudel.cc/">Strudel live coding music</a></li>
+<li><a href="https://www.hacklily.org/">Hacklily</a></li>
+</ul>
+<p>阅读材料：</p>
+<ul>
+<li><em>Operating Systems: Three Easy Pieces</em> 第 30 章，Condition Variables。</li>
+</ul>
+<p>官方课程资料：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/2026/">课程主页</a></li>
+<li><a href="https://jyywiki.cn/OS/2026/lect15.md">第 15 讲讲义：并发控制：同步 (1)</a></li>
+<li><a href="https://www.bilibili.com/video/BV1t3dQBAEzd/">视频：15 - 并发控制：条件变量和万能同步方法</a></li>
+</ul>
+<blockquote>
+<p><strong>版权与署名</strong>：本讲课程材料由蒋炎岩（jyy）编写。课程讲义与幻灯片采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书保留课程出处、作者署名与许可说明。</p>
+</blockquote>
+    </article>
+
+    <!-- Mermaid 图表引擎初始化 -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            mermaid.initialize({ startOnLoad: false, theme: 'default' });
+            
+            // 兼容普通代码块以及丢失 language-mermaid 类名的情况 (CodeHilite 干扰)
+            const codeNodes = document.querySelectorAll('pre code, .highlight code');
+            codeNodes.forEach(function(node) {
+                const text = node.textContent.trim();
+                // 匹配常见的 mermaid 图表前缀
+                if (text.startsWith('graph ') || text.startsWith('flowchart ') || text.startsWith('sequenceDiagram') || text.startsWith('gantt') || text.startsWith('pie') || text.startsWith('classDiagram') || text.startsWith('stateDiagram') || text.startsWith('mindmap')) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.className = 'mermaid';
+                    tempDiv.textContent = text;
+                    
+                    // 获取需要替换的最外层父节点 (比如 div.highlight 或者 pre)
+                    const wrapper = node.closest('.highlight') || node.parentNode;
+                    wrapper.replaceWith(tempDiv); 
+                }
+            });
+            
+            // 所有节点转换完成，统一进行图表动态绘制
+            mermaid.run();
+        });
+    </script>
+    <!-- Lightbox：截图点击放大 -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const lightbox = document.createElement('div');
+            lightbox.className = 'lightbox';
+            lightbox.innerHTML = '<img alt=""><div class="lightbox-caption"></div>';
+            document.body.appendChild(lightbox);
+            const lbImg = lightbox.querySelector('img');
+            const lbCap = lightbox.querySelector('.lightbox-caption');
+            function openLightbox(src, alt) {
+                lbImg.src = src; lbImg.alt = alt || '';
+                lbCap.textContent = alt || '';
+                lightbox.classList.add('open');
+                document.body.style.overflow = 'hidden';
+            }
+            function closeLightbox() {
+                lightbox.classList.remove('open');
+                lbImg.src = '';
+                document.body.style.overflow = '';
+            }
+            document.querySelectorAll('.screenshot-card img').forEach(function(img) {
+                img.addEventListener('click', function() { openLightbox(img.src, img.alt); });
+            });
+            lightbox.addEventListener('click', closeLightbox);
+            document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
+        });
+    </script>
+</body>
+</html>
