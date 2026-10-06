@@ -1,0 +1,1489 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>调试 C 标准库：从 DWARF 到 vDSO 与 malloc</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* ── 基础重置 ── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            color-scheme: light;
+            --bg-primary: #f7f7f8;
+            --bg-secondary: #ffffff;
+            --bg-card: #eef0f3;
+            --bg-code: #f2f3f5;
+            --text-primary: #1f2328;
+            --text-secondary: #57606a;
+            --text-muted: #6e7781;
+            --accent: #2563eb;
+            --accent-glow: rgba(37, 99, 235, 0.08);
+            --border: #d9dce1;
+            --border-subtle: #e7e9ec;
+            --radius: 12px;
+            --shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Serif SC', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.8;
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── 文章容器 ── */
+        .book-content {
+            max-width: 780px;
+            margin: 0 auto;
+            padding: 60px 32px 120px;
+        }
+
+        /* ── 标题 ── */
+        h1 {
+            font-size: 2.2em;
+            font-weight: 700;
+            margin: 0 0 12px;
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+        }
+
+        h2 {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 56px 0 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h3 {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: var(--accent);
+            margin: 36px 0 12px;
+        }
+
+        /* ── 段落与文字 ── */
+        p {
+            margin: 0 0 16px;
+            color: var(--text-primary);
+        }
+
+        strong {
+            color: #0f172a;
+            font-weight: 600;
+        }
+
+        em {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.2s;
+        }
+        a:hover {
+            border-bottom-color: var(--accent);
+        }
+
+        /* ── 引用 ── */
+        blockquote {
+            margin: 24px 0;
+            padding: 16px 20px;
+            background: var(--bg-secondary);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 var(--radius) var(--radius) 0;
+            color: var(--text-secondary);
+        }
+        blockquote p { margin: 0; }
+
+        /* ── 列表 ── */
+        ul, ol {
+            margin: 12px 0 20px 24px;
+            color: var(--text-primary);
+        }
+        li {
+            margin: 6px 0;
+        }
+
+        /* ── 分割线 ── */
+        hr {
+            border: none;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border), transparent);
+            margin: 48px 0;
+        }
+
+        /* ── 表格 ── */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 24px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+        thead {
+            background: var(--bg-card);
+        }
+        th {
+            padding: 12px 16px;
+            font-weight: 600;
+            text-align: left;
+            color: var(--accent);
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        td {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border-subtle);
+        }
+        tbody tr {
+            background: var(--bg-secondary);
+            transition: background 0.15s;
+        }
+        tbody tr:hover {
+            background: var(--bg-card);
+        }
+
+        /* ── 代码 ── */
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-code);
+            padding: 2px 7px;
+            border-radius: 5px;
+            font-size: 0.88em;
+            color: #6d28d9;
+        }
+
+        pre {
+            margin: 20px 0;
+            padding: 20px 24px;
+            background: var(--bg-code);
+            border-radius: var(--radius);
+            overflow-x: auto;
+            border: 1px solid var(--border);
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9em;
+            color: var(--text-primary);
+        }
+
+        /* ── 视频嵌入卡片 ── */
+        .video-card {
+            margin: 32px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .video-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(15, 23, 42, 0.12);
+        }
+
+        .video-wrapper {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 */
+            height: 0;
+            overflow: hidden;
+        }
+        .video-wrapper iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .video-card img {
+            width: 100%;
+            display: block;
+        }
+
+        .video-caption {
+            padding: 12px 16px;
+            font-size: 0.88em;
+            color: var(--text-secondary);
+            text-align: center;
+            line-height: 1.6;
+            margin: 0;
+        }
+        .video-caption a {
+            color: var(--accent);
+        }
+
+        .video-card.fallback {
+            padding: 20px;
+            text-align: center;
+        }
+
+        /* ── Lightbox：截图点击放大 ── */
+        .screenshot-card img { cursor: zoom-in; transition: opacity 0.15s; }
+        .screenshot-card img:hover { opacity: 0.9; }
+        .lightbox {
+            position: fixed; inset: 0; z-index: 999;
+            display: none; align-items: center; justify-content: center;
+            background: rgba(5, 5, 8, 0.92); backdrop-filter: blur(4px);
+            cursor: zoom-out; padding: 24px;
+        }
+        .lightbox.open { display: flex; }
+        .lightbox img {
+            max-width: 96vw; max-height: 90vh;
+            border-radius: 8px; box-shadow: 0 12px 60px rgba(0,0,0,0.7);
+        }
+        .lightbox-caption {
+            position: absolute; bottom: 14px; left: 0; right: 0;
+            text-align: center; color: var(--text-secondary); font-size: 0.85em;
+        }
+
+        /* ── 顶部信息栏 ── */
+        .book-content > blockquote:first-of-type {
+            background: var(--accent-glow);
+            border-left-color: var(--accent);
+            border-radius: var(--radius);
+            margin-bottom: 32px;
+        }
+
+        /* ── 图表居中 ── */
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            margin: 32px 0;
+            overflow-x: auto;
+        }
+
+        /* ── 滚动条 ── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* ── 响应式 ── */
+        @media (max-width: 640px) {
+            .book-content { padding: 32px 16px 80px; }
+            h1 { font-size: 1.7em; }
+            h2 { font-size: 1.3em; }
+        }
+    </style>
+</head>
+<body>
+    <article class="book-content">
+        <h1 id="c-dwarf-vdso-malloc">调试 C 标准库：从 DWARF 到 vDSO 与 malloc</h1>
+<blockquote>
+<p><strong>课程</strong>：2026 春季学期《操作系统原理》<br />
+<strong>讲师</strong>：蒋炎岩（jyy）<br />
+<strong>官方课程主页</strong>：<a href="https://jyywiki.cn/OS/2026/">https://jyywiki.cn/OS/2026/</a><br />
+<strong>官方讲义</strong>：<a href="https://jyywiki.cn/OS/2026/lect10.md">https://jyywiki.cn/OS/2026/lect10.md</a><br />
+<strong>视频来源</strong>：<a href="https://www.bilibili.com/video/BV1yu9cBCEAb/">Bilibili BV1yu9cBCEAb</a><br />
+<strong>版权说明</strong>：课程讲义与幻灯片归蒋炎岩所有，采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书是对课堂讲授的书面化重构，保留出处与许可说明。</p>
+</blockquote>
+<h2 id="libc">导语：从“知道 libc 封装了什么”到“真正调试它”</h2>
+<p><em>(参考时间: 00:00)</em></p>
+<p>上一讲从接口层面观察了 C 标准库：</p>
+<ul>
+<li><code>FILE *</code> 封装文件描述符；</li>
+<li><code>printf</code> 家族共享格式化核心；</li>
+<li><code>errno</code>、<code>perror</code> 处理错误；</li>
+<li><code>environ</code> 保存进程环境；</li>
+<li><code>_start</code>、<code>__libc_start_main</code> 和 <code>exit</code> 构成 C Runtime。</li>
+</ul>
+<p>这一讲继续向下钻。我们不满足于“知道某个函数大概做了什么”，而是用调试器和真正的 musl libc 源码观察：</p>
+<ul>
+<li>编译器为什么需要调试信息；</li>
+<li><code>_start</code> 如何解析初始进程栈；</li>
+<li><code>printf</code> 如何把变参数搬到内存；</li>
+<li><code>setjmp</code> 与 <code>longjmp</code> 保存和恢复了哪些寄存器；</li>
+<li><code>gettimeofday</code> 为什么不产生系统调用；</li>
+<li><code>malloc</code> 如何在系统调用之上管理小对象。</li>
+</ul>
+<p>核心方法是：<strong>从机器的低级状态恢复程序的高级意义</strong>。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["PC、寄存器、内存"] --&gt; B["调试信息"]
+    B --&gt; C["函数名、类型、变量、源代码行"]
+    C --&gt; D["调用栈、性能火焰图、崩溃快照"]
+    D --&gt; E["人类可理解的程序行为"]
+</code></pre></div>
+
+<p>课堂开始也提到上一讲的“翻车”经历：直接让模型编译并安装 musl libc，模型声称成功，实际使用的仍是系统包管理器安装的版本，导致调试器看不到 libc 源码。这次讲师逐条检查命令和输出，确保自定义 musl 工具链真正生效。</p>
+<p>这件事本身就是一条工程经验：<strong>AI 可以完成复杂操作，但关键步骤仍要验证实际状态，而不是只看“已完成”的总结。</strong></p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_08_20.png" alt="从 GDB 看不到 libc 源码的调试现场" loading="lazy">
+  <p class="video-caption">📷 从 GDB 看不到 libc 源码的调试现场<br><a href="https://www.bilibili.com/video/BV1yu9cBCEAb/?t=500" target="_blank" rel="noopener">回到原视频 (00:08:20)</a></p>
+</div>
+
+<hr />
+<h2 id="1-debug-info">1. Debug Info：让二进制重新“长出”源代码</h2>
+<h3 id="11-musl-gcc">1.1 编译 <code>musl-gcc</code> 与调试信息</h3>
+<p><em>(参考时间: 00:09)</em></p>
+<p>先要让程序带着调试信息编译。最简单的 C 程序可以写成：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">int</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>普通编译只产生机器指令和数据；加上 <code>-g</code> 后，目标文件与可执行文件中会多出调试信息节。</p>
+<p>在 musl 教学环境中，可以把 libc 本身也编译成带调试信息、便于阅读的版本：</p>
+<div class="highlight"><pre><span></span><code><span class="nv">CC</span><span class="o">=</span>musl-gcc<span class="w"> </span><span class="se">\</span>
+<span class="nv">CFLAGS</span><span class="o">=</span><span class="s2">"-Og -ggdb -fno-omit-frame-pointer"</span><span class="w"> </span><span class="se">\</span>
+./configure<span class="w"> </span>--prefix<span class="o">=</span><span class="s2">"</span><span class="nv">$HOME</span><span class="s2">/musl-debug"</span>
+
+make<span class="w"> </span>-j<span class="s2">"</span><span class="k">$(</span>nproc<span class="k">)</span><span class="s2">"</span>
+make<span class="w"> </span>install
+</code></pre></div>
+
+<p>随后静态编译演示程序：</p>
+<div class="highlight"><pre><span></span><code>musl-gcc<span class="w"> </span>-Og<span class="w"> </span>-ggdb<span class="w"> </span>-static<span class="w"> </span>test-debug.c<span class="w"> </span>-o<span class="w"> </span>test-debug
+gdb<span class="w"> </span>./test-debug
+</code></pre></div>
+
+<p><code>-Og</code> 更偏向调试体验，<code>-ggdb</code> 生成 GDB 友好的调试信息，<code>-fno-omit-frame-pointer</code> 让调用栈更容易恢复。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_09_00.png" alt="首次加载程序时 GDB 还没有任何源代码" loading="lazy">
+  <p class="video-caption">📷 首次加载程序时 GDB 还没有任何源代码<br><a href="https://www.bilibili.com/video/BV1yu9cBCEAb/?t=540" target="_blank" rel="noopener">回到原视频 (00:09:00)</a></p>
+</div>
+
+<h3 id="12">1.2 调试信息是二进制中的额外节</h3>
+<p><em>(参考时间: 00:10)</em></p>
+<p>可以用 <code>readelf -a</code> 查看 ELF 文件。除了熟悉的 <code>.text</code>、<code>.data</code>、<code>.bss</code>，带调试信息的文件还会包含：</p>
+<ul>
+<li><code>.debug_info</code>：类型、变量、函数和编译单元等核心信息；</li>
+<li><code>.debug_abbrev</code>：调试信息中使用的缩写表；</li>
+<li><code>.debug_line</code>：机器地址与源代码行的对应；</li>
+<li><code>.debug_str</code>：调试字符串表；</li>
+<li><code>.debug_ranges</code>、<code>.debug_rnglists</code>：地址范围；</li>
+<li><code>.debug_frame</code>：调用栈展开所需的信息；</li>
+<li><code>.debug_loc</code>、<code>.debug_loclists</code>：变量位置表达式。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>readelf<span class="w"> </span>-a<span class="w"> </span>./test-debug<span class="w"> </span><span class="p">|</span><span class="w"> </span>less
+readelf<span class="w"> </span>-S<span class="w"> </span>./test-debug
+</code></pre></div>
+
+<p>这些节使用 <strong>DWARF Debugging Standard</strong>。名字也埋着课程常提到的幻想梗：</p>
+<ul>
+<li><strong>ELF</strong> 是精灵（Elf）；</li>
+<li><strong>DWARF</strong> 是矮人（Dwarf）。</li>
+</ul>
+<p>DWARF 不只是“地址到行号”的表格。它包含一个类似字节码的小型指令集，用来描述：</p>
+<blockquote>
+<p>在某个 PC 范围内，某个变量的值在哪里，应该怎样计算出来。</p>
+</blockquote>
+<p>变量可能在寄存器里、栈上、内存中的某个偏移；经过优化后，甚至可能只在某段指令内存在。DWARF 字节码负责把这些位置和计算规则描述出来。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["ELF 二进制"] --&gt; B[".debug_info"]
+    A --&gt; C[".debug_line"]
+    A --&gt; D[".debug_frame"]
+    A --&gt; E[".debug_str / ranges / loc"]
+    B --&gt; F["类型、变量、函数、编译单元"]
+    C --&gt; G["PC 地址 ↔ 源代码行"]
+    D --&gt; H["栈帧展开"]
+    E --&gt; I["名称和地址范围"]
+    F --&gt; J["调试器重建程序状态"]
+    G --&gt; J
+    H --&gt; J
+    I --&gt; J
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_11_10.png" alt="readelf 中多出的 DWARF 调试节" loading="lazy">
+  <p class="video-caption">📷 readelf 中多出的 DWARF 调试节<br><a href="https://www.bilibili.com/video/BV1yu9cBCEAb/?t=670" target="_blank" rel="noopener">回到原视频 (00:11:10)</a></p>
+</div>
+
+<h3 id="13-dwarf">1.3 没有 DWARF，符号表也能近似定位</h3>
+<p><em>(参考时间: 00:14)</em></p>
+<p>即使没有 <code>-g</code>，ELF 通常仍保留 <code>.symtab</code> 符号表。可以用 <code>nm</code> 查看：</p>
+<div class="highlight"><pre><span></span><code>nm<span class="w"> </span>./a.out<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span><span class="s1">' main'</span>
+</code></pre></div>
+
+<p>它会告诉我们类似：</p>
+<div class="highlight"><pre><span></span><code>0000000000400218 T main
+</code></pre></div>
+
+<p>如果 PC 进入 <code>main</code> 的地址范围，调试器至少知道“当前正在执行 <code>main</code>”。但符号表通常不能精确告诉调试器“现在正在执行 <code>main.c</code> 的第几行”。</p>
+<p>调试信息补足了更精细的映射：</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    S[".symtab"] --&gt; A["函数级定位"]
+    A --&gt; B["main"]
+    D[".debug_line"] --&gt; C["语句级定位"]
+    C --&gt; D2["main.c:11"]
+    B --&gt; E["近似 addr2line"]
+    D2 --&gt; F["完整源码调试"]
+</code></pre></div>
+
+<p><code>addr2line</code> 把地址解析为源码位置：</p>
+<div class="highlight"><pre><span></span><code>addr2line<span class="w"> </span>-e<span class="w"> </span>./test-debug<span class="w"> </span>-f<span class="w"> </span>0x400218
+</code></pre></div>
+
+<p>输出类似：</p>
+<div class="highlight"><pre><span></span><code>main
+/path/test-debug.c:3
+</code></pre></div>
+
+<p>有了符号表和地址映射，理论上就足以实现一个简单调试器。更复杂的部分，例如多级调用栈、变量类型、位域和优化后变量恢复，需要完整 DWARF。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_16_55.png" alt="nm 与 addr2line 从地址恢复函数和源代码行" loading="lazy">
+  <p class="video-caption">📷 nm 与 addr2line 从地址恢复函数和源代码行<br><a href="https://www.bilibili.com/video/BV1yu9cBCEAb/?t=1015" target="_blank" rel="noopener">回到原视频 (00:16:55)</a></p>
+</div>
+
+<h3 id="14-dwarf">1.4 DWARF 字节码为什么存在</h3>
+<p><em>(参考时间: 00:17)</em></p>
+<p>C 程序中的变量并不总能简单地对应一个寄存器或固定栈偏移。考虑：</p>
+<ul>
+<li>变量可能一会儿在寄存器，一会儿被写回内存；</li>
+<li>结构体可能使用位域；</li>
+<li>优化器可能重排、内联或删除变量；</li>
+<li>编译器可能只为一段 PC 范围保留某个值。</li>
+</ul>
+<p>因此 DWARF 需要一种可执行的描述语言。它能够读取寄存器、访问内存、做算术、判断范围，甚至分支。它本质上足够表达任意值恢复过程，所以是一个图灵完备的字节码系统。</p>
+<p>调试器显示：</p>
+<div class="highlight"><pre><span></span><code>variable optimized out
+</code></pre></div>
+
+<p>往往就是编译器没有为该位置生成可恢复信息，或者优化后确实不再存在这个变量。</p>
+<p>DWARF 也用于 C++ 异常的 <strong>stack unwinding</strong>：异常抛出时，需要沿着调用栈找到能够处理异常的帧，并在展开过程中恢复寄存器与栈状态。上一讲的 <code>longjmp</code> 和这里的栈展开在机制上有相通之处。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_17_40.png" alt="DWARF 字节码描述变量在何处、如何计算" loading="lazy">
+  <p class="video-caption">📷 DWARF 字节码描述变量在何处、如何计算<br><a href="https://www.bilibili.com/video/BV1yu9cBCEAb/?t=1060" target="_blank" rel="noopener">回到原视频 (00:17:40)</a></p>
+</div>
+
+<h3 id="15-source-map">1.5 Source Map：浏览器里的调试信息</h3>
+<p><em>(参考时间: 00:20)</em></p>
+<p>并非所有语言都像 C 一样依赖外部源文件。TypeScript 会被转译成 JavaScript，新版本 JavaScript 又可能被转译成旧浏览器兼容的代码。浏览器沙盒中没有开发者的项目目录，因此调试信息可以直接携带源码。</p>
+<p>前端构建常生成 <code>.map</code> 文件：</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"file"</span><span class="p">:</span><span class="w"> </span><span class="s2">"bundle.js"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"sources"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"src/index.js"</span><span class="p">],</span>
+<span class="w">  </span><span class="nt">"names"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"map"</span><span class="p">,</span><span class="w"> </span><span class="s2">"callbackFn"</span><span class="p">],</span>
+<span class="w">  </span><span class="nt">"mappings"</span><span class="p">:</span><span class="w"> </span><span class="s2">"AAAA, ..."</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"sourcesContent"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"const x = 1; ..."</span><span class="p">]</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><code>sourcesContent</code> 可以把原始源码直接嵌进 Source Map。</p>
+<p>课堂上以 Claude Code 的 <code>cli.js.map</code> 泄漏为例。压缩后的 JavaScript 本来难以阅读，但 Source Map 中保存了源码，使人们很快得到接近原始项目的代码结构。讲师评价其中不少设计比较普通，但也看到 React 实现的终端 UI、异步 token 处理等有趣细节。</p>
+<p>更值得注意的是供应链安全：</p>
+<ul>
+<li>从网络下载并构建未知项目会执行脚本；</li>
+<li>依赖包可能被投毒；</li>
+<li>构建环境中的 token、密钥和环境变量可能泄漏；</li>
+<li>发布前应使用自动检查扫描源代码和构建产物；</li>
+<li>处理来路不明的项目最好放在干净沙盒里。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    TS["TypeScript"] --&gt; JS1["JavaScript"]
+    JS1 --&gt; JS2["兼容旧浏览器的 JavaScript"]
+    JS2 --&gt; MAP["Source Map"]
+    MAP --&gt; SRC["浏览器中的源码位置"]
+    REPO["未知开源仓库"] --&gt; CI["本地构建 / 安装"]
+    CI --&gt; RISK["依赖投毒、脚本执行、密钥泄漏"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_23_39.png" alt="Source Map 将压缩代码映射回原始源码" loading="lazy">
+  <p class="video-caption">📷 Source Map 将压缩代码映射回原始源码<br><a href="https://www.bilibili.com/video/BV1yu9cBCEAb/?t=1419" target="_blank" rel="noopener">回到原视频 (00:23:39)</a></p>
+</div>
+
+<h3 id="16-debug-info">1.6 Debug Info 能做什么</h3>
+<p><em>(参考时间: 00:27)</em></p>
+<p>调试信息的价值可以概括为：<strong>把机器状态重新解释为程序意义</strong>。</p>
+<p>典型能力包括：</p>
+<ul>
+<li><code>addr2line</code>：地址映射到源码行；</li>
+<li>backtrace：恢复完整函数调用栈；</li>
+<li>profiler：周期性采样 PC，恢复调用栈并生成火焰图；</li>
+<li>crash dump：保存崩溃时刻的进程快照，事后调试；</li>
+<li>AddressSanitizer：在诊断报告中加入源码位置和对象信息。</li>
+</ul>
+<p>以 <code>bt</code> 为例，调试器可以一次恢复从 <code>main</code> 到当前函数的整个调用链：</p>
+<div class="highlight"><pre><span></span><code>#0  second ()
+#1  first ()
+#2  main ()
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["main 栈帧"] --&gt; B["first 栈帧"]
+    B --&gt; C["second 栈帧"]
+    C --&gt; D["当前 PC 与寄存器"]
+    D --&gt; E["DWARF 展开规则"]
+    E --&gt; F["恢复返回地址与 save 寄存器"]
+    F --&gt; G["backtrace / profiler / crash dump"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_30_00.png" alt="GDB backtrace 恢复多层调用栈" loading="lazy">
+  <p class="video-caption">📷 GDB backtrace 恢复多层调用栈<br><a href="https://www.bilibili.com/video/BV1yu9cBCEAb/?t=1800" target="_blank" rel="noopener">回到原视频 (00:30:00)</a></p>
+</div>
+
+<h3 id="17">1.7 火焰图：采样得到的调用栈时间轴</h3>
+<p><em>(参考时间: 00:31)</em></p>
+<p>如果每隔很短时间暂停程序并记录调用栈，就能得到一张火焰图：</p>
+<ul>
+<li>横轴表示时间或采样总体；</li>
+<li>每一层表示一个调用栈帧；</li>
+<li>函数进入时向上叠加；</li>
+<li>函数返回时对应层结束；</li>
+<li>越宽的框代表该调用路径占用的采样越多。</li>
+</ul>
+<p><code>strace</code> 记录系统调用，适合观察内核边界；火焰图采样用户态调用栈，更适合寻找 CPU 性能瓶颈。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["周期性中断程序"] --&gt; B["读取 PC 与寄存器"]
+    B --&gt; C["用 DWARF 恢复调用栈"]
+    C --&gt; D["记录一个栈样本"]
+    D --&gt; E{"继续采样？"}
+    E -- "是" --&gt; A
+    E -- "否" --&gt; F["聚合调用栈"]
+    F --&gt; G["火焰图 / 性能分析"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_31_55.png" alt="火焰图展示调用栈随时间的变化" loading="lazy">
+  <p class="video-caption">📷 火焰图展示调用栈随时间的变化<br><a href="https://www.bilibili.com/video/BV1yu9cBCEAb/?t=1915" target="_blank" rel="noopener">回到原视频 (00:31:55)</a></p>
+</div>
+
+<h3 id="18-sanitizer">1.8 Sanitizer：把隐蔽未定义行为变成诊断报告</h3>
+<p><em>(参考时间: 00:34)</em></p>
+<p>考虑一个典型的 use-after-free：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">int</span><span class="w"> </span><span class="o">*</span><span class="n">p</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">malloc</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="o">*</span><span class="n">p</span><span class="p">));</span>
+<span class="o">*</span><span class="n">p</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+<span class="n">free</span><span class="p">(</span><span class="n">p</span><span class="p">);</span>
+<span class="o">*</span><span class="n">p</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">2</span><span class="p">;</span><span class="w">  </span><span class="cm">/* undefined behavior */</span>
+</code></pre></div>
+
+<p>这段代码可能不崩溃。释放后，虚拟地址空间中的页可能仍然映射；从机器角度看，指针的值也没改变。问题不会凭空消失，只是暂时没有被观察到。</p>
+<p>使用 AddressSanitizer：</p>
+<div class="highlight"><pre><span></span><code>cc<span class="w"> </span>-fsanitize<span class="o">=</span>address<span class="w"> </span>-g<span class="w"> </span>-O1<span class="w"> </span>bug.c<span class="w"> </span>-o<span class="w"> </span>bug
+./bug
+</code></pre></div>
+
+<p>诊断报告会指出：</p>
+<div class="highlight"><pre><span></span><code>heap-use-after-free
+</code></pre></div>
+
+<p>并利用调试信息展示源码位置、分配栈和释放栈。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["malloc 返回地址"] --&gt; B["程序使用对象"]
+    B --&gt; C["free 标记对象已释放"]
+    C --&gt; D["指针值仍然存在"]
+    D --&gt; E{"再次访问？"}
+    E -- "普通运行" --&gt; F["可能静默成功"]
+    E -- "ASan 运行" --&gt; G["heap-use-after-free 诊断"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_34_44.png" alt="AddressSanitizer 报告 use-after-free 与源码位置" loading="lazy">
+  <p class="video-caption">📷 AddressSanitizer 报告 use-after-free 与源码位置<br><a href="https://www.bilibili.com/video/BV1yu9cBCEAb/?t=2084" target="_blank" rel="noopener">回到原视频 (00:34:44)</a></p>
+</div>
+
+<hr />
+<h2 id="2-crt1o-main">2. 调试 <code>crt1.o</code>：从第一条汇编指令到 <code>main</code></h2>
+<h3 id="21-runtime">2.1 最小程序其实经过了完整 Runtime</h3>
+<p><em>(参考时间: 00:35)</em></p>
+<p>把 <code>dummy.c</code> 编译并静态链接后：</p>
+<div class="highlight"><pre><span></span><code>musl-gcc<span class="w"> </span>-Og<span class="w"> </span>-ggdb<span class="w"> </span>-static<span class="w"> </span>dummy.c<span class="w"> </span>-o<span class="w"> </span>dummy
+strace<span class="w"> </span>./dummy
+</code></pre></div>
+
+<p><code>strace</code> 会显示，程序在 <code>execve</code> 后只执行少量初始化，然后直接调用 <code>exit</code> 系统调用。相比带大量初始化逻辑的 glibc，musl 的启动路径更短，适合观察。</p>
+<p>进入 GDB：</p>
+<div class="highlight"><pre><span></span><code>gdb<span class="w"> </span>./dummy
+</code></pre></div>
+
+<p>初始 PC 位于 <code>_start</code>。<code>_start</code> 是汇编代码，进入它所调用的 C 函数 <code>_start_c</code> 后，就能看到更完整的调试信息。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_35_46.png" alt="GDB 从 `_start` 开始单步执行最小程序" loading="lazy">
+  <p class="video-caption">📷 GDB 从 `_start` 开始单步执行最小程序<br><a href="https://www.bilibili.com/video/BV1yu9cBCEAb/?t=2146" target="_blank" rel="noopener">回到原视频 (00:35:46)</a></p>
+</div>
+
+<h3 id="22">2.2 用代码反向还原初始进程栈</h3>
+<p><em>(参考时间: 00:36)</em></p>
+<p><code>_start_c</code> 接收一个 <code>long *p</code>。这个指针就是内核交给用户态程序的初始栈位置。</p>
+<p>按照 System V ABI，初始栈布局可以表示为：</p>
+<div class="highlight"><pre><span></span><code>p[0]        = argc
+p[1]        = argv[0]
+p[2]        = argv[1]
+...
+p[1+argc]   = NULL
+p[2+argc]   = envp[0]
+p[3+argc]   = envp[1]
+...
+             = NULL
+             = auxiliary vector entries
+</code></pre></div>
+
+<p>因此：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">long</span><span class="w"> </span><span class="n">argc</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">p</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+<span class="kt">char</span><span class="w"> </span><span class="o">**</span><span class="n">argv</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="kt">char</span><span class="w"> </span><span class="o">**</span><span class="p">)</span><span class="o">&amp;</span><span class="n">p</span><span class="p">[</span><span class="mi">1</span><span class="p">];</span>
+<span class="kt">char</span><span class="w"> </span><span class="o">**</span><span class="n">envp</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">argv</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">argc</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+</code></pre></div>
+
+<p>在 GDB 中可以打印 <code>argv[0]</code>、<code>envp[0]</code> 和 <code>envp[1]</code>，确认它们分别对应可执行文件名和环境变量。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["内核设置 initial process stack"] --&gt; B["argc"]
+    B --&gt; C["argv[0] … argv[argc-1]"]
+    C --&gt; D["argv 终止 NULL"]
+    D --&gt; E["envp[0] …"]
+    E --&gt; F["envp 终止 NULL"]
+    F --&gt; G["auxv: AT_RANDOM、AT_SYSINFO_EHDR 等"]
+    A --&gt; H["_start / _start_c 读取栈指针"]
+    H --&gt; I["计算 argc、argv、envp"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_37_28.png" alt="在 GDB 中检查初始进程栈的 argc、argv 与 envp" loading="lazy">
+  <p class="video-caption">📷 在 GDB 中检查初始进程栈的 argc、argv 与 envp<br><a href="https://www.bilibili.com/video/BV1yu9cBCEAb/?t=2248" target="_blank" rel="noopener">回到原视频 (00:37:28)</a></p>
+</div>
+
+<h3 id="23-__init_libc-__libc_start_main">2.3 <code>__init_libc</code> 与 <code>__libc_start_main</code></h3>
+<p><em>(参考时间: 00:38)</em></p>
+<p>继续单步会进入 <code>__init_libc</code>。这里完成：</p>
+<ul>
+<li>把 <code>envp</code> 赋给全局变量 <code>environ</code>；</li>
+<li>跳过所有环境变量；</li>
+<li>处理后续 auxiliary vector；</li>
+<li>保存 TLS、随机数种子、vDSO 地址等运行时信息。</li>
+</ul>
+<p>环境变量每一项都是一个指向 NUL 结尾字符串的指针：</p>
+<div class="highlight"><pre><span></span><code><span class="k">extern</span><span class="w"> </span><span class="kt">char</span><span class="w"> </span><span class="o">**</span><span class="n">environ</span><span class="p">;</span>
+
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">char</span><span class="w"> </span><span class="o">**</span><span class="n">e</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">envp</span><span class="p">;</span><span class="w"> </span><span class="o">*</span><span class="n">e</span><span class="p">;</span><span class="w"> </span><span class="o">++</span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="cm">/* 处理 KEY=VALUE */</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>处理完初始化后，控制流进入 <code>__libc_start_main</code>，再由 <code>stage2</code> 调用真正的 <code>main(argc, argv, envp)</code>。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["ELF entry"] --&gt; B["_start"]
+    B --&gt; C["_start_c(long *p)"]
+    C --&gt; D["计算 argc / argv / envp"]
+    D --&gt; E["__libc_start_main"]
+    E --&gt; F["__init_libc"]
+    F --&gt; G["environ = envp"]
+    G --&gt; H["处理 auxv"]
+    H --&gt; I["stage2"]
+    I --&gt; J["main(argc, argv, envp)"]
+    J --&gt; K["exit"]
+    K --&gt; L["exit system call"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_39_28.png" alt="musl 从 `__init_libc` 进入 `__libc_start_main`" loading="lazy">
+  <p class="video-caption">📷 musl 从 `__init_libc` 进入 `__libc_start_main`<br><a href="https://www.bilibili.com/video/BV1yu9cBCEAb/?t=2368" target="_blank" rel="noopener">回到原视频 (00:39:28)</a></p>
+</div>
+
+<hr />
+<h2 id="3-printf-file">3. 调试 <code>printf</code>、变参数与 <code>FILE</code></h2>
+<h3 id="31-printf">3.1 给 <code>printf</code> 打断点</h3>
+<p><em>(参考时间: 00:41)</em></p>
+<p>在 VS Code 或 GDB 中给 musl 的 <code>printf</code> 打上断点。进入后可以看到：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">int</span><span class="w"> </span><span class="nf">printf</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="kt">char</span><span class="w"> </span><span class="o">*</span><span class="n">fmt</span><span class="p">,</span><span class="w"> </span><span class="p">...)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">vfprintf</span><span class="p">(</span><span class="n">stdout</span><span class="p">,</span><span class="w"> </span><span class="n">fmt</span><span class="p">,</span><span class="w"> </span><span class="p">...);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>实际实现通过 <code>va_list</code> 把可变参数传给 <code>vfprintf</code>。</p>
+<p>此时展开 <code>stdout</code>，能看到 <code>FILE</code> 的内部状态：</p>
+<ul>
+<li><code>fd = 1</code>；</li>
+<li><code>buf</code> 指向用户空间缓冲区；</li>
+<li><code>buf_size = 1024</code>；</li>
+<li>当前读写位置和缓冲位置；</li>
+<li>错误、EOF 和状态标志。</li>
+</ul>
+<p>这直接印证上一讲的结论：标准 I/O 是文件描述符和用户空间缓冲的封装。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["printf(fmt, ...)"] --&gt; B["构造 va_list"]
+    B --&gt; C["vfprintf(stdout, fmt, ap)"]
+    C --&gt; D["vfprintf 内部解析循环"]
+    D --&gt; E["格式化到 stdout buffer"]
+    E --&gt; F{"缓冲区满或主动 flush？"}
+    F -- "否" --&gt; G["留在用户空间"]
+    F -- "是" --&gt; H["write / writev 系统调用"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_43_00.png" alt="GDB 展开 `stdout` 的 `FILE` 结构" loading="lazy">
+  <p class="video-caption">📷 GDB 展开 `stdout` 的 `FILE` 结构<br><a href="https://www.bilibili.com/video/BV1yu9cBCEAb/?t=2580" target="_blank" rel="noopener">回到原视频 (00:43:00)</a></p>
+</div>
+
+<h3 id="32">3.2 变参数不是魔法</h3>
+<p><em>(参考时间: 00:44)</em></p>
+<p>在旧的 32 位 x86 <code>cdecl</code> 调用约定中，参数依次压栈。很多人会用下面的方式访问变参数：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="nf">foo</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">n</span><span class="p">,</span><span class="w"> </span><span class="p">...)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">intptr_t</span><span class="w"> </span><span class="o">*</span><span class="n">vargs</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="kt">intptr_t</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">n</span><span class="p">;</span>
+
+<span class="w">    </span><span class="cm">/* vargs[0] = n */</span>
+<span class="w">    </span><span class="cm">/* vargs[1] = 第一个可变参数 */</span>
+<span class="w">    </span><span class="cm">/* vargs[2] = 第二个可变参数 */</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>这个 hack 在现代 x86-64、AArch64、RISC-V 上不再可行，因为前几个参数通过寄存器传递。函数入口时，它们并不天然在内存中形成连续数组。</p>
+<p>编译器与 libc 必须协作。以 AArch64 为例，参数寄存器可能是 <code>x0</code>、<code>x1</code>、<code>x2</code> 等。进入可变参数函数后，编译器会生成一段序言，把寄存器参数保存到栈上的一个“寄存器保存区”，使 <code>va_list</code> 能按统一方式遍历。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["调用者把参数放入寄存器"] --&gt; B["进入可变参数函数"]
+    B --&gt; C["函数序言保存部分寄存器到栈"]
+    C --&gt; D["构造 va_list 元数据"]
+    D --&gt; E["va_start"]
+    E --&gt; F["va_arg 依次读取寄存器区或栈参数"]
+    F --&gt; G{"还有参数？"}
+    G -- "是" --&gt; F
+    G -- "否" --&gt; H["va_end"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_46_00.png" alt="AArch64 下寄存器参数被保存到栈" loading="lazy">
+  <p class="video-caption">📷 AArch64 下寄存器参数被保存到栈<br><a href="https://www.bilibili.com/video/BV1yu9cBCEAb/?t=2760" target="_blank" rel="noopener">回到原视频 (00:46:00)</a></p>
+</div>
+
+<h3 id="33-va_list-printf">3.3 <code>va_list</code> 与 <code>printf</code> 解析器</h3>
+<p>从汇编回到 C 语义，可以写成：</p>
+<div class="highlight"><pre><span></span><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;stdarg.h&gt;</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">foo</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">n</span><span class="p">,</span><span class="w"> </span><span class="p">...)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">va_list</span><span class="w"> </span><span class="n">ap</span><span class="p">;</span>
+<span class="w">    </span><span class="n">va_start</span><span class="p">(</span><span class="n">ap</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">);</span>
+
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">n</span><span class="p">;</span><span class="w"> </span><span class="o">++</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kt">int</span><span class="w"> </span><span class="n">value</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">va_arg</span><span class="p">(</span><span class="n">ap</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="p">);</span>
+<span class="w">        </span><span class="cm">/* use value */</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="n">va_end</span><span class="p">(</span><span class="n">ap</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><code>vfprintf</code> 的核心工作包括：</p>
+<ol>
+<li>扫描格式字符串；</li>
+<li>普通字符直接输出；</li>
+<li>遇到 <code>%d</code>、<code>%s</code>、<code>%x</code> 等转换规范时解析标志、宽度、精度；</li>
+<li>用 <code>va_arg</code> 取得参数；</li>
+<li>格式化到 <code>FILE</code> 缓冲；</li>
+<li>必要时通过 <code>write</code> 或 <code>writev</code> 进入内核。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["format string"] --&gt; B{"当前字符"}
+    B -- "普通字符" --&gt; C["复制/输出"]
+    B -- "% 转换" --&gt; D["解析 flags / width / precision"]
+    D --&gt; E["va_arg 取参数"]
+    E --&gt; F["格式化"]
+    C --&gt; G["FILE buffer"]
+    F --&gt; G
+    G --&gt; H{"flush？"}
+    H -- "是" --&gt; I["write / writev"]
+    H -- "否" --&gt; J["继续解析"]
+    J --&gt; B
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_47_17.png" alt="单步进入 `vfprintf` 的格式化循环" loading="lazy">
+  <p class="video-caption">📷 单步进入 `vfprintf` 的格式化循环<br><a href="https://www.bilibili.com/video/BV1yu9cBCEAb/?t=2837" target="_blank" rel="noopener">回到原视频 (00:47:17)</a></p>
+</div>
+
+<hr />
+<h2 id="4-setjmp-longjmp">4. 调试 <code>setjmp</code> / <code>longjmp</code>：给寄存器刷漆</h2>
+<h3 id="41">4.1 实验设计</h3>
+<p><em>(参考时间: 00:48)</em></p>
+<p>为了观察 <code>setjmp</code> / <code>longjmp</code> 到底保存什么，讲师让 AI 写了一段寄存器实验：</p>
+<ol>
+<li>在 <code>setjmp</code> 前，把 <code>x0</code> 到 <code>x28</code> 全部写成一组“红色”值；</li>
+<li>调用 <code>setjmp</code>；</li>
+<li>再把所有可用寄存器写成另一组“蓝色”值；</li>
+<li>调用 <code>longjmp</code>；</li>
+<li>观察哪些寄存器恢复成红色，哪些仍保持蓝色。</li>
+</ol>
+<p>这像给寄存器“刷漆”，颜色变化直接暴露保存与恢复行为。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["所有可用寄存器刷为红色"] --&gt; B["setjmp(buf)"]
+    B --&gt; C["部分寄存器被保存到 buf"]
+    C --&gt; D["所有可用寄存器刷为蓝色"]
+    D --&gt; E["longjmp(buf, value)"]
+    E --&gt; F["从 buf 恢复部分寄存器"]
+    F --&gt; G["观察哪些变量恢复为红色"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_50_25.png" alt="进入实验时所有可用寄存器被刷成同一值" loading="lazy">
+  <p class="video-caption">📷 进入实验时所有可用寄存器被刷成同一值<br><a href="https://www.bilibili.com/video/BV1yu9cBCEAb/?t=3025" target="_blank" rel="noopener">回到原视频 (00:50:25)</a></p>
+</div>
+
+<h3 id="42-setjmp">4.2 <code>setjmp</code> 保存了什么</h3>
+<p><em>(参考时间: 00:51)</em></p>
+<p>实验里不能随意覆盖栈指针、特殊控制寄存器和运行时必须保持的寄存器。可以修改的通用寄存器中，<code>x0</code> 到 <code>x18</code> 很快就被函数调用和编译器使用，原来的“红色”值迅速消失。</p>
+<p><code>setjmp</code> 的汇编代码把 <code>x19</code> 到 <code>x28</code> 成对保存到 <code>buf</code>，同时保存：</p>
+<ul>
+<li>返回地址；</li>
+<li>栈指针；</li>
+<li>后续恢复所需的上下文。</li>
+</ul>
+<p>可以看到类似：</p>
+<div class="highlight"><pre><span></span><code><span class="nf">stp</span><span class="w"> </span><span class="no">x19</span><span class="p">,</span><span class="w"> </span><span class="no">x20</span><span class="p">,</span><span class="w"> </span><span class="p">[</span><span class="no">x0</span><span class="p">,</span><span class="w"> </span><span class="c1">#...]</span>
+<span class="nf">stp</span><span class="w"> </span><span class="no">x21</span><span class="p">,</span><span class="w"> </span><span class="no">x22</span><span class="p">,</span><span class="w"> </span><span class="p">[</span><span class="no">x0</span><span class="p">,</span><span class="w"> </span><span class="c1">#...]</span>
+<span class="nf">stp</span><span class="w"> </span><span class="no">x23</span><span class="p">,</span><span class="w"> </span><span class="no">x24</span><span class="p">,</span><span class="w"> </span><span class="p">[</span><span class="no">x0</span><span class="p">,</span><span class="w"> </span><span class="c1">#...]</span>
+<span class="na">...</span>
+<span class="nf">mov</span><span class="w"> </span><span class="no">w0</span><span class="p">,</span><span class="w"> </span><span class="mi">#0</span>
+<span class="nf">ret</span>
+</code></pre></div>
+
+<p><code>stp</code> 是 AArch64 的一次保存两个寄存器的 store pair 指令。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["setjmp(buf)"] --&gt; B["保存返回地址 / SP"]
+    B --&gt; C["保存 x19-x28"]
+    C --&gt; D["保存调用约定要求的上下文"]
+    D --&gt; E["返回 0"]
+    E --&gt; F["程序继续执行"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_51_24.png" alt="`setjmp` 将 `x19` 到 `x28` 等寄存器保存进 `buf`" loading="lazy">
+  <p class="video-caption">📷 `setjmp` 将 `x19` 到 `x28` 等寄存器保存进 `buf`<br><a href="https://www.bilibili.com/video/BV1yu9cBCEAb/?t=3084" target="_blank" rel="noopener">回到原视频 (00:51:24)</a></p>
+</div>
+
+<h3 id="43-longjmp">4.3 <code>longjmp</code> 恢复了什么</h3>
+<p><em>(参考时间: 00:52)</em></p>
+<p>在 <code>longjmp</code> 前，寄存器再次被刷成新值。执行 <code>longjmp</code> 后，可以观察到：</p>
+<ul>
+<li><code>x0</code> 到 <code>x18</code> 仍然是新值，说明它们没有被 <code>longjmp</code> 恢复；</li>
+<li><code>x19</code> 到 <code>x28</code> 被恢复成 <code>setjmp</code> 保存的旧值；</li>
+<li>返回地址与栈上下文恢复，控制流回到 <code>setjmp</code> 的位置。</li>
+</ul>
+<p><code>longjmp</code> 的汇编代码主要执行成对 load：</p>
+<div class="highlight"><pre><span></span><code><span class="nf">ldp</span><span class="w"> </span><span class="no">x19</span><span class="p">,</span><span class="w"> </span><span class="no">x20</span><span class="p">,</span><span class="w"> </span><span class="p">[</span><span class="no">x0</span><span class="p">,</span><span class="w"> </span><span class="c1">#...]</span>
+<span class="nf">ldp</span><span class="w"> </span><span class="no">x21</span><span class="p">,</span><span class="w"> </span><span class="no">x22</span><span class="p">,</span><span class="w"> </span><span class="p">[</span><span class="no">x0</span><span class="p">,</span><span class="w"> </span><span class="c1">#...]</span>
+<span class="na">...</span>
+<span class="nf">ret</span>
+</code></pre></div>
+
+<p>因此，这个实验实际上逆向了 AArch64 调用约定的一部分。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["setjmp 保存 x19-x28"] --&gt; B["中间调用任意多层函数"]
+    B --&gt; C["模型：寄存器和栈帧发生变化"]
+    C --&gt; D["longjmp"]
+    D --&gt; E["恢复 x19-x28、SP 和返回地址"]
+    E --&gt; F["跳回 setjmp 的返回点"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_52_47.png" alt="`longjmp` 后 `x19` 到 `x28` 被恢复" loading="lazy">
+  <p class="video-caption">📷 `longjmp` 后 `x19` 到 `x28` 被恢复<br><a href="https://www.bilibili.com/video/BV1yu9cBCEAb/?t=3167" target="_blank" rel="noopener">回到原视频 (00:52:47)</a></p>
+</div>
+
+<h3 id="44-caller-saved-callee-saved">4.4 Caller-saved 与 callee-saved</h3>
+<p><em>(参考时间: 00:54)</em></p>
+<p>为什么 <code>x0</code> 到 <code>x18</code> 不需要保存？</p>
+<p>因为这些寄存器属于调用约定中的 caller-saved，或者更直观地叫 <strong>call-clobbered</strong>：</p>
+<ul>
+<li>调用函数后，被调用者可以随意改写；</li>
+<li>调用者不能在调用前把一个需要继续使用的值留在这些寄存器里，并期待调用后还保持；</li>
+<li>如果调用者需要保留，必须自己先保存。</li>
+</ul>
+<p><code>x19</code> 到 <code>x28</code> 则是 callee-saved：</p>
+<ul>
+<li>被调用函数如果想使用，必须先保存原值；</li>
+<li>返回前必须恢复；</li>
+<li>因此 <code>setjmp</code> 保存它们，<code>longjmp</code> 再恢复它们。</li>
+</ul>
+<p>这正是函数调用约定能够在汇编层工作的基础。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["函数调用"] --&gt; B{"寄存器类别"}
+    B -- "caller-saved / call-clobbered" --&gt; C["被调用者可以随意改写"]
+    C --&gt; D["调用者自行保存需要的值"]
+    B -- "callee-saved" --&gt; E["被调用者若要使用"]
+    E --&gt; F["保存旧值"]
+    F --&gt; G["使用寄存器"]
+    G --&gt; H["返回前恢复旧值"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_55_45.png" alt="从寄存器恢复行为反推 AArch64 调用约定" loading="lazy">
+  <p class="video-caption">📷 从寄存器恢复行为反推 AArch64 调用约定<br><a href="https://www.bilibili.com/video/BV1yu9cBCEAb/?t=3345" target="_blank" rel="noopener">回到原视频 (00:55:45)</a></p>
+</div>
+
+<hr />
+<h2 id="5-gettimeofday">5. 调试 <code>gettimeofday</code>：不进入内核的系统调用</h2>
+<h3 id="51">5.1 进程自身没有时间概念</h3>
+<p><em>(参考时间: 00:56)</em></p>
+<p>一个程序可以这样测量经过的时间：</p>
+<div class="highlight"><pre><span></span><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;sys/time.h&gt;</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;unistd.h&gt;</span>
+
+<span class="k">struct</span><span class="w"> </span><span class="nc">timeval</span><span class="w"> </span><span class="n">t1</span><span class="p">,</span><span class="w"> </span><span class="n">t2</span><span class="p">;</span>
+
+<span class="n">gettimeofday</span><span class="p">(</span><span class="o">&amp;</span><span class="n">t1</span><span class="p">,</span><span class="w"> </span><span class="nb">NULL</span><span class="p">);</span>
+<span class="n">usleep</span><span class="p">(</span><span class="mi">200000</span><span class="p">);</span>
+<span class="n">gettimeofday</span><span class="p">(</span><span class="o">&amp;</span><span class="n">t2</span><span class="p">,</span><span class="w"> </span><span class="nb">NULL</span><span class="p">);</span>
+
+<span class="kt">long</span><span class="w"> </span><span class="n">elapsed_us</span><span class="w"> </span><span class="o">=</span>
+<span class="w">    </span><span class="p">(</span><span class="n">t2</span><span class="p">.</span><span class="n">tv_sec</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">t1</span><span class="p">.</span><span class="n">tv_sec</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">1000000L</span><span class="w"> </span><span class="o">+</span>
+<span class="w">    </span><span class="p">(</span><span class="n">t2</span><span class="p">.</span><span class="n">tv_usec</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">t1</span><span class="p">.</span><span class="n">tv_usec</span><span class="p">);</span>
+</code></pre></div>
+
+<p>进程状态只有寄存器和内存，无法仅靠自己感知物理时间。因此从原理上说，读取时间应通过系统调用。</p>
+<p><code>strace</code> 运行结果却有意外：</p>
+<div class="highlight"><pre><span></span><code>strace<span class="w"> </span>./gettimeofday-demo
+</code></pre></div>
+
+<p>可以看到 <code>nanosleep</code> 或 <code>clock_nanosleep</code>，却看不到 <code>gettimeofday</code>。</p>
+<p>既然程序打印出的时间正确，它一定通过其他方式读取了时钟。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["进程"] --&gt; B["寄存器和内存"]
+    B --&gt; C{"能直接感知物理时间吗？"}
+    C -- "不能" --&gt; D["需要时钟来源"]
+    D --&gt; E["传统方案：系统调用"]
+    D --&gt; F["优化方案：vDSO"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_57_24.png" alt="`strace` 只看到睡眠系统调用，没有看到 `gettimeofday`" loading="lazy">
+  <p class="video-caption">📷 `strace` 只看到睡眠系统调用，没有看到 `gettimeofday`<br><a href="https://www.bilibili.com/video/BV1yu9cBCEAb/?t=3444" target="_blank" rel="noopener">回到原视频 (00:57:24)</a></p>
+</div>
+
+<h3 id="52-usleep-clock_nanosleep">5.2 <code>usleep</code> 最终调用 <code>clock_nanosleep</code></h3>
+<p><em>(参考时间: 01:00)</em></p>
+<p>进入 musl 的 <code>usleep</code> 实现，可以看到它把微秒转换为 <code>timespec</code>，然后调用 <code>clock_nanosleep</code>：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">int</span><span class="w"> </span><span class="nf">usleep</span><span class="p">(</span><span class="n">useconds_t</span><span class="w"> </span><span class="n">usec</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">timespec</span><span class="w"> </span><span class="n">ts</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="p">.</span><span class="n">tv_sec</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">usec</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">1000000</span><span class="p">,</span>
+<span class="w">        </span><span class="p">.</span><span class="n">tv_nsec</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">usec</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">1000000</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">1000</span>
+<span class="w">    </span><span class="p">};</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">clock_nanosleep</span><span class="p">(</span><span class="n">CLOCK_REALTIME</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">ts</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>底层系统调用使用内联汇编和 <code>register</code> 变量，把参数放入 ABI 规定的寄存器：</p>
+<div class="highlight"><pre><span></span><code><span class="k">register</span><span class="w"> </span><span class="kt">long</span><span class="w"> </span><span class="n">x8</span><span class="w"> </span><span class="n">__asm__</span><span class="p">(</span><span class="s">"x8"</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">__NR_clock_nanosleep</span><span class="p">;</span>
+<span class="k">register</span><span class="w"> </span><span class="kt">long</span><span class="w"> </span><span class="n">x0</span><span class="w"> </span><span class="n">__asm__</span><span class="p">(</span><span class="s">"x0"</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">CLOCK_REALTIME</span><span class="p">;</span>
+<span class="k">register</span><span class="w"> </span><span class="kt">long</span><span class="w"> </span><span class="n">x1</span><span class="w"> </span><span class="n">__asm__</span><span class="p">(</span><span class="s">"x1"</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="k">register</span><span class="w"> </span><span class="kt">long</span><span class="w"> </span><span class="n">x2</span><span class="w"> </span><span class="n">__asm__</span><span class="p">(</span><span class="s">"x2"</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="kt">long</span><span class="p">)</span><span class="o">&amp;</span><span class="n">ts</span><span class="p">;</span>
+<span class="k">register</span><span class="w"> </span><span class="kt">long</span><span class="w"> </span><span class="n">x3</span><span class="w"> </span><span class="n">__asm__</span><span class="p">(</span><span class="s">"x3"</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+
+<span class="n">__asm__</span><span class="w"> </span><span class="k">volatile</span><span class="p">(</span><span class="s">"svc 0"</span>
+<span class="w">                 </span><span class="o">:</span><span class="w"> </span><span class="s">"+r"</span><span class="p">(</span><span class="n">x0</span><span class="p">)</span>
+<span class="w">                 </span><span class="o">:</span><span class="w"> </span><span class="s">"r"</span><span class="p">(</span><span class="n">x1</span><span class="p">),</span><span class="w"> </span><span class="s">"r"</span><span class="p">(</span><span class="n">x2</span><span class="p">),</span><span class="w"> </span><span class="s">"r"</span><span class="p">(</span><span class="n">x3</span><span class="p">),</span><span class="w"> </span><span class="s">"r"</span><span class="p">(</span><span class="n">x8</span><span class="p">)</span>
+<span class="w">                 </span><span class="o">:</span><span class="w"> </span><span class="s">"memory"</span><span class="p">);</span>
+</code></pre></div>
+
+<p>这段代码很适合观察：libc 并没有消灭系统调用，而是把它们藏在清晰的 C 接口后面。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["usleep(200000)"] --&gt; B["构造 timespec"]
+    B --&gt; C["clock_nanosleep"]
+    C --&gt; D["参数写入 x0-x3 和系统调用号 x8"]
+    D --&gt; E["svc 0 进入内核"]
+    E --&gt; F["内核挂起线程"]
+    F --&gt; G["到期后返回用户态"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_00_35.png" alt="musl `usleep` 最终进入 `clock_nanosleep`" loading="lazy">
+  <p class="video-caption">📷 musl `usleep` 最终进入 `clock_nanosleep`<br><a href="https://www.bilibili.com/video/BV1yu9cBCEAb/?t=3635" target="_blank" rel="noopener">回到原视频 (01:00:35)</a></p>
+</div>
+
+<h3 id="53-vdso-vvar">5.3 vDSO 与 vvar</h3>
+<p><em>(参考时间: 01:01)</em></p>
+<p><code>gettimeofday</code> 的路径经过条件编译分支，进入 musl 的 <code>__vdsosym</code>：</p>
+<div class="highlight"><pre><span></span><code><span class="cp">#ifdef VDSO_CGT_SYM</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">vdso_func</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">vdso_func</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">__vdsosym</span><span class="p">(</span><span class="n">VDSO_CGT_VER</span><span class="p">,</span><span class="w"> </span><span class="n">VDSO_CGT_SYM</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="cp">#endif</span>
+</code></pre></div>
+
+<p>进程地址空间中有两块特殊区域：</p>
+<ul>
+<li><strong>vDSO</strong>：Virtual Dynamic Shared Object，内核提供的一小段用户态代码；</li>
+<li><strong>vvar</strong>：内核维护的只读数据页，包含当前时间、CPU 信息等动态数据。</li>
+</ul>
+<p>时钟中断会更新 vvar 中的计数器。用户程序读取 vvar，再调用 vDSO 中的代码完成换算，因此不需要陷入内核。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["内核"] --&gt; B["vvar: ticks / time data"]
+    A --&gt; C["vDSO: clock_gettime code"]
+    B --&gt; D["用户进程"]
+    C --&gt; D
+    D --&gt; E["读取时钟数据"]
+    E --&gt; F["执行用户态计算"]
+    F --&gt; G["返回 gettimeofday 结果"]
+    G --&gt; H["没有 syscall 指令"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_01_55.png" alt="musl 通过 vDSO 读取时钟" loading="lazy">
+  <p class="video-caption">📷 musl 通过 vDSO 读取时钟<br><a href="https://www.bilibili.com/video/BV1yu9cBCEAb/?t=3715" target="_blank" rel="noopener">回到原视频 (01:01:55)</a></p>
+</div>
+
+<h3 id="54-auxv-libc-vdso">5.4 auxv 告诉 libc 去哪里找 vDSO</h3>
+<p><em>(参考时间: 01:03)</em></p>
+<p>libc 怎么知道 vDSO 被映射在哪里？</p>
+<p>答案仍在初始进程栈后面的 <strong>auxiliary vector（auxv）</strong>。内核在启动进程时放置 <code>AT_SYSINFO_EHDR</code> 等条目，musl 遍历 auxv 查找 vDSO 的 ELF program headers。</p>
+<p>找到 vDSO 后，libc 像一个小型动态加载器一样：</p>
+<ol>
+<li>解析 ELF header；</li>
+<li>遍历 program headers；</li>
+<li>找到 dynamic segment；</li>
+<li>遍历动态符号表；</li>
+<li>查找 <code>__kernel_clock_gettime</code>；</li>
+<li>取得函数地址并缓存。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["initial process stack"] --&gt; B["argc / argv / envp"]
+    B --&gt; C["auxv"]
+    C --&gt; D["AT_SYSINFO_EHDR"]
+    D --&gt; E["vDSO ELF base"]
+    E --&gt; F["解析 program headers"]
+    F --&gt; G["定位 dynamic / dynsym"]
+    G --&gt; H["查找 __kernel_clock_gettime"]
+    H --&gt; I["缓存函数地址"]
+    I --&gt; J["用户态调用"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_04_30.png" alt="auxv 中的 `AT_SYSINFO_EHDR` 定位 vDSO" loading="lazy">
+  <p class="video-caption">📷 auxv 中的 `AT_SYSINFO_EHDR` 定位 vDSO<br><a href="https://www.bilibili.com/video/BV1yu9cBCEAb/?t=3870" target="_blank" rel="noopener">回到原视频 (01:04:30)</a></p>
+</div>
+
+<h3 id="55">5.5 时钟序列计数器与单步调试陷阱</h3>
+<p><em>(参考时间: 01:05)</em></p>
+<p>解析到函数地址后，GDB 可以跳进 vDSO 的汇编代码。这里没有 <code>svc</code> 系统调用，却能从 vvar 得到正确时间。</p>
+<p>让 AI 生成 GDB script，记录 <code>__kernel_clock_gettime</code> 的完整指令序列，会发现一个循环：</p>
+<div class="highlight"><pre><span></span><code>读取 sequence counter
+读取时钟数据
+再次读取 sequence counter
+如果两次计数器相同，数据有效
+否则重试
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code><span class="k">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">seq1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">read_seqcount</span><span class="p">();</span>
+<span class="w">    </span><span class="n">time</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">read_time_data</span><span class="p">();</span>
+<span class="w">    </span><span class="n">seq2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">read_seqcount</span><span class="p">();</span>
+<span class="p">}</span><span class="w"> </span><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="n">seq1</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="n">seq2</span><span class="p">);</span>
+</code></pre></div>
+
+<p>这是一种无锁的一致性检查。若读取过程中发生时钟更新，序列号会改变，用户态代码就重新读取。</p>
+<p>单步调试时，每条指令之间延迟很大，时钟中断很容易夹在两次读取之间，于是 GDB 看起来陷入“死循环”。这并不表示 vDSO 代码错误，而是调试器的单步速度破坏了原本依赖短暂时间窗口的假设。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["读取 tick 版本 seq1"] --&gt; B["读取时钟数据"]
+    B --&gt; C["读取 tick 版本 seq2"]
+    C --&gt; D{"seq1 == seq2？"}
+    D -- "是" --&gt; E["数据一致，计算时间"]
+    D -- "否" --&gt; A
+    E --&gt; F["返回用户态调用者"]
+
+    S["GDB 单步"] --&gt; T["指令间延迟变大"]
+    T --&gt; U["时钟更新频繁插入"]
+    U --&gt; A
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_08_05.png" alt="vDSO 时钟读取的序列计数器循环" loading="lazy">
+  <p class="video-caption">📷 vDSO 时钟读取的序列计数器循环<br><a href="https://www.bilibili.com/video/BV1yu9cBCEAb/?t=4085" target="_blank" rel="noopener">回到原视频 (01:08:05)</a></p>
+</div>
+
+<h3 id="56">5.6 进程没有时间，但可以获得时间</h3>
+<p><em>(参考时间: 01:09)</em></p>
+<p><code>gettimeofday</code> 的例子给出一个重要结论：</p>
+<blockquote>
+<p>系统调用语义不一定等于每次都必须执行机器级系统调用指令。</p>
+</blockquote>
+<p>内核可以把一段安全、受控的实现映射进进程地址空间，由用户态直接执行。它仍然属于“操作系统提供的服务”，只是不经过传统的陷阱路径。</p>
+<p>这也解释了若干现象：</p>
+<ul>
+<li>游戏修改器的“变速齿轮”可以拦截时间相关调用；</li>
+<li>性能优化会寻找可以避免内核切换的路径；</li>
+<li>vDSO 允许内核在保留抽象的同时缩短高频操作的路径。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["应用请求时间"] --&gt; B{"是否有可用 vDSO？"}
+    B -- "否" --&gt; C["syscall / svc 进入内核"]
+    C --&gt; D["内核读取时钟"]
+    D --&gt; E["返回用户态"]
+    B -- "是" --&gt; F["调用 vDSO"]
+    F --&gt; G["读取 vvar 数据"]
+    G --&gt; H["用户态计算"]
+    E --&gt; I["返回时间"]
+    H --&gt; I
+</code></pre></div>
+
+<hr />
+<h2 id="6-malloc-free">6. <code>malloc</code> / <code>free</code>：在系统调用上搭内存分配器</h2>
+<h3 id="61-api">6.1 API 很简单，约束却非常严格</h3>
+<p><em>(参考时间: 01:11)</em></p>
+<p><code>malloc</code> / <code>free</code> 的接口非常直观：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="o">*</span><span class="n">ptr</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">malloc</span><span class="p">(</span><span class="n">n</span><span class="p">);</span>
+<span class="n">free</span><span class="p">(</span><span class="n">ptr</span><span class="p">);</span>
+</code></pre></div>
+
+<p>它还要支持非常宽泛的需求：</p>
+<ul>
+<li>可以申请很小的对象；</li>
+<li>可以申请很大的对象；</li>
+<li>标准甚至允许 <code>malloc(0)</code> 返回一个之后可以传给 <code>free</code> 的唯一指针；</li>
+<li><code>calloc</code>、<code>realloc</code>、<code>aligned_alloc</code> 等接口可以在 <code>malloc</code> 之上实现。</li>
+</ul>
+<p>但接口简单不代表语义简单。<code>malloc</code> 引入了一条跨函数、跨路径的协议：</p>
+<ul>
+<li>每次成功分配最终必须恰好释放一次；</li>
+<li><code>free</code> 后不能再使用该指针；</li>
+<li>不能在释放后再次释放同一个指针；</li>
+<li>指针可能被复制，所有权容易被误用；</li>
+<li>并发程序中，一个线程释放对象的同一时刻，另一个线程可能仍在使用。</li>
+</ul>
+<div class="highlight"><pre><span></span><code><span class="kt">int</span><span class="w"> </span><span class="o">*</span><span class="n">p</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">malloc</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="o">*</span><span class="n">p</span><span class="p">));</span>
+<span class="n">free</span><span class="p">(</span><span class="n">p</span><span class="p">);</span>
+<span class="o">*</span><span class="n">p</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">42</span><span class="p">;</span><span class="w">  </span><span class="cm">/* use-after-free，未定义行为 */</span>
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_11_14.png" alt="use-after-free 在普通运行和 ASan 下的不同表现" loading="lazy">
+  <p class="video-caption">📷 use-after-free 在普通运行和 ASan 下的不同表现<br><a href="https://www.bilibili.com/video/BV1yu9cBCEAb/?t=4274" target="_blank" rel="noopener">回到原视频 (01:11:14)</a></p>
+</div>
+
+<h3 id="62">6.2 操作系统不分配任意小字节</h3>
+<p><em>(参考时间: 01:12)</em></p>
+<p>进程向操作系统申请内存的主要接口是：</p>
+<ul>
+<li><code>brk</code> / <code>sbrk</code>：移动数据段边界；</li>
+<li><code>mmap</code> / <code>munmap</code>：映射或解除映射虚拟内存区域。</li>
+</ul>
+<p><code>mmap</code> 按页管理，常见页大小是 4 KiB。因此操作系统无法直接满足 <code>malloc(1)</code>、<code>malloc(7)</code> 这类任意大小的请求。</p>
+<div class="highlight"><pre><span></span><code>flowchart BT
+    A["应用程序"] --&gt; B["malloc / free"]
+    B --&gt; C["用户态分配器"]
+    C --&gt; D["mmap / munmap"]
+    C --&gt; E["brk / sbrk"]
+    D --&gt; F["内核虚拟内存"]
+    E --&gt; F
+    F --&gt; G["物理页 / swap"]
+</code></pre></div>
+
+<p>libc 需要自己维护一组较大的内存区域，再把其中小块切给应用：</p>
+<div class="highlight"><pre><span></span><code><span class="cm">/* 思想示意，不是 libc 的真实实现。 */</span>
+<span class="kt">void</span><span class="w"> </span><span class="o">*</span><span class="nf">malloc</span><span class="p">(</span><span class="kt">size_t</span><span class="w"> </span><span class="n">n</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">n_is_large</span><span class="p">(</span><span class="n">n</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">mmap_for_allocation</span><span class="p">(</span><span class="n">n</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">pop_small_block_from_pool</span><span class="p">(</span><span class="n">round_up</span><span class="p">(</span><span class="n">n</span><span class="p">));</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["malloc(n)"] --&gt; B{"n 是否足够大？"}
+    B -- "是" --&gt; C["直接向内核 mmap"]
+    B -- "否" --&gt; D["从已有内存池查找空闲块"]
+    D --&gt; E{"找到足够大的块？"}
+    E -- "是" --&gt; F["切分并返回"]
+    E -- "否" --&gt; G["向内核申请新 region"]
+    G --&gt; D
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_12_50.png" alt="小对象池与 `mmap` 大区域的分层" loading="lazy">
+  <p class="video-caption">📷 小对象池与 `mmap` 大区域的分层<br><a href="https://www.bilibili.com/video/BV1yu9cBCEAb/?t=4370" target="_blank" rel="noopener">回到原视频 (01:12:50)</a></p>
+</div>
+
+<h3 id="63">6.3 十亿美元错误与所有权</h3>
+<p><em>(参考时间: 01:14)</em></p>
+<p>Tony Hoare 曾把空引用称为自己的 <strong>billion-dollar mistake</strong>。它与手工内存管理有相似的风险：程序员必须维持一个编译器无法直接证明的全局不变量。</p>
+<p>对比不同 API：</p>
+<ul>
+<li><code>open</code> / <code>write</code> / <code>close</code>：语义相对局部，操作本身就是主要效果；</li>
+<li><code>malloc</code> / <code>free</code>：要求在程序所有控制流路径上维持配对关系；</li>
+<li><code>free</code> 之后，普通 C 指针仍保存旧地址，语言层面并不自动让它失效。</li>
+</ul>
+<p>人们为此发展出多种机制：</p>
+<ul>
+<li>Java、JavaScript 等语言的垃圾回收；</li>
+<li>C++ 的 RAII；</li>
+<li>Rust 的 ownership、borrowing 与生命周期；</li>
+<li>智能指针、引用计数、区域分配；</li>
+<li>静态分析与运行时 sanitizer。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["手工内存管理的所有权问题"] --&gt; B["GC / managed runtime"]
+    A --&gt; C["C++ RAII"]
+    A --&gt; D["Rust ownership / borrowing"]
+    A --&gt; E["智能指针 / 引用计数"]
+    A --&gt; F["ASan / Valgrind / 静态分析"]
+    B --&gt; G["减少显式 free"]
+    C --&gt; H["作用域结束自动析构"]
+    D --&gt; I["编译期跟踪所有权"]
+    E --&gt; J["在类型中表达释放策略"]
+    F --&gt; K["发现 use-after-free / leak"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_15_00.png" alt="Tony Hoare 的空引用反思与内存所有权" loading="lazy">
+  <p class="video-caption">📷 Tony Hoare 的空引用反思与内存所有权<br><a href="https://www.bilibili.com/video/BV1yu9cBCEAb/?t=4500" target="_blank" rel="noopener">回到原视频 (01:15:00)</a></p>
+</div>
+
+<h3 id="64-malloc">6.4 最直观的 malloc 作业方案</h3>
+<p><em>(参考时间: 01:19)</em></p>
+<p>如果把 <code>malloc</code> 当数据结构题，最直接的设计是：</p>
+<ol>
+<li>大对象直接使用 <code>mmap</code>；</li>
+<li>每个较小的 <code>mmap</code> region 内部维护空闲区间集合；</li>
+<li>分配时寻找第一个足够大的区间；</li>
+<li>从区间中切出所需大小；</li>
+<li>释放时把区间重新插回集合；</li>
+<li>尽可能合并相邻空闲区间。</li>
+</ol>
+<p>这自然导向区间树或平衡二叉搜索树：</p>
+<div class="highlight"><pre><span></span><code>free_regions = { [addr, size], ... }
+
+allocate(n):
+    find first region with size &gt;= n
+    remove region
+    split into allocated block + remaining free region
+
+free(ptr):
+    insert [ptr, size]
+    merge with adjacent free regions
+</code></pre></div>
+
+<p>算法课容易给出平衡树答案，但它并不是现代高性能分配器的主要实现方式。原因是性能不只由查找复杂度决定，还取决于真实工作负载、局部性、并发伸缩和常见对象大小。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["大对象"] --&gt; B["mmap"]
+    A --&gt; C["小块分配"]
+    C --&gt; D["维护空闲区间集合"]
+    D --&gt; E["first fit"]
+    E --&gt; F["切分 / 删除"]
+    F --&gt; G["free 时插入 / 合并"]
+    G --&gt; H["平衡树是教材上的自然答案"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_19_40.png" alt="在 GDB 与 `strace` 中观察分配器使用 `mmap`" loading="lazy">
+  <p class="video-caption">📷 在 GDB 与 `strace` 中观察分配器使用 `mmap`<br><a href="https://www.bilibili.com/video/BV1yu9cBCEAb/?t=4780" target="_blank" rel="noopener">回到原视频 (01:19:40)</a></p>
+</div>
+
+<hr />
+<h2 id="7-malloc">7. 讲义延伸：真实 <code>malloc</code> 为什么不是一棵平衡树</h2>
+<blockquote>
+<p><strong>编者说明</strong>：以下内容来自官方讲义，但视频在课堂时间结束前没有完整展开。为保持课程材料的完整性和术语一致，本节单独标为讲义延伸，不与课堂原话混在一起。</p>
+</blockquote>
+<h3 id="71-1995">7.1 1995 年的综述：先理解真实工作负载</h3>
+<p>官方讲义推荐 Paul Wilson 等人的 1995 年动态内存管理综述：</p>
+<ul>
+<li><a href="http://jyywiki.cn/OS/manuals/malloc-survey.pdf">Dynamic Storage Allocation: A Survey and Critical Review</a></li>
+</ul>
+<p>其中已经指出，讨论分配器算法前，必须先理解真实程序行为。隔离空闲链表（segregated free lists）等思想早在 1964 年就出现了。多年后的新论文仍然在围绕真实 workload 调整性能和策略。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["真实程序行为"] --&gt; B["对象大小分布"]
+    A --&gt; C["生命周期分布"]
+    A --&gt; D["并发访问模式"]
+    B --&gt; E["分配器 design space"]
+    C --&gt; E
+    D --&gt; E
+    E --&gt; F["策略与数据结构选择"]
+</code></pre></div>
+
+<h3 id="72">7.2 观察：小对象多，大对象读写频繁</h3>
+<p>讲义给出一组经验观察：</p>
+<ul>
+<li>大对象通常被写入和读取很多次，后续访问量应远大于对象大小；</li>
+<li>若申请 16 MiB，只扫描一次就释放，往往说明程序存在 performance bug；</li>
+<li>小对象创建频繁，可能生命周期很短；</li>
+<li>中、大对象和容器往往存活更久；</li>
+<li>所有处理器都会发生分配和回收，因此小对象路径的 scalability 非常关键。</li>
+</ul>
+<p>如果把所有小对象都放进一个带全局锁的区间树，多核扩展性会很差。</p>
+<h3 id="73-fast-path-slow-path">7.3 Fast path 与 slow path</h3>
+<p>讲义借用《思考，快与慢》的两套思维系统，把分配器拆为：</p>
+<ul>
+<li>Fast path：速度极快，覆盖大多数常见分配；</li>
+<li>Slow path：不追求极限速度，但处理复杂情况并回退到 <code>mmap</code>。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["malloc 请求"] --&gt; B["Fast path"]
+    B --&gt; C{"本地缓存命中？"}
+    C -- "是" --&gt; D["O(1) 分配完成"]
+    C -- "否" --&gt; E["Slow path"]
+    E --&gt; F["从全局池补充"]
+    F --&gt; G{"池中内存不足？"}
+    G -- "是" --&gt; H["mmap 新 region"]
+    G -- "否" --&gt; I["切分 / 组织 slab"]
+    H --&gt; I
+    I --&gt; D
+</code></pre></div>
+
+<h3 id="74-segregated-listsslab-o1">7.4 Segregated lists、slab 与 O(1) 回收</h3>
+<p>空间换简洁的典型方案是 slab 分配器：</p>
+<ul>
+<li>每个 slab 中的对象大小固定；</li>
+<li>每个线程为若干常见对象大小维护本地缓存；</li>
+<li>小对象分配走线程本地 fast path；</li>
+<li>不足时从全局 slab 补充；</li>
+<li>释放通常只需把对象放回对应空闲链表，可达到 O(1)。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Thread 0"] --&gt; B["8B slab cache"]
+    A --&gt; C["16B slab cache"]
+    A --&gt; D["32B slab cache"]
+    E["Thread 1"] --&gt; F["8B slab cache"]
+    E --&gt; G["16B slab cache"]
+    B --&gt; H["共享 page / region"]
+    C --&gt; H
+    D --&gt; H
+    F --&gt; H
+    G --&gt; H
+</code></pre></div>
+
+<p>延伸阅读：</p>
+<ul>
+<li><a href="https://www.microsoft.com/en-us/research/uploads/prod/2019/06/mimalloc-tr-v1.pdf">Mimalloc: Free List Sharding in Action</a></li>
+<li><a href="https://dl.acm.org/doi/abs/10.5555/3620237.3620571">Cross Container Attack</a></li>
+<li><a href="https://dl.acm.org/doi/10.1145/3620666.3651350">SOSP 2023/2024-era allocator work</a></li>
+</ul>
+<h3 id="75">7.5 理论与现实的边界</h3>
+<p>现实分配器通常不针对恶意 worst case 设计，而是针对正常程序行为优化。这给了拒绝服务攻击机会，也意味着：</p>
+<blockquote>
+<p>脱离 workload 做优化没有意义。</p>
+</blockquote>
+<p>性能问题需要先回答：</p>
+<ul>
+<li>哪些对象大小最常见？</li>
+<li>它们在什么处理器上分配？</li>
+<li>生命周期多长？</li>
+<li>多线程共享程度如何？</li>
+<li>分配路径中的哪个环节成为瓶颈？</li>
+</ul>
+<p>AI 时代的变化不是丢掉机制，而是可以更快地在更大的 design space 中搜索策略。机制仍然是舞台，策略可以从启发式升级为由模型驱动的决策。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Mechanism：数据结构、原子操作、mmap、线程本地缓存"] --&gt; B["Design space"]
+    C["Policy：大小分类、阈值、回收时机"] --&gt; B
+    B --&gt; D["AI / 实验搜索策略"]
+    D --&gt; E["真实 workload 评测"]
+    E --&gt; F{"性能是否改善？"}
+    F -- "是" --&gt; G["保留策略"]
+    F -- "否" --&gt; D
+</code></pre></div>
+
+<hr />
+<h2 id="8-libc">8. 总结：libc 的隐藏角落</h2>
+<p>这一讲从调试信息开始，逐层观察了 C Runtime 和 libc 中最容易被忽略的机制：</p>
+<ul>
+<li><code>-g</code> 不只是“能看源码”，它把 DWARF 字节码、地址范围和变量位置写进二进制；</li>
+<li><code>.symtab</code> 可以做函数级近似定位，DWARF 才能恢复语句、类型和优化后的状态；</li>
+<li>Source Map 把类似能力带入浏览器沙盒，同时也带来源码与供应链泄漏风险；</li>
+<li><code>_start</code> 从 Initial Process Stack 恢复 <code>argc</code>、<code>argv</code>、<code>envp</code> 和 auxv；</li>
+<li><code>__init_libc</code> 负责 <code>environ</code>、vDSO 和运行时状态；</li>
+<li><code>printf</code> 把 <code>va_list</code> 与文件描述符封装连接起来；</li>
+<li><code>setjmp</code> / <code>longjmp</code> 的“刷漆实验”揭示了 caller-saved 与 callee-saved 寄存器；</li>
+<li><code>gettimeofday</code> 通过 vDSO 与 vvar 在用户态读取时间，不执行 <code>syscall</code>；</li>
+<li><code>malloc</code> 在页级系统调用之上管理小对象，并引入跨路径的配对释放约束；</li>
+<li>高性能分配器依赖真实 workload、fast/slow path、线程本地缓存和 slab。</li>
+</ul>
+<p>libc 屏蔽了几乎所有指令集、ABI 和系统调用差异，但它的抽象层内部仍然充满机器相关代码。只有到调试器、汇编和真实 workload 这一层，才能看到这层“看不见的基础设施”究竟如何工作。</p>
+<div class="highlight"><pre><span></span><code>flowchart BT
+    A["机器指令 / ABI / 系统调用"] --&gt; B["C Runtime"]
+    B --&gt; C["libc 函数与运行时状态"]
+    C --&gt; D["malloc / stdio / setjmp / 时间接口"]
+    D --&gt; E["跨平台应用代码"]
+    E --&gt; F["完整应用生态"]
+
+    G["DWARF / GDB / vDSO"] --&gt; B
+    G --&gt; C
+    G --&gt; D
+</code></pre></div>
+
+<hr />
+<h2 id="_1">附：官方参考与延伸阅读</h2>
+<p>以下链接来自官方讲义第 10 讲及课堂内容：</p>
+<ul>
+<li><a href="https://dwarfstd.org/">DWARF Debugging Standard</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/virtualization/musl-demos">musl debugging demos</a></li>
+<li><a href="https://perfetto.dev/">Perfetto</a></li>
+<li><a href="https://github.com/hangsman/claude-code-source/blob/main/cli.js.map">Claude Code Source Map</a></li>
+<li><a href="https://github.com/oboard/claude-code-rev">Claude Code reverse-engineering project</a></li>
+<li><a href="http://jyywiki.cn/OS/manuals/malloc-survey.pdf">Dynamic Storage Allocation: A Survey and Critical Review</a></li>
+<li><a href="https://www.microsoft.com/en-us/research/uploads/prod/2019/06/mimalloc-tr-v1.pdf">Mimalloc: Free List Sharding in Action</a></li>
+<li><a href="https://dl.acm.org/doi/abs/10.5555/3620237.3620571">Cross Container Attack</a></li>
+<li><a href="https://dl.acm.org/doi/10.1145/3620666.3651350">Modern allocator research</a></li>
+</ul>
+<p>官方课程资料：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/2026/">课程主页</a></li>
+<li><a href="https://jyywiki.cn/OS/2026/lect10.md">第 10 讲讲义：C 标准库和实现 (2)</a></li>
+<li><a href="https://www.bilibili.com/video/BV1yu9cBCEAb/">视频：10 - 调试 C 标准库</a></li>
+</ul>
+<blockquote>
+<p><strong>版权与署名</strong>：本讲课程材料由蒋炎岩（jyy）编写。课程讲义与幻灯片采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书保留课程出处、作者署名与许可说明。</p>
+</blockquote>
+    </article>
+
+    <!-- Mermaid 图表引擎初始化 -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            mermaid.initialize({ startOnLoad: false, theme: 'default' });
+            
+            // 兼容普通代码块以及丢失 language-mermaid 类名的情况 (CodeHilite 干扰)
+            const codeNodes = document.querySelectorAll('pre code, .highlight code');
+            codeNodes.forEach(function(node) {
+                const text = node.textContent.trim();
+                // 匹配常见的 mermaid 图表前缀
+                if (text.startsWith('graph ') || text.startsWith('flowchart ') || text.startsWith('sequenceDiagram') || text.startsWith('gantt') || text.startsWith('pie') || text.startsWith('classDiagram') || text.startsWith('stateDiagram') || text.startsWith('mindmap')) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.className = 'mermaid';
+                    tempDiv.textContent = text;
+                    
+                    // 获取需要替换的最外层父节点 (比如 div.highlight 或者 pre)
+                    const wrapper = node.closest('.highlight') || node.parentNode;
+                    wrapper.replaceWith(tempDiv); 
+                }
+            });
+            
+            // 所有节点转换完成，统一进行图表动态绘制
+            mermaid.run();
+        });
+    </script>
+    <!-- Lightbox：截图点击放大 -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const lightbox = document.createElement('div');
+            lightbox.className = 'lightbox';
+            lightbox.innerHTML = '<img alt=""><div class="lightbox-caption"></div>';
+            document.body.appendChild(lightbox);
+            const lbImg = lightbox.querySelector('img');
+            const lbCap = lightbox.querySelector('.lightbox-caption');
+            function openLightbox(src, alt) {
+                lbImg.src = src; lbImg.alt = alt || '';
+                lbCap.textContent = alt || '';
+                lightbox.classList.add('open');
+                document.body.style.overflow = 'hidden';
+            }
+            function closeLightbox() {
+                lightbox.classList.remove('open');
+                lbImg.src = '';
+                document.body.style.overflow = '';
+            }
+            document.querySelectorAll('.screenshot-card img').forEach(function(img) {
+                img.addEventListener('click', function() { openLightbox(img.src, img.alt); });
+            });
+            lightbox.addEventListener('click', closeLightbox);
+            document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
+        });
+    </script>
+</body>
+</html>
