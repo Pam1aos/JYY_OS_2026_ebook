@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM、Agents 与 Scaling Law：从语言模型到最小操作系统</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* ── 基础重置 ── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            color-scheme: light;
+            --bg-primary: #f7f7f8;
+            --bg-secondary: #ffffff;
+            --bg-card: #eef0f3;
+            --bg-code: #f2f3f5;
+            --text-primary: #1f2328;
+            --text-secondary: #57606a;
+            --text-muted: #6e7781;
+            --accent: #2563eb;
+            --accent-glow: rgba(37, 99, 235, 0.08);
+            --border: #d9dce1;
+            --border-subtle: #e7e9ec;
+            --radius: 12px;
+            --shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Serif SC', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.8;
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── 文章容器 ── */
+        .book-content {
+            max-width: 780px;
+            margin: 0 auto;
+            padding: 60px 32px 120px;
+        }
+
+        /* ── 标题 ── */
+        h1 {
+            font-size: 2.2em;
+            font-weight: 700;
+            margin: 0 0 12px;
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+        }
+
+        h2 {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 56px 0 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h3 {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: var(--accent);
+            margin: 36px 0 12px;
+        }
+
+        /* ── 段落与文字 ── */
+        p {
+            margin: 0 0 16px;
+            color: var(--text-primary);
+        }
+
+        strong {
+            color: #0f172a;
+            font-weight: 600;
+        }
+
+        em {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.2s;
+        }
+        a:hover {
+            border-bottom-color: var(--accent);
+        }
+
+        /* ── 引用 ── */
+        blockquote {
+            margin: 24px 0;
+            padding: 16px 20px;
+            background: var(--bg-secondary);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 var(--radius) var(--radius) 0;
+            color: var(--text-secondary);
+        }
+        blockquote p { margin: 0; }
+
+        /* ── 列表 ── */
+        ul, ol {
+            margin: 12px 0 20px 24px;
+            color: var(--text-primary);
+        }
+        li {
+            margin: 6px 0;
+        }
+
+        /* ── 分割线 ── */
+        hr {
+            border: none;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border), transparent);
+            margin: 48px 0;
+        }
+
+        /* ── 表格 ── */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 24px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+        thead {
+            background: var(--bg-card);
+        }
+        th {
+            padding: 12px 16px;
+            font-weight: 600;
+            text-align: left;
+            color: var(--accent);
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        td {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border-subtle);
+        }
+        tbody tr {
+            background: var(--bg-secondary);
+            transition: background 0.15s;
+        }
+        tbody tr:hover {
+            background: var(--bg-card);
+        }
+
+        /* ── 代码 ── */
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-code);
+            padding: 2px 7px;
+            border-radius: 5px;
+            font-size: 0.88em;
+            color: #6d28d9;
+        }
+
+        pre {
+            margin: 20px 0;
+            padding: 20px 24px;
+            background: var(--bg-code);
+            border-radius: var(--radius);
+            overflow-x: auto;
+            border: 1px solid var(--border);
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9em;
+            color: var(--text-primary);
+        }
+
+        /* ── 视频嵌入卡片 ── */
+        .video-card {
+            margin: 32px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .video-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(15, 23, 42, 0.12);
+        }
+
+        .video-wrapper {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 */
+            height: 0;
+            overflow: hidden;
+        }
+        .video-wrapper iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .video-card img {
+            width: 100%;
+            display: block;
+        }
+
+        .video-caption {
+            padding: 12px 16px;
+            font-size: 0.88em;
+            color: var(--text-secondary);
+            text-align: center;
+            line-height: 1.6;
+            margin: 0;
+        }
+        .video-caption a {
+            color: var(--accent);
+        }
+
+        .video-card.fallback {
+            padding: 20px;
+            text-align: center;
+        }
+
+        /* ── Lightbox：截图点击放大 ── */
+        .screenshot-card img { cursor: zoom-in; transition: opacity 0.15s; }
+        .screenshot-card img:hover { opacity: 0.9; }
+        .lightbox {
+            position: fixed; inset: 0; z-index: 999;
+            display: none; align-items: center; justify-content: center;
+            background: rgba(5, 5, 8, 0.92); backdrop-filter: blur(4px);
+            cursor: zoom-out; padding: 24px;
+        }
+        .lightbox.open { display: flex; }
+        .lightbox img {
+            max-width: 96vw; max-height: 90vh;
+            border-radius: 8px; box-shadow: 0 12px 60px rgba(0,0,0,0.7);
+        }
+        .lightbox-caption {
+            position: absolute; bottom: 14px; left: 0; right: 0;
+            text-align: center; color: var(--text-secondary); font-size: 0.85em;
+        }
+
+        /* ── 顶部信息栏 ── */
+        .book-content > blockquote:first-of-type {
+            background: var(--accent-glow);
+            border-left-color: var(--accent);
+            border-radius: var(--radius);
+            margin-bottom: 32px;
+        }
+
+        /* ── 图表居中 ── */
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            margin: 32px 0;
+            overflow-x: auto;
+        }
+
+        /* ── 滚动条 ── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* ── 响应式 ── */
+        @media (max-width: 640px) {
+            .book-content { padding: 32px 16px 80px; }
+            h1 { font-size: 1.7em; }
+            h2 { font-size: 1.3em; }
+        }
+    </style>
+</head>
+<body>
+    <article class="book-content">
+        <h1 id="llmagents-scaling-law">LLM、Agents 与 Scaling Law：从语言模型到最小操作系统</h1>
+<blockquote>
+<p><strong>课程</strong>：2026 春季学期《操作系统原理》，Hacking Day 选讲<br />
+<strong>讲师</strong>：蒋炎岩（jyy）<br />
+<strong>官方课程主页</strong>：<a href="https://jyywiki.cn/OS/2026/">https://jyywiki.cn/OS/2026/</a><br />
+<strong>官方讲义</strong>：<a href="https://jyywiki.cn/OS/2026/lect4.md">https://jyywiki.cn/OS/2026/lect4.md</a><br />
+<strong>视频来源</strong>：<a href="https://www.bilibili.com/video/BV1gEcmzzE4P/">Bilibili BV1gEcmzzE4P</a><br />
+<strong>版权说明</strong>：课程讲义与幻灯片归蒋炎岩所有，采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书是对课堂讲授的书面化重构，保留出处与许可说明。</p>
+</blockquote>
+<h2 id="hacking-day">导读：Hacking Day</h2>
+<p><em>(参考时间: 00:00:00)</em></p>
+<p>课程调整为 3 学分后，每四次课安排一次 Hacking Day，讲授与操作系统和应用生态相关的扩展知识，不作为考试内容。</p>
+<p>本讲讨论三个相互关联的问题：</p>
+<ol>
+<li>大语言模型为什么能够理解世界并生成代码？</li>
+<li>Agent 为什么能像人一样长期工作？</li>
+<li>为什么“增加算力、数据和模型规模”能够带来智能的质变？</li>
+</ol>
+<p>课堂最后不依赖预演，直接让 Coding Agent 生成一个 RISC-V 最小操作系统内核，并观察它如何规划、写代码、编译、报错和修复。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_00_00.png" alt="第一次 Hacking Day 与现场演示目标" loading="lazy">
+  <p class="video-caption">📷 第一次 Hacking Day 与现场演示目标<br><a href="https://www.bilibili.com/video/BV1gEcmzzE4P/?t=0" target="_blank" rel="noopener">回到原视频 (00:00:00)</a></p>
+</div>
+
+<hr />
+<h2 id="1-chatgpt">1. 第一次感受到 ChatGPT 的威力</h2>
+<p><em>(参考时间: 00:02:10)</em></p>
+<p>ChatGPT 发布仅两个多月时，课堂曾询问它一个编译器优化问题：一段包含内联汇编的 C 代码，经过编译后会得到怎样的结果？</p>
+<p>当时的 GPT-3.5 给出了相当准确的回答。那一刻让人感觉世界发生了根本变化：</p>
+<ul>
+<li>模型不仅会背知识，还表现出程序语言和编译行为的“直觉”；</li>
+<li>自然语言成为可以直接调用复杂专业知识的接口；</li>
+<li>编程不再只属于熟练程序员。</li>
+</ul>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_02_10.png" alt="早期 ChatGPT 分析编译器优化" loading="lazy">
+  <p class="video-caption">📷 早期 ChatGPT 分析编译器优化<br><a href="https://www.bilibili.com/video/BV1gEcmzzE4P/?t=130" target="_blank" rel="noopener">回到原视频 (00:02:10)</a></p>
+</div>
+
+<hr />
+<h2 id="2">2. 什么是大语言模型</h2>
+<h3 id="21">2.1 大：应对宏观复杂性的必要条件</h3>
+<p><em>(参考时间: 00:03:55)</em></p>
+<p>薛定谔在《生命是什么》中提出过一个看似朴素的问题：为什么原子这么小，而生命体这么大？</p>
+<p>一个原子能携带的信息非常有限。极少数原子组成的系统，很难承载生命和智能表现出的复杂性。因此，“大”是应对宏观复杂世界的必要条件。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["小系统&lt;br/&gt;信息容量有限"] --&gt; B["无法承载高度复杂行为"]
+    C["大系统&lt;br/&gt;大量基本单元"] --&gt; D["可以形成复杂结构"]
+    D --&gt; E["语言、生命与智能"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_03_55.png" alt="“大”是承载复杂性的必要条件" loading="lazy">
+  <p class="video-caption">📷 “大”是承载复杂性的必要条件<br><a href="https://www.bilibili.com/video/BV1gEcmzzE4P/?t=235" target="_blank" rel="noopener">回到原视频 (00:03:55)</a></p>
+</div>
+
+<h3 id="22">2.2 语言：人类沉淀的世界模型</h3>
+<p><em>(参考时间: 00:05:49)</em></p>
+<p>为什么大语言模型选择“语言”作为核心，而不是图像或棋局？</p>
+<p>讲师认为，语言是人类几千年以来共同积累、相互对齐的世界模型。例如：</p>
+<blockquote>
+<p>“我在来上课的路上看到一个美女。”</p>
+</blockquote>
+<p>这句话非常短，但背后隐含了：</p>
+<ul>
+<li>什么是“来上课”；</li>
+<li>什么是“路上”；</li>
+<li>什么是“看到”；</li>
+<li>什么是“美女”；</li>
+<li>每个人如何在各自经验中解构这个概念。</li>
+</ul>
+<p>不同人想到的形象不同，但概念结构大致相似，因为人类共享物理世界、教育体系和文化经验。这种共享 Grounding 使语言能够成为跨个体对齐的抽象。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    W["共享物理世界"] --&gt; E["共同经验"]
+    E --&gt; L["语言与世界模型"]
+    L --&gt; A["人与人之间对齐"]
+    L --&gt; M["大语言模型学习"]
+</code></pre></div>
+
+<p>这也解释了模型有时为什么理解得很好，有时又会误解：语言压缩了信息，也丢失了部分个体经验。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_05_49.png" alt="语言作为人类共享的世界模型" loading="lazy">
+  <p class="video-caption">📷 语言作为人类共享的世界模型<br><a href="https://www.bilibili.com/video/BV1gEcmzzE4P/?t=349" target="_blank" rel="noopener">回到原视频 (00:05:49)</a></p>
+</div>
+
+<h3 id="23-next-token-prediction">2.3 模型：Next Token Prediction</h3>
+<p><em>(参考时间: 00:09:40)</em></p>
+<p>语言模型的核心机制是根据已有上下文，预测下一个 token 的概率分布。</p>
+<p>训练通常分为两个阶段：</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    T["大规模文本"] --&gt; P["预训练&lt;br/&gt;学习世界与语言结构"]
+    P --&gt; F["后训练&lt;br/&gt;指令遵循与对话"]
+    F --&gt; C["上下文 / Context"]
+    C --&gt; N["预测 next token"]
+    N --&gt; C
+</code></pre></div>
+
+<ul>
+<li>预训练：从海量文本学习语言、知识和统计规律；</li>
+<li>后训练：把模型调整为愿意遵循指令、进行对话的助手；</li>
+<li>推理：根据完整上下文不断预测下一个 token。</li>
+</ul>
+<p>图片、语音和视频等多模态信息最终也可以映射到同一视觉或语言空间，因此模型可以统一处理不同感官输入。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_09_40.png" alt="基于上下文预测下一个 token" loading="lazy">
+  <p class="video-caption">📷 基于上下文预测下一个 token<br><a href="https://www.bilibili.com/video/BV1gEcmzzE4P/?t=580" target="_blank" rel="noopener">回到原视频 (00:09:40)</a></p>
+</div>
+
+<h3 id="24">2.4 为什么概率模型能够写程序</h3>
+<p><em>(参考时间: 00:11:07)</em></p>
+<p>2022 年，Google 发布 AlphaCode，展示了神经模型在编程竞赛中的潜力。课堂回忆起当时最令人震惊的问题：</p>
+<blockquote>
+<p>一个只会预测下一个 token 的模型，为什么能顺序写出上百行正确程序？</p>
+</blockquote>
+<p>结构与人类编写代码的方式不同。人类程序员通常会：</p>
+<ol>
+<li>理解问题；</li>
+<li>设计算法；</li>
+<li>写伪代码；</li>
+<li>把伪代码逐步翻译成代码。</li>
+</ol>
+<p>如果把伪代码视为草稿纸，那么最后“写代码”可以近似看成一种机器翻译任务。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    P["问题描述"] --&gt; R["推理与伪代码"]
+    R --&gt; C["代码生成"]
+    C --&gt; T["编译与测试"]
+    T --&gt;|"失败"| R
+    T --&gt;|"成功"| O["可运行程序"]
+</code></pre></div>
+
+<p>大模型在上下文中保留足够多中间结果后，可以把复杂思考转成接近线性的生成过程。这也是将模型能力继续扩展的关键。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_12_59.png" alt="从伪代码到代码的翻译式生成" loading="lazy">
+  <p class="video-caption">📷 从伪代码到代码的翻译式生成<br><a href="https://www.bilibili.com/video/BV1gEcmzzE4P/?t=779" target="_blank" rel="noopener">回到原视频 (00:12:59)</a></p>
+</div>
+
+<hr />
+<h2 id="3-agent">3. 从语言模型到具有感官和工具的 Agent</h2>
+<h3 id="31-vit">3.1 “眼睛”：ViT 与多模态</h3>
+<p>图像可以被切分成小块，每块映射成向量，再与文本 token 放在同一空间处理。ViT 等工作使“看图片”变成语言模型可以处理的任务。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    I["图像"] --&gt; P["切分为 patch"]
+    P --&gt; V["视觉向量"]
+    V --&gt; T["与文本 token 对齐"]
+    T --&gt; M["多模态语言模型"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_21_08.png" alt="通过视觉 token 为语言模型增加“眼睛”" loading="lazy">
+  <p class="video-caption">📷 通过视觉 token 为语言模型增加“眼睛”<br><a href="https://www.bilibili.com/video/BV1gEcmzzE4P/?t=1268" target="_blank" rel="noopener">回到原视频 (00:21:08)</a></p>
+</div>
+
+<h3 id="32-chain-of-thought">3.2 “草稿纸”：Chain-of-Thought</h3>
+<p>如果模型只在脑内一次性得到答案，就容易受有限上下文和短期工作记忆限制。把推理步骤写出来，可以显著提升复杂任务表现。</p>
+<p>GPT-4 时代常使用：</p>
+<div class="highlight"><pre><span></span><code>Think step by step.
+</code></pre></div>
+
+<p>例如计算 <code>123 + 456</code>，模型可以把数字拆成百位、十位和个位，再逐步组合。虽然路径更长，但每一步更简单，更容易保持正确。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    Q["123 + 456"] --&gt; A["100 + 20 + 3&lt;br/&gt;+ 400 + 50 + 6"]
+    A --&gt; B["100 + 400"]
+    A --&gt; C["20 + 50"]
+    A --&gt; D["3 + 6"]
+    B --&gt; R["579"]
+    C --&gt; R
+    D --&gt; R
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_22_24.png" alt="Chain-of-Thought 把隐式推理变成可检查步骤" loading="lazy">
+  <p class="video-caption">📷 Chain-of-Thought 把隐式推理变成可检查步骤<br><a href="https://www.bilibili.com/video/BV1gEcmzzE4P/?t=1344" target="_blank" rel="noopener">回到原视频 (00:22:24)</a></p>
+</div>
+
+<h3 id="33-react-toolformer">3.3 “计算器”：ReAct 与 Toolformer</h3>
+<p>模型不必自己完成所有计算。对 <code>123 × 456</code>，人类会自然打开计算器。类似地，模型可以输出调用工具的意图，把结果写回上下文后继续推理。</p>
+<p>这就是 Agent 的“手和脚”。</p>
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant M as LLM
+    participant T as Python / Tool
+    participant C as Context
+    M-&gt;&gt;T: 调用计算工具 123 × 456
+    T--&gt;&gt;C: 返回结果
+    C--&gt;&gt;M: 读取工具结果
+    M-&gt;&gt;M: 继续推理与输出
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_26_42.png" alt="通过工具调用补足模型不擅长的计算与操作" loading="lazy">
+  <p class="video-caption">📷 通过工具调用补足模型不擅长的计算与操作<br><a href="https://www.bilibili.com/video/BV1gEcmzzE4P/?t=1602" target="_blank" rel="noopener">回到原视频 (00:26:42)</a></p>
+</div>
+
+<h3 id="34-agentic-loop">3.4 Agentic Loop</h3>
+<p><em>(参考时间: 00:29:33)</em></p>
+<p>LLM 有眼睛、草稿纸和工具后，就接近一个能够犯错、尝试、修正并最终完成任务的“人”。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    M["记忆 / 工作区"] --&gt; P["规划任务"]
+    P --&gt; E["执行一步"]
+    E --&gt; T["调用工具"]
+    T --&gt; C["检查结果"]
+    C --&gt;|"失败"| R["修正计划"]
+    R --&gt; P
+    C --&gt;|"成功"| W["写回工作区"]
+    W --&gt; N["继续下一任务"]
+</code></pre></div>
+
+<p>Agent 还需要：</p>
+<ul>
+<li>记忆：Context、文件系统、Git 仓库；</li>
+<li>分解：把大任务拆成小任务；</li>
+<li>执行：调用工具、运行测试；</li>
+<li>检查：读取错误并验证；</li>
+<li>复用：Tools、Sub-agents、Skills。</li>
+</ul>
+<h3 id="35-agent">3.5 工作区就是 Agent 的工作记忆</h3>
+<p>一个项目目录就是理想的 Working Memory：</p>
+<div class="highlight"><pre><span></span><code>project/
+├── README.md
+├── docs/
+├── plan.md
+├── src/
+├── tests/
+└── logs/
+</code></pre></div>
+
+<p>人类软件工程的长期最佳实践，恰好为 Agent 提供了完整的舞台。</p>
+<h4 id="git">Git 是一组平行宇宙</h4>
+<p><em>(参考时间: 00:31:09)</em></p>
+<p>Git 保存目录快照。Agent 可以修改、提交、回退、创建分支、Cherry-pick 和合并。即使当前工作区被改乱，也能回到过去的快照。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    C0["提交 C0"] --&gt; C1["提交 C1"]
+    C1 --&gt; C2["提交 C2"]
+    C1 --&gt; B1["实验分支 A"]
+    C1 --&gt; B2["实验分支 B"]
+    B1 --&gt; M["选择与合并"]
+    B2 --&gt; M
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_31_09.png" alt="Git 为 Agent 提供可回滚的平行工作空间" loading="lazy">
+  <p class="video-caption">📷 Git 为 Agent 提供可回滚的平行工作空间<br><a href="https://www.bilibili.com/video/BV1gEcmzzE4P/?t=1869" target="_blank" rel="noopener">回到原视频 (00:31:09)</a></p>
+</div>
+
+<h3 id="36">3.6 大模型像在“死亡循环”中工作</h3>
+<p>模型推理结束后不会永久保留工作记忆。下一次启动时，它只有训练好的参数和当前上下文。</p>
+<p>因此，Agent 必须把计划写进 <code>plan.md</code>，把结果写进代码、测试和日志。这类似游戏 <em>Deathloop</em>：每一次醒来都失去记忆，只能通过外部世界保存进度。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_33_33.png" alt="通过计划文件跨会话保存 Agent 记忆" loading="lazy">
+  <p class="video-caption">📷 通过计划文件跨会话保存 Agent 记忆<br><a href="https://www.bilibili.com/video/BV1gEcmzzE4P/?t=2013" target="_blank" rel="noopener">回到原视频 (00:33:33)</a></p>
+</div>
+
+<h3 id="37">3.7 非程序员也可以使用工作区</h3>
+<p>工作区不是程序员专属。学生可以建立：</p>
+<div class="highlight"><pre><span></span><code>study/
+├── lectures/
+├── exercises/
+├── mistakes.md
+├── schedule.md
+└── exam-papers/
+</code></pre></div>
+
+<p>然后让 Agent：</p>
+<ul>
+<li>根据薄弱知识点生成复习计划；</li>
+<li>从错题本设计模拟题；</li>
+<li>搜索往年题；</li>
+<li>定时发送复习提醒；</li>
+<li>把任务排入 <code>cron</code>。</li>
+</ul>
+<p>讲师早已把个人文档、学习记录和工作资料放入结构化数据库，再通过 Claude Code、Telegram Bot 和定时任务管理。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_35_42.png" alt="用文件工作区管理学习、生活和自动化任务" loading="lazy">
+  <p class="video-caption">📷 用文件工作区管理学习、生活和自动化任务<br><a href="https://www.bilibili.com/video/BV1gEcmzzE4P/?t=2142" target="_blank" rel="noopener">回到原视频 (00:35:42)</a></p>
+</div>
+
+<hr />
+<h2 id="4-scaling-law">4. Scaling Law：量变如何引起质变</h2>
+<h3 id="41-the-bitter-lesson">4.1 The Bitter Lesson</h3>
+<p><em>(参考时间: 00:38:25)</em></p>
+<p>Richard Sutton 在《The Bitter Lesson》中指出，人类倾向于把领域知识、对称性和复杂先验写进系统，但长期最有效的方法，往往是能随着算力不断扩展的通用方法。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    H["人类设计启发式规则"] --&gt; L["短期的好效果"]
+    S["通用方法 + 更多算力/数据"] --&gt; G["长期压倒性优势"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_38_25.png" alt="The Bitter Lesson：通用方法随规模增长" loading="lazy">
+  <p class="video-caption">📷 The Bitter Lesson：通用方法随规模增长<br><a href="https://www.bilibili.com/video/BV1gEcmzzE4P/?t=2305" target="_blank" rel="noopener">回到原视频 (00:38:25)</a></p>
+</div>
+
+<h3 id="42">4.2 存储增长与搜索引擎</h3>
+<p><em>(参考时间: 00:40:17)</em></p>
+<p>1980 年代，人们发现互联网数据增长速度慢于存储设备容量增长。按趋势外推，总有一天可以存下所有网页。</p>
+<p>一旦“全量存储”和高效检索成为可能，搜索引擎就成为历史必然。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_40_17.png" alt="存储能力超过网页增长速度，搜索引擎成为可能" loading="lazy">
+  <p class="video-caption">📷 存储能力超过网页增长速度，搜索引擎成为可能<br><a href="https://www.bilibili.com/video/BV1gEcmzzE4P/?t=2417" target="_blank" rel="noopener">回到原视频 (00:40:17)</a></p>
+</div>
+
+<h3 id="43-deepblue-scaling-law">4.3 DeepBlue：象棋中的 Scaling Law</h3>
+<p><em>(参考时间: 00:44:42)</em></p>
+<p>计算机象棋使用 Elo 评分系统衡量棋力。每增加一层搜索深度，机器棋力通常稳定提升。</p>
+<p>当研究者意识到“智能可以随算力提升”后，最有收益的方向不再只是优化启发式规则，而是：</p>
+<ul>
+<li>使用超级计算机；</li>
+<li>设计象棋专用加速电路；</li>
+<li>在单位时间搜索更深。</li>
+</ul>
+<p>1997 年，DeepBlue 击败 Garry Kasparov。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_44_42.png" alt="DeepBlue 用算力与专用硬件扩展搜索深度" loading="lazy">
+  <p class="video-caption">📷 DeepBlue 用算力与专用硬件扩展搜索深度<br><a href="https://www.bilibili.com/video/BV1gEcmzzE4P/?t=2682" target="_blank" rel="noopener">回到原视频 (00:44:42)</a></p>
+</div>
+
+<h3 id="44-alphago">4.4 AlphaGo 与神经网络搜索</h3>
+<p><em>(参考时间: 00:47:48)</em></p>
+<p>AlphaGo 把神经网络与蒙特卡洛树搜索结合，并使用卷积网络理解棋局。它延续了同样的规律：</p>
+<blockquote>
+<p>所谓智能表现，可以通过更强的表示、更多数据和更多计算持续提升。</p>
+</blockquote>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_47_48.png" alt="AlphaGo 将神经网络与大规模搜索结合" loading="lazy">
+  <p class="video-caption">📷 AlphaGo 将神经网络与大规模搜索结合<br><a href="https://www.bilibili.com/video/BV1gEcmzzE4P/?t=2868" target="_blank" rel="noopener">回到原视频 (00:47:48)</a></p>
+</div>
+
+<h3 id="45-scaling-law">4.5 大语言模型的 Scaling Law</h3>
+<p><em>(参考时间: 00:49:00)</em></p>
+<p>Kaplan Scaling Law 和 Chinchilla 论文说明：</p>
+<ul>
+<li>模型参数、数据量与训练计算量存在可预测关系；</li>
+<li>在给定计算预算下，参数和数据需要按比例增长；</li>
+<li>训练 loss 会随规模增加而稳定下降；</li>
+<li>小规模实验的结果可以外推到更大模型。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    C["更多计算"] --&gt; M["更大模型"]
+    C --&gt; D["更多数据"]
+    M --&gt; L["更低训练 Loss"]
+    D --&gt; L
+    L --&gt; A["更强通用能力"]
+</code></pre></div>
+
+<p>OpenAI 训练 GPT-3 时，并不知道所有设计细节是否最优，但小规模实验使研究者相信：</p>
+<blockquote>
+<p>数据还没有把模型喂饱，扩大规模应该继续有效。</p>
+</blockquote>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_49_00.png" alt="参数、数据与计算构成的 Scaling Law" loading="lazy">
+  <p class="video-caption">📷 参数、数据与计算构成的 Scaling Law<br><a href="https://www.bilibili.com/video/BV1gEcmzzE4P/?t=2940" target="_blank" rel="noopener">回到原视频 (00:49:00)</a></p>
+</div>
+
+<h3 id="46-heuristics-is-dead">4.6 “Heuristics is dead”</h3>
+<p><em>(参考时间: 00:54:03)</em></p>
+<p>Jim Gray 曾提出：</p>
+<blockquote>
+<p>Tape is Dead, Disk is Tape, Flash is Disk, RAM Locality is King.</p>
+</blockquote>
+<p>课堂将这一表述类比到 AI：</p>
+<blockquote>
+<p><strong>Heuristics is dead, Policy is Heuristics, LLM is Policy, Mechanism is King.</strong></p>
+</blockquote>
+<p>含义不是所有启发式方法都毫无价值，而是：</p>
+<ul>
+<li>只靠手工规则和局部微调很难持续；</li>
+<li>应构建可承载大规模数据和模型探索的机制；</li>
+<li>LLM 可以充当策略生成器；</li>
+<li>真正重要的是能支撑智能持续扩展的系统底座。</li>
+</ul>
+<h3 id="47">4.7 正确的“量变”</h3>
+<p>“量变引起质变”不等于原地重复任何微小工作。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["重复低水平工作"] --&gt; X["原地踏步"]
+    B["找到可扩展机制"] --&gt; C["更多数据/算力/工具"]
+    C --&gt; D["能力持续增长"]
+    D --&gt; E["跨过临界点产生质变"]
+</code></pre></div>
+
+<p>需要找到真正能够复利的曲线。Agent、Skills、开放协议和可组合工具，都是当前可能“走量”的机制。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_55_49.png" alt="选择能够引发质变的增长曲线" loading="lazy">
+  <p class="video-caption">📷 选择能够引发质变的增长曲线<br><a href="https://www.bilibili.com/video/BV1gEcmzzE4P/?t=3349" target="_blank" rel="noopener">回到原视频 (00:55:49)</a></p>
+</div>
+
+<hr />
+<h2 id="5">5. 如何用好大模型</h2>
+<h3 id="51-prompt-engineering-attention-engineering">5.1 Prompt Engineering 是 Attention Engineering</h3>
+<p><em>(参考时间: 00:59:32)</em></p>
+<p>Transformer 的核心机制是 Self-Attention。提示词工程的目标，是让模型把注意力集中到真正重要的信息上，并抑制平庸的平均回答。</p>
+<p>如果只说“写一篇小说”，模型可能生成泛化、平均的文本。要得到高质量结果，应提供：</p>
+<ul>
+<li>人物与场景设定；</li>
+<li>风格与结构；</li>
+<li>禁止事项；</li>
+<li>目标读者；</li>
+<li>样例和评价标准。</li>
+</ul>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_59_32.png" alt="通过上下文引导模型注意力" loading="lazy">
+  <p class="video-caption">📷 通过上下文引导模型注意力<br><a href="https://www.bilibili.com/video/BV1gEcmzzE4P/?t=3572" target="_blank" rel="noopener">回到原视频 (00:59:32)</a></p>
+</div>
+
+<h3 id="52">5.2 分解问题就是构建抽象</h3>
+<p><em>(参考时间: 01:01:00)</em></p>
+<p>复杂任务无法直接交给 AI 时，最有效的方法是分解。</p>
+<p>经典系统抽象包括：</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["应用生态"] --&gt; S["系统调用 / Syscall"]
+    S --&gt; O["操作系统实现"]
+    O --&gt; H["硬件"]
+    A --&gt; I["指令集 / ISA"]
+    I --&gt; H2["处理器实现"]
+</code></pre></div>
+
+<ul>
+<li>系统调用隔离应用生态与内核实现；</li>
+<li>指令集隔离软件与处理器实现；</li>
+<li>抽象层使上下两侧可以独立演化。</li>
+</ul>
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_01_38.png" alt="系统调用与指令集是经典复杂性抽象" loading="lazy">
+  <p class="video-caption">📷 系统调用与指令集是经典复杂性抽象<br><a href="https://www.bilibili.com/video/BV1gEcmzzE4P/?t=3698" target="_blank" rel="noopener">回到原视频 (01:01:38)</a></p>
+</div>
+
+<h3 id="53">5.3 函数调用不够时，使用协议</h3>
+<p><em>(参考时间: 01:06:33)</em></p>
+<p>函数调用可以直接组合，也方便复用。但当跨模块接口变化时，修改会扩散到整个系统。</p>
+<p>另一种设计是定义子系统和协议，例如让多个组件通过文件系统通信。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    UI["前端显示系统"] --&gt; F["文件系统协议"]
+    F --&gt; S["幻灯片播放器"]
+    F --&gt; N["Notes 生成器"]
+    F --&gt; L["日志分析器"]
+</code></pre></div>
+
+<p>课堂的 Vibe-learning 系统把幻灯片事件写入日志目录，由独立程序读取和渲染。前端和渲染器彻底解耦，多个 Agent 可以并行修改不同组件，而不污染整个项目。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_06_33.png" alt="用文件系统协议连接不同子系统" loading="lazy">
+  <p class="video-caption">📷 用文件系统协议连接不同子系统<br><a href="https://www.bilibili.com/video/BV1gEcmzzE4P/?t=3993" target="_blank" rel="noopener">回到原视频 (01:06:33)</a></p>
+</div>
+
+<hr />
+<h2 id="6-hacking-day-agent">6. Hacking Day：用 Agent 实现最小操作系统</h2>
+<h3 id="61">6.1 准备一个最小提示词</h3>
+<p><em>(参考时间: 01:10:26)</em></p>
+<p>课堂准备了一个极简任务：</p>
+<blockquote>
+<p>在不依赖外部库的情况下，实现一个可在 QEMU 启动的最小 RISC-V 操作系统，创建两个内核线程并展示调度与切换。</p>
+</blockquote>
+<p>讲师要求自己暂时“清空”操作系统知识，只使用自然语言任务和 Agent 生成的 <code>CLAUDE.md</code> / <code>AGENTS.md</code> 设计文档。</p>
+<p>文档中定义：</p>
+<ul>
+<li>项目目标；</li>
+<li>架构和流程；</li>
+<li>禁止项；</li>
+<li>测试方式；</li>
+<li>Working Style；</li>
+<li>每次改动必须解释和运行最小测试。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    G["自然语言目标"] --&gt; D["CLAUDE.md / AGENTS.md"]
+    D --&gt; P["规划"]
+    P --&gt; C["生成代码"]
+    C --&gt; T["构建与测试"]
+    T --&gt; F["反馈修复"]
+    F --&gt; C
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_10_26.png" alt="由自然语言生成最小操作系统任务说明" loading="lazy">
+  <p class="video-caption">📷 由自然语言生成最小操作系统任务说明<br><a href="https://www.bilibili.com/video/BV1gEcmzzE4P/?t=4226" target="_blank" rel="noopener">回到原视频 (01:10:26)</a></p>
+</div>
+
+<h3 id="62-agent">6.2 Agent 的规划与代码生成</h3>
+<p>Agent 首先创建目录、Makefile、<code>kernel.h</code>、<code>thread.h</code> 和源代码，再逐步实现：</p>
+<ul>
+<li>内核入口；</li>
+<li>最小 runtime 环境；</li>
+<li>线程结构；</li>
+<li>上下文切换；</li>
+<li>汇编保存和恢复寄存器；</li>
+<li>调度循环。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    B["_start / 启动代码"] --&gt; R["初始化 runtime"]
+    R --&gt; T["创建两个内核线程"]
+    T --&gt; S["调度器选择线程"]
+    S --&gt; C["保存当前上下文"]
+    C --&gt; N["恢复下一线程上下文"]
+    N --&gt; S
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_13_09.png" alt="Agent 生成内核目录、头文件与基础构建系统" loading="lazy">
+  <p class="video-caption">📷 Agent 生成内核目录、头文件与基础构建系统<br><a href="https://www.bilibili.com/video/BV1gEcmzzE4P/?t=4389" target="_blank" rel="noopener">回到原视频 (01:13:09)</a></p>
+</div>
+
+<h3 id="63">6.3 编译错误与自动修复</h3>
+<p>第一次构建出现了指针宽度转换问题：</p>
+<div class="highlight"><pre><span></span><code>cast a pointer from integer of different size
+</code></pre></div>
+
+<p>Agent 根据错误信息修改类型和指针转换，再次编译。这个过程与人类做 Computer Systems 实验没有本质区别。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_15_23.png" alt="Agent 根据编译错误自动修复代码" loading="lazy">
+  <p class="video-caption">📷 Agent 根据编译错误自动修复代码<br><a href="https://www.bilibili.com/video/BV1gEcmzzE4P/?t=4523" target="_blank" rel="noopener">回到原视频 (01:15:23)</a></p>
+</div>
+
+<h3 id="64-qemu">6.4 QEMU 中成功运行</h3>
+<p>构建完成后，最小操作系统在 QEMU 中运行，两个线程交替输出编号，显示上下文切换生效。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_17_02.png" alt="最小 RISC-V 内核在 QEMU 中运行并切换线程" loading="lazy">
+  <p class="video-caption">📷 最小 RISC-V 内核在 QEMU 中运行并切换线程<br><a href="https://www.bilibili.com/video/BV1gEcmzzE4P/?t=4622" target="_blank" rel="noopener">回到原视频 (01:17:02)</a></p>
+</div>
+
+<p>Agent 最终完成了一个令讲师意外的可用版本。这说明在今天：</p>
+<ul>
+<li>大量“众所周知”的实现可以被模型复用；</li>
+<li>Agent 具备从任务规划到构建修复的完整工作流；</li>
+<li>人类不需要事无巨细地编写每一行代码。</li>
+</ul>
+<h3 id="65">6.5 人类仍然重要在哪里</h3>
+<p><em>(参考时间: 01:19:21)</em></p>
+<p>Agent 的行为带有强烈的“Do it”倾向：</p>
+<ol>
+<li>立即写大量代码；</li>
+<li>构建；</li>
+<li>看到错误；</li>
+<li>直接修复；</li>
+<li>继续运行。</li>
+</ol>
+<p>人类系统工程师更倾向于先建立：</p>
+<ul>
+<li>清晰的测试框架；</li>
+<li>日志和 Trace 工具；</li>
+<li>可重复运行环境；</li>
+<li>抽象边界；</li>
+<li>验证与断言机制。</li>
+</ul>
+<p>Agent 运行长输出命令时，如果不及时停止，日志会大量进入 Context，浪费 Token 并淹没有效信息。更好的做法是提供最小 Test Framework，让每一步只返回最关键结果。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    B["Build"] --&gt; T["最小 Test / Trace"]
+    T --&gt; R["结构化结果"]
+    R --&gt; A["Agent 判断"]
+    A --&gt;|"通过"| N["继续下一步"]
+    A --&gt;|"失败"| F["仅带必要日志修复"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_19_21.png" alt="为 Agent 设计测试、日志与验证基础设施" loading="lazy">
+  <p class="video-caption">📷 为 Agent 设计测试、日志与验证基础设施<br><a href="https://www.bilibili.com/video/BV1gEcmzzE4P/?t=4761" target="_blank" rel="noopener">回到原视频 (01:19:21)</a></p>
+</div>
+
+<p>这些系统设计能力，是“人类智慧”在当前 Agent 工作流中仍然最重要的部分。</p>
+<hr />
+<h2 id="7">7. 本讲总结</h2>
+<div class="highlight"><pre><span></span><code>mindmap
+  root((LLM / Agent / Scaling))
+    大语言模型
+      大
+      语言
+      Next Token
+      预训练与后训练
+    多能力
+      ViT
+      Chain-of-Thought
+      ReAct
+      Toolformer
+    Agent
+      Workspace
+      Plan
+      Tools
+      Git
+      记忆循环
+    Scaling Law
+      Bitter Lesson
+      Google
+      DeepBlue
+      AlphaGo
+      Kaplan / Chinchilla
+    工程方法
+      Attention Engineering
+      问题分解
+      抽象层
+      子系统和协议
+      Tests / Logs
+</code></pre></div>
+
+<p>核心结论：</p>
+<ol>
+<li>大语言模型通过海量语言学习人类共享的世界模型。</li>
+<li>Next-token prediction 配合注意力机制，可以完成推理与程序生成。</li>
+<li>多模态、草稿纸和工具调用使模型逐渐具备完整 Agent 能力。</li>
+<li>Agent 需要工作区、计划、Git、工具和验证机制维持长期记忆。</li>
+<li>Scaling Law 表明算力、数据和参数可以稳定改善模型能力。</li>
+<li>“量变引起质变”只适用于能够复利和扩展的机制。</li>
+<li>Prompt Engineering 本质上是引导模型注意力。</li>
+<li>复杂问题必须通过分解和抽象解决。</li>
+<li>系统调用、ISA、文件系统协议都是适合 AI 协作的清晰边界。</li>
+<li>Agent 已经能够完成最小操作系统实现，但测试、Trace、抽象与验证仍需要人类设计。</li>
+</ol>
+<blockquote>
+<p><strong>Heuristics is dead, Policy is Heuristics, LLM is Policy, Mechanism is King.</strong></p>
+</blockquote>
+<hr />
+<h2 id="_1">附：官方参考与延伸阅读</h2>
+<p>课程与讲义：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/2026/">《操作系统原理》2026 课程主页</a></li>
+<li><a href="https://jyywiki.cn/OS/2026/lect4.md">第 4 讲讲义：Scaling Law 和 Agentic AI</a></li>
+<li><a href="https://www.bilibili.com/video/BV1gEcmzzE4P/">本讲视频</a></li>
+</ul>
+<p>核心论文与资料：</p>
+<ul>
+<li><a href="https://www.cs.utexas.edu/~eunsol/courses/data/bitter_lesson.pdf">The Bitter Lesson</a></li>
+<li><a href="https://arxiv.org/abs/2010.11929">An Image is Worth 16x16 Words: ViT</a></li>
+<li><a href="https://arxiv.org/abs/2210.03629">ReAct: Reasoning and Acting in Language Models</a></li>
+<li><a href="https://arxiv.org/abs/2302.04761">Toolformer</a></li>
+<li><a href="https://arxiv.org/pdf/2001.08361">Kaplan et al., Scaling Laws for Neural Language Models</a></li>
+<li><a href="https://arxiv.org/abs/2203.15556">Chinchilla Scaling Laws</a></li>
+<li><a href="https://www.attackingchess.com/understanding-the-elo-rating-system-in-chess/">Elo Rating System</a></li>
+</ul>
+<p>课程演示与工程实践：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/demos/intro/os-minimal">最小操作系统 os-minimal</a></li>
+<li><a href="https://github.com/openclaw/openclaw/blob/main/AGENTS.md">OpenClaw AGENTS.md</a></li>
+<li><a href="https://store.steampowered.com/app/1252330/DEATHLOOP/">DEATHLOOP 游戏</a></li>
+<li><a href="https://github.com/nvbn/thefuck">thefuck：修复上一条命令</a></li>
+</ul>
+<blockquote>
+<p><strong>版权说明</strong>：课程讲义与幻灯片的著作权归蒋炎岩所有，采用 Creative Commons BY-NC 4.0 许可。电子书正文为课堂内容的书面化重构，脚本占位符已替换为视频画面或官方资料渲染图；引用与来源链接均保留在本页。</p>
+</blockquote>
+    </article>
+
+    <!-- Mermaid 图表引擎初始化 -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            mermaid.initialize({ startOnLoad: false, theme: 'default' });
+            
+            // 兼容普通代码块以及丢失 language-mermaid 类名的情况 (CodeHilite 干扰)
+            const codeNodes = document.querySelectorAll('pre code, .highlight code');
+            codeNodes.forEach(function(node) {
+                const text = node.textContent.trim();
+                // 匹配常见的 mermaid 图表前缀
+                if (text.startsWith('graph ') || text.startsWith('flowchart ') || text.startsWith('sequenceDiagram') || text.startsWith('gantt') || text.startsWith('pie') || text.startsWith('classDiagram') || text.startsWith('stateDiagram') || text.startsWith('mindmap')) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.className = 'mermaid';
+                    tempDiv.textContent = text;
+                    
+                    // 获取需要替换的最外层父节点 (比如 div.highlight 或者 pre)
+                    const wrapper = node.closest('.highlight') || node.parentNode;
+                    wrapper.replaceWith(tempDiv); 
+                }
+            });
+            
+            // 所有节点转换完成，统一进行图表动态绘制
+            mermaid.run();
+        });
+    </script>
+    <!-- Lightbox：截图点击放大 -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const lightbox = document.createElement('div');
+            lightbox.className = 'lightbox';
+            lightbox.innerHTML = '<img alt=""><div class="lightbox-caption"></div>';
+            document.body.appendChild(lightbox);
+            const lbImg = lightbox.querySelector('img');
+            const lbCap = lightbox.querySelector('.lightbox-caption');
+            function openLightbox(src, alt) {
+                lbImg.src = src; lbImg.alt = alt || '';
+                lbCap.textContent = alt || '';
+                lightbox.classList.add('open');
+                document.body.style.overflow = 'hidden';
+            }
+            function closeLightbox() {
+                lightbox.classList.remove('open');
+                lbImg.src = '';
+                document.body.style.overflow = '';
+            }
+            document.querySelectorAll('.screenshot-card img').forEach(function(img) {
+                img.addEventListener('click', function() { openLightbox(img.src, img.alt); });
+            });
+            lightbox.addEventListener('click', closeLightbox);
+            document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
+        });
+    </script>
+</body>
+</html>
