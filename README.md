@@ -4,6 +4,10 @@
 
 ## 目录
 
+- [第 1 讲：Agentic AI 时代的操作系统课：绪论](./01-AgenticAI时代的操作系统课-绪论/book.html)
+  - [Markdown 源稿](./01-AgenticAI时代的操作系统课-绪论/book.md)
+  - 视频：[Bilibili BV1opAfzpEf9](https://www.bilibili.com/video/BV1opAfzpEf9/)
+  - 官方讲义：[第 1 讲](https://jyywiki.cn/OS/2026/lect1.md)
 - [第 24 讲：文件系统 API (1)](./24-文件系统API-1/book.html)
   - [Markdown 源稿](./24-文件系统API-1/book.md)
   - 视频：[Bilibili BV1hAGr6vEi9](https://www.bilibili.com/video/BV1hAGr6vEi9/)
