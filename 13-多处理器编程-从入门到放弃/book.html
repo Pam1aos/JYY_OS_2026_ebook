@@ -1,0 +1,1434 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多处理器编程：从入门到放弃</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* ── 基础重置 ── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            color-scheme: light;
+            --bg-primary: #f7f7f8;
+            --bg-secondary: #ffffff;
+            --bg-card: #eef0f3;
+            --bg-code: #f2f3f5;
+            --text-primary: #1f2328;
+            --text-secondary: #57606a;
+            --text-muted: #6e7781;
+            --accent: #2563eb;
+            --accent-glow: rgba(37, 99, 235, 0.08);
+            --border: #d9dce1;
+            --border-subtle: #e7e9ec;
+            --radius: 12px;
+            --shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Serif SC', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.8;
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── 文章容器 ── */
+        .book-content {
+            max-width: 780px;
+            margin: 0 auto;
+            padding: 60px 32px 120px;
+        }
+
+        /* ── 标题 ── */
+        h1 {
+            font-size: 2.2em;
+            font-weight: 700;
+            margin: 0 0 12px;
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+        }
+
+        h2 {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 56px 0 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h3 {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: var(--accent);
+            margin: 36px 0 12px;
+        }
+
+        /* ── 段落与文字 ── */
+        p {
+            margin: 0 0 16px;
+            color: var(--text-primary);
+        }
+
+        strong {
+            color: #0f172a;
+            font-weight: 600;
+        }
+
+        em {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.2s;
+        }
+        a:hover {
+            border-bottom-color: var(--accent);
+        }
+
+        /* ── 引用 ── */
+        blockquote {
+            margin: 24px 0;
+            padding: 16px 20px;
+            background: var(--bg-secondary);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 var(--radius) var(--radius) 0;
+            color: var(--text-secondary);
+        }
+        blockquote p { margin: 0; }
+
+        /* ── 列表 ── */
+        ul, ol {
+            margin: 12px 0 20px 24px;
+            color: var(--text-primary);
+        }
+        li {
+            margin: 6px 0;
+        }
+
+        /* ── 分割线 ── */
+        hr {
+            border: none;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border), transparent);
+            margin: 48px 0;
+        }
+
+        /* ── 表格 ── */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 24px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+        thead {
+            background: var(--bg-card);
+        }
+        th {
+            padding: 12px 16px;
+            font-weight: 600;
+            text-align: left;
+            color: var(--accent);
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        td {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border-subtle);
+        }
+        tbody tr {
+            background: var(--bg-secondary);
+            transition: background 0.15s;
+        }
+        tbody tr:hover {
+            background: var(--bg-card);
+        }
+
+        /* ── 代码 ── */
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-code);
+            padding: 2px 7px;
+            border-radius: 5px;
+            font-size: 0.88em;
+            color: #6d28d9;
+        }
+
+        pre {
+            margin: 20px 0;
+            padding: 20px 24px;
+            background: var(--bg-code);
+            border-radius: var(--radius);
+            overflow-x: auto;
+            border: 1px solid var(--border);
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9em;
+            color: var(--text-primary);
+        }
+
+        /* ── 视频嵌入卡片 ── */
+        .video-card {
+            margin: 32px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .video-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(15, 23, 42, 0.12);
+        }
+
+        .video-wrapper {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 */
+            height: 0;
+            overflow: hidden;
+        }
+        .video-wrapper iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .video-card img {
+            width: 100%;
+            display: block;
+        }
+
+        .video-caption {
+            padding: 12px 16px;
+            font-size: 0.88em;
+            color: var(--text-secondary);
+            text-align: center;
+            line-height: 1.6;
+            margin: 0;
+        }
+        .video-caption a {
+            color: var(--accent);
+        }
+
+        .video-card.fallback {
+            padding: 20px;
+            text-align: center;
+        }
+
+        /* ── Lightbox：截图点击放大 ── */
+        .screenshot-card img { cursor: zoom-in; transition: opacity 0.15s; }
+        .screenshot-card img:hover { opacity: 0.9; }
+        .lightbox {
+            position: fixed; inset: 0; z-index: 999;
+            display: none; align-items: center; justify-content: center;
+            background: rgba(5, 5, 8, 0.92); backdrop-filter: blur(4px);
+            cursor: zoom-out; padding: 24px;
+        }
+        .lightbox.open { display: flex; }
+        .lightbox img {
+            max-width: 96vw; max-height: 90vh;
+            border-radius: 8px; box-shadow: 0 12px 60px rgba(0,0,0,0.7);
+        }
+        .lightbox-caption {
+            position: absolute; bottom: 14px; left: 0; right: 0;
+            text-align: center; color: var(--text-secondary); font-size: 0.85em;
+        }
+
+        /* ── 顶部信息栏 ── */
+        .book-content > blockquote:first-of-type {
+            background: var(--accent-glow);
+            border-left-color: var(--accent);
+            border-radius: var(--radius);
+            margin-bottom: 32px;
+        }
+
+        /* ── 图表居中 ── */
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            margin: 32px 0;
+            overflow-x: auto;
+        }
+
+        /* ── 滚动条 ── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* ── 响应式 ── */
+        @media (max-width: 640px) {
+            .book-content { padding: 32px 16px 80px; }
+            h1 { font-size: 1.7em; }
+            h2 { font-size: 1.3em; }
+        }
+    </style>
+</head>
+<body>
+    <article class="book-content">
+        <h1 id="_1">多处理器编程：从入门到放弃</h1>
+<blockquote>
+<p><strong>课程</strong>：2026 春季学期《操作系统原理》<br />
+<strong>讲师</strong>：蒋炎岩（jyy）<br />
+<strong>官方课程主页</strong>：<a href="https://jyywiki.cn/OS/2026/">https://jyywiki.cn/OS/2026/</a><br />
+<strong>官方讲义</strong>：<a href="https://jyywiki.cn/OS/2026/lect13.md">https://jyywiki.cn/OS/2026/lect13.md</a><br />
+<strong>视频来源</strong>：<a href="https://www.bilibili.com/video/BV1vgQGBREyJ/">Bilibili BV1vgQGBREyJ</a><br />
+<strong>版权说明</strong>：课程讲义与幻灯片归蒋炎岩所有，采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书是对课堂讲授的书面化重构，保留出处与许可说明。</p>
+</blockquote>
+<h2 id="_2">导语：打开共享内存的魔鬼盒子</h2>
+<p><em>(参考时间: 00:00)</em></p>
+<p>上一讲描绘了完整的应用世界：</p>
+<div class="highlight"><pre><span></span><code>CPU Reset
+  → Firmware
+  → Bootloader
+  → Linux Kernel
+  → initramfs / init
+  → systemd
+  → 应用程序
+</code></pre></div>
+
+<p>操作系统为应用提供对象与 API，libc、语言运行时、核心工具和应用生态逐层生长。现在要进入并发部分。</p>
+<p>表面上看，多线程只是把单线程状态机扩展为多个状态机：</p>
+<ul>
+<li>每个线程拥有独立栈和 PC；</li>
+<li>所有线程共享全局数据；</li>
+<li>任意一步选择一个线程执行。</li>
+</ul>
+<p>只要增加两个 API：</p>
+<div class="highlight"><pre><span></span><code><span class="n">spawn</span><span class="p">(</span><span class="n">fn</span><span class="p">);</span><span class="w">  </span><span class="cm">/* 创建线程 */</span>
+<span class="n">join</span><span class="p">();</span><span class="w">     </span><span class="cm">/* 等待线程结束 */</span>
+</code></pre></div>
+
+<p>似乎就已经理解并发的全部。可是这恰恰打开了“魔鬼的盒子”：</p>
+<ul>
+<li>状态迁移不再确定；</li>
+<li>编译器会按顺序程序假设进行优化；</li>
+<li>处理器还会在运行时再次重排指令；</li>
+<li>缓存使内存本身不再是一个瞬时一致的共享数组。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["单线程状态机"] --&gt; B["增加独立栈"]
+    B --&gt; C["共享全局内存"]
+    C --&gt; D["spawn / join"]
+    D --&gt; E["多线程状态机"]
+    E --&gt; F["非确定性、编译优化、乱序执行"]
+    F --&gt; G["放弃简单直觉"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_03_30.png" alt="从操作系统 API 到应用生态的复习" loading="lazy">
+  <p class="video-caption">📷 从操作系统 API 到应用生态的复习<br><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/?t=210" target="_blank" rel="noopener">回到原视频 (00:03:30)</a></p>
+</div>
+
+<hr />
+<h2 id="1">1. 为什么要共享内存并发</h2>
+<h3 id="11">1.1 系统调用可能等待很久</h3>
+<p><em>(参考时间: 00:04)</em></p>
+<p>一个顺序 HTTP 服务器可能这样写：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="nf">http_server</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">fd</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">Buffer</span><span class="w"> </span><span class="o">*</span><span class="n">buf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">alloc_buf</span><span class="p">();</span>
+<span class="w">        </span><span class="kt">ssize_t</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">read</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span><span class="w"> </span><span class="n">buf</span><span class="p">,</span><span class="w"> </span><span class="mi">1024</span><span class="p">);</span>
+<span class="w">        </span><span class="n">handle_request</span><span class="p">(</span><span class="n">buf</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>当 <code>read</code> 等待网络数据、<code>handle_request</code> 等待磁盘或其他服务时，CPU 只能停在这个执行路径上。即使进程中还有别的请求可以处理，也无法继续推进。</p>
+<p>理想情况是：一个执行流等待 I/O 时，另一个执行流继续工作。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["顺序 HTTP Server"] --&gt; B["read 等待网络"]
+    B --&gt; C["CPU 无法处理其他请求"]
+    C --&gt; D["希望多个执行流互相填补等待时间"]
+    D --&gt; E["共享内存并发动机 1"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_05_30.png" alt="顺序 HTTP 服务器在 I/O 等待时闲置" loading="lazy">
+  <p class="video-caption">📷 顺序 HTTP 服务器在 I/O 等待时闲置<br><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/?t=330" target="_blank" rel="noopener">回到原视频 (00:05:30)</a></p>
+</div>
+
+<h3 id="12">1.2 多处理器和共享内存</h3>
+<p><em>(参考时间: 00:07)</em></p>
+<p>现代机器通常有多个逻辑处理器：</p>
+<div class="highlight"><pre><span></span><code>lscpu
+cat<span class="w"> </span>/proc/cpuinfo
+</code></pre></div>
+
+<p>硬件模型是共享内存：</p>
+<ul>
+<li>CPU 1 写地址 <code>0x1234</code>；</li>
+<li>CPU 2 之后读同一地址；</li>
+<li>CPU 2 可以观察到 CPU 1 的写入；</li>
+<li>多个 CPU 共享同一个物理内存空间。</li>
+</ul>
+<p>多处理器资源不用就是浪费。可是 <code>fork</code> 后进程虽然可以通过管道或共享映射通信，但默认地址空间不再直接共享。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["多处理器共享物理内存"] --&gt; B["CPU 0 与 CPU 1"]
+    B --&gt; C["并行执行"]
+    C --&gt; D["希望直接共享地址空间通信"]
+    D --&gt; E["共享内存线程"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_07_15.png" alt="多处理器系统共享同一个物理地址空间" loading="lazy">
+  <p class="video-caption">📷 多处理器系统共享同一个物理地址空间<br><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/?t=435" target="_blank" rel="noopener">回到原视频 (00:07:15)</a></p>
+</div>
+
+<hr />
+<h2 id="2">2. 线程：共享内存的进程</h2>
+<h3 id="21-simplec">2.1 从 SimpleC 状态机扩展</h3>
+<p><em>(参考时间: 00:10)</em></p>
+<p>SimpleC 中，一个程序状态由：</p>
+<ul>
+<li>全局变量；</li>
+<li>函数调用栈；</li>
+<li>栈顶帧的 PC；</li>
+</ul>
+<p>共同组成。函数调用就是压入新栈帧，返回就是弹出栈帧。</p>
+<p>要让多个执行流共享全局变量，同时保持独立控制流，最自然的扩展是：</p>
+<div class="highlight"><pre><span></span><code>Thread 1: Stack 1 + PC 1
+Thread 2: Stack 2 + PC 2
+Thread 3: Stack 3 + PC 3
+              +
+        Shared Globals
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    G["共享全局数据"]
+    T1["线程 1：独立栈 + PC"] --&gt; G
+    T2["线程 2：独立栈 + PC"] --&gt; G
+    T3["线程 3：独立栈 + PC"] --&gt; G
+    S["每一步选择一个线程执行一条语句"] --&gt; T1
+    S --&gt; T2
+    S --&gt; T3
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_11_30.png" alt="线程模型：独立栈共享全局变量" loading="lazy">
+  <p class="video-caption">📷 线程模型：独立栈共享全局变量<br><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/?t=690" target="_blank" rel="noopener">回到原视频 (00:11:30)</a></p>
+</div>
+
+<h3 id="22-spawn-join">2.2 <code>spawn</code> 和 <code>join</code></h3>
+<p><em>(参考时间: 00:13)</em></p>
+<p>为了管理线程，可以增加两个系统调用或库函数：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="nf">spawn</span><span class="p">(</span><span class="kt">void</span><span class="w"> </span><span class="p">(</span><span class="o">*</span><span class="n">fn</span><span class="p">)(</span><span class="kt">int</span><span class="w"> </span><span class="n">tid</span><span class="p">));</span>
+<span class="kt">void</span><span class="w"> </span><span class="nf">join</span><span class="p">(</span><span class="kt">void</span><span class="p">);</span>
+</code></pre></div>
+
+<p><code>spawn(fn)</code>：</p>
+<ul>
+<li>在现有线程之外创建一个新线程；</li>
+<li>新线程从 <code>fn</code> 开始执行；</li>
+<li>每个线程拥有独立栈；</li>
+<li>全局变量保持不变并共享。</li>
+</ul>
+<p>线程函数返回后，该线程消失。<code>join</code> 等待所有被创建的线程结束。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["主线程"] --&gt;|"spawn(fn)"| B["线程栈 1"]
+    A --&gt;|"spawn(fn)"| C["线程栈 2"]
+    A --&gt;|"join"| D["等待所有线程结束"]
+    B --&gt; E["线程返回"]
+    C --&gt; E
+    E --&gt; F["主线程继续"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_14_20.png" alt="`spawn` 创建线程，`join` 等待线程结束" loading="lazy">
+  <p class="video-caption">📷 `spawn` 创建线程，`join` 等待线程结束<br><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/?t=860" target="_blank" rel="noopener">回到原视频 (00:14:20)</a></p>
+</div>
+
+<h3 id="23">2.3 并发与并行</h3>
+<p><em>(参考时间: 00:16)</em></p>
+<p><strong>并发</strong>是逻辑上的同时执行：</p>
+<ul>
+<li>可以在单个 CPU 上轮流执行；</li>
+<li>在较长时间尺度上，两个任务都有进展；</li>
+<li>由操作系统或运行时模拟。</li>
+</ul>
+<p><strong>并行</strong>是真正的物理同时执行：</p>
+<ul>
+<li>多个处理器同时执行指令；</li>
+<li>至少两个线程在同一时刻运行；</li>
+<li>通常由共享内存多处理器提供。</li>
+</ul>
+<p>并行程序一定并发，并发程序不一定并行。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["并发"] --&gt; B["逻辑同时"]
+    A --&gt; C["可由单核轮流执行"]
+    D["并行"] --&gt; E["物理同时"]
+    D --&gt; F["多个处理器同时执行"]
+    E --&gt; A
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_17_30.png" alt="并发与并行的概念差异" loading="lazy">
+  <p class="video-caption">📷 并发与并行的概念差异<br><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/?t=1050" target="_blank" rel="noopener">回到原视频 (00:17:30)</a></p>
+</div>
+
+<h3 id="24-posix">2.4 POSIX 线程与教学线程库</h3>
+<p><em>(参考时间: 00:19)</em></p>
+<p>真实系统提供：</p>
+<div class="highlight"><pre><span></span><code>pthreads(7)
+</code></pre></div>
+
+<p>课程线程库对其进行简化：</p>
+<div class="highlight"><pre><span></span><code><span class="n">spawn</span><span class="p">(</span><span class="n">worker</span><span class="p">);</span>
+<span class="n">join</span><span class="p">();</span>
+</code></pre></div>
+
+<p>它内部仍使用 POSIX Threads。标准化接口让线程代码能够移植到 Linux、Android、鸿蒙等支持 POSIX 的平台。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["课程线程库"] --&gt; B["spawn / join"]
+    B --&gt; C["POSIX pthreads"]
+    C --&gt; D["Linux / Android / HarmonyOS / macOS"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_20_30.png" alt="教学线程库对 POSIX Threads 的简化" loading="lazy">
+  <p class="video-caption">📷 教学线程库对 POSIX Threads 的简化<br><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/?t=1230" target="_blank" rel="noopener">回到原视频 (00:20:30)</a></p>
+</div>
+
+<h3 id="25-a-b">2.5 交替输出 A 与 B</h3>
+<p><em>(参考时间: 00:22)</em></p>
+<p>两个线程分别执行：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="nf">print_a</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">tid</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">putchar</span><span class="p">(</span><span class="sc">'A'</span><span class="p">);</span>
+<span class="w">        </span><span class="n">fflush</span><span class="p">(</span><span class="n">stdout</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">print_b</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">tid</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">putchar</span><span class="p">(</span><span class="sc">'B'</span><span class="p">);</span>
+<span class="w">        </span><span class="n">fflush</span><span class="p">(</span><span class="n">stdout</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>输出会交替出现 A 和 B，但顺序和连续长度不确定。原因包括：</p>
+<ul>
+<li>操作系统何时把线程调度到 CPU 不确定；</li>
+<li>两个线程所在处理器速度不同；</li>
+<li>缓存状态、分支预测和其他线程都影响执行速度。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Thread A"] --&gt; P["共享终端"]
+    B["Thread B"] --&gt; P
+    S["调度器"] --&gt; A
+    S --&gt; B
+    P --&gt; O["AABABBBA... 非确定序列"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_22_50.png" alt="两个线程交替输出 A 与 B" loading="lazy">
+  <p class="video-caption">📷 两个线程交替输出 A 与 B<br><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/?t=1370" target="_blank" rel="noopener">回到原视频 (00:22:50)</a></p>
+</div>
+
+<hr />
+<h2 id="3">3. 验证共享内存与线程栈</h2>
+<h3 id="31">3.1 用读写实验证明全局变量共享</h3>
+<p><em>(参考时间: 00:24)</em></p>
+<div class="highlight"><pre><span></span><code><span class="kt">int</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="kt">int</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">inc_x</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">tid</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">x</span><span class="o">++</span><span class="p">;</span>
+<span class="w">        </span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">inc_y</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">tid</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">y</span><span class="o">++</span><span class="p">;</span>
+<span class="w">        </span><span class="n">sleep</span><span class="p">(</span><span class="mi">2</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>主线程持续打印 <code>x</code> 和 <code>y</code>。因为 <code>x</code> 增长比 <code>y</code> 快，主线程确实读到了其他线程写入的全局变量。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["线程 1 写全局 x"] --&gt; G["共享全局内存"]
+    B["线程 2 写全局 y"] --&gt; G
+    G --&gt; C["主线程读 x / y"]
+    C --&gt; D["观察到其他线程的写入"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_25_50.png" alt="通过跨线程读写验证共享内存" loading="lazy">
+  <p class="video-caption">📷 通过跨线程读写验证共享内存<br><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/?t=1550" target="_blank" rel="noopener">回到原视频 (00:25:50)</a></p>
+</div>
+
+<h3 id="32-8-mib">3.2 独立栈与 8 MiB 默认大小</h3>
+<p><em>(参考时间: 00:26)</em></p>
+<p>每个线程栈位于同一个地址空间中，但占据不同区域。可以用递归探测栈范围：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="nf">probe</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">depth</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">volatile</span><span class="w"> </span><span class="kt">char</span><span class="w"> </span><span class="n">scratch</span><span class="p">[</span><span class="mi">64</span><span class="p">];</span>
+<span class="w">    </span><span class="n">update_range</span><span class="p">(</span><span class="o">&amp;</span><span class="n">scratch</span><span class="p">);</span>
+<span class="w">    </span><span class="n">probe</span><span class="p">(</span><span class="n">depth</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>不断递归直到栈溢出，同时记录访问过的最高和最低地址，就能估算线程栈的大小。</p>
+<p>Linux 默认线程栈通常约为 8 MiB：</p>
+<div class="highlight"><pre><span></span><code>stack range ≈ 8192 KiB
+</code></pre></div>
+
+<p>主线程栈可以随虚拟内存增长，但额外创建的线程必须在创建时预留固定大小的栈区域。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["线程入口"] --&gt; B["递归分配 64B 局部变量"]
+    B --&gt; C["记录地址范围 high / low"]
+    C --&gt; D["继续递归"]
+    D --&gt; E{"栈溢出？"}
+    E -- "否" --&gt; B
+    E -- "是" --&gt; F["线程崩溃"]
+    F --&gt; G["根据范围估算栈大小"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_28_10.png" alt="递归探测线程栈边界" loading="lazy">
+  <p class="video-caption">📷 递归探测线程栈边界<br><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/?t=1690" target="_blank" rel="noopener">回到原视频 (00:28:10)</a></p>
+</div>
+
+<h3 id="33">3.3 调试多线程程序</h3>
+<p><em>(参考时间: 00:31)</em></p>
+<p>编译时带 <code>-g</code>，使用 GDB：</p>
+<div class="highlight"><pre><span></span><code>break thread_fn
+run
+info threads
+set scheduler-locking on
+thread 2
+step
+thread 3
+step
+</code></pre></div>
+
+<ul>
+<li><code>info threads</code> 列出所有线程；</li>
+<li><code>thread N</code> 切换当前调试线程；</li>
+<li><code>scheduler-locking on</code> 让其他线程在单步时暂停。</li>
+</ul>
+<p>这样就能把实际多线程程序映射回课程的状态机模型：选择线程、执行一步、再选择另一个线程。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["GDB 暂停进程"] --&gt; B["info threads"]
+    B --&gt; C["选择 Thread 2"]
+    C --&gt; D["scheduler-locking on"]
+    D --&gt; E["单步 T2"]
+    E --&gt; F["切换 Thread 3"]
+    F --&gt; G["单步 T3"]
+    G --&gt; C
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_32_30.png" alt="GDB 中列出并切换多个线程" loading="lazy">
+  <p class="video-caption">📷 GDB 中列出并切换多个线程<br><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/?t=1950" target="_blank" rel="noopener">回到原视频 (00:32:30)</a></p>
+</div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_34_50.png" alt="多线程程序在 GDB 中逐线程单步" loading="lazy">
+  <p class="video-caption">📷 多线程程序在 GDB 中逐线程单步<br><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/?t=2090" target="_blank" rel="noopener">回到原视频 (00:34:50)</a></p>
+</div>
+
+<hr />
+<h2 id="4">4. 放弃一：状态迁移不再确定</h2>
+<h3 id="41">4.1 确定性与函数</h3>
+<p><em>(参考时间: 00:35)</em></p>
+<p>数学函数满足确定性：</p>
+<div class="highlight"><pre><span></span><code>f: X → Y
+</code></pre></div>
+
+<p>同一个输入永远产生同一个输出。</p>
+<p>单线程程序在初始状态确定、系统调用结果确定时，也同样确定：</p>
+<div class="highlight"><pre><span></span><code>s' = f(s)
+</code></pre></div>
+
+<p>每一步迁移都是一个函数，因此整个执行序列可以重复。顺序程序给开发者一种可控感：测试通过后，只要代码和输入不变，结果就不会改变。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    S0["初始状态 s0"] --&gt; F1["迁移 f"]
+    F1 --&gt; S1["s1"]
+    S1 --&gt; F2["迁移 f"]
+    F2 --&gt; S2["s2"]
+    S2 --&gt; S3["相同输入总是相同结果"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_38_30.png" alt="确定性状态机模型" loading="lazy">
+  <p class="video-caption">📷 确定性状态机模型<br><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/?t=2310" target="_blank" rel="noopener">回到原视频 (00:38:30)</a></p>
+</div>
+
+<h3 id="42">4.2 共享内存打破确定性</h3>
+<p><em>(参考时间: 00:40)</em></p>
+<p>多线程程序每一步都可以选择不同线程：</p>
+<div class="highlight"><pre><span></span><code>状态 s
+  ├─ 选择 T1 → s1
+  └─ 选择 T2 → s2
+</code></pre></div>
+
+<p>经过很多步以后，可能状态呈指数增长。一次 <code>load</code> 是否读到其他线程刚刚写入的值，也没有固定保证。</p>
+<p>因此：</p>
+<blockquote>
+<p>测试通过一百万次，也不代表程序正确。</p>
+</blockquote>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    S["状态 s"] --&gt; T1["T1 执行一步"]
+    S --&gt; T2["T2 执行一步"]
+    T1 --&gt; S11["T1 再执行"]
+    T1 --&gt; S12["T2 执行"]
+    T2 --&gt; S21["T1 执行"]
+    T2 --&gt; S22["T2 再执行"]
+    S11 --&gt; E["交错状态指数增长"]
+    S12 --&gt; E
+    S21 --&gt; E
+    S22 --&gt; E
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_41_30.png" alt="多线程状态选择的指数级爆炸" loading="lazy">
+  <p class="video-caption">📷 多线程状态选择的指数级爆炸<br><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/?t=2490" target="_blank" rel="noopener">回到原视频 (00:41:30)</a></p>
+</div>
+
+<h3 id="43">4.3 并发支付漏洞</h3>
+<p><em>(参考时间: 00:42)</em></p>
+<p>一个看似正确的转账函数：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">unsigned</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">balance</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">100</span><span class="p">;</span>
+
+<span class="kt">int</span><span class="w"> </span><span class="nf">withdraw</span><span class="p">(</span><span class="kt">unsigned</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">amount</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">balance</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="n">amount</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">balance</span><span class="w"> </span><span class="o">-=</span><span class="w"> </span><span class="n">amount</span><span class="p">;</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">SUCCESS</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">FAIL</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>如果两个线程同时：</p>
+<ol>
+<li>读取 <code>balance == 100</code>；</li>
+<li>都判断余额足够；</li>
+<li>各自执行 <code>balance -= 100</code>；</li>
+</ol>
+<p>就会出现重复扣款或错误余额。如果 <code>balance</code> 是无符号整数，负数还可能回绕成巨大值。</p>
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant T1 as Thread 1
+    participant M as balance
+    participant T2 as Thread 2
+    T1-&gt;&gt;M: load 100
+    T2-&gt;&gt;M: load 100
+    T1-&gt;&gt;T1: check 100 &gt;= 100
+    T2-&gt;&gt;T2: check 100 &gt;= 100
+    T1-&gt;&gt;M: store 0
+    T2-&gt;&gt;M: store 0
+    Note over M: 两次提款只体现为一次扣减
+</code></pre></div>
+
+<p>这类 check-then-act 问题不只是课堂玩具。课程提到 Mt. Gox 攻击造成约 650,000 BTC 损失，以及 Diablo I 物品复制等真实漏洞。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_43_50.png" alt="两个线程同时判断余额导致并发支付漏洞" loading="lazy">
+  <p class="video-caption">📷 两个线程同时判断余额导致并发支付漏洞<br><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/?t=2630" target="_blank" rel="noopener">回到原视频 (00:43:50)</a></p>
+</div>
+
+<h3 id="44-diablo-i">4.4 Diablo I 的物品复制</h3>
+<p><em>(参考时间: 00:45)</em></p>
+<p>Diablo I 的复制过程依赖事件交错：</p>
+<ol>
+<li>玩家把要复制的物品丢到地上；</li>
+<li>角色正在执行“捡起地上物品”；</li>
+<li>玩家在角色完成动作前点击金币；</li>
+<li>两个事件竞争同一个全局“手中物品”变量；</li>
+<li>已写入的物品被金币覆盖；</li>
+<li>地上物品仍保留，于是物品被复制。</li>
+</ol>
+<p>这不是传统多核并行，而是事件并发，但本质仍然是多个控制流交错修改共享状态。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["角色准备捡起地上物品"] --&gt; B["写全局 current_item = 物品"]
+    C["鼠标点击金币"] --&gt; D["写全局 current_item = 金币"]
+    B --&gt; E{"哪个写生效？"}
+    D --&gt; E
+    E -- "金币覆盖物品" --&gt; F["物品仍在地上"]
+    F --&gt; G["玩家已有物品 + 地上物品"]
+    G --&gt; H["复制成功"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_45_30.png" alt="Diablo I 物品复制漏洞的事件交错" loading="lazy">
+  <p class="video-caption">📷 Diablo I 物品复制漏洞的事件交错<br><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/?t=2730" target="_blank" rel="noopener">回到原视频 (00:45:30)</a></p>
+</div>
+
+<h3 id="45-sum">4.5 <code>sum++</code> 不是原子操作</h3>
+<p><em>(参考时间: 00:47)</em></p>
+<div class="highlight"><pre><span></span><code><span class="cp">#define N 100000000</span>
+
+<span class="kt">long</span><span class="w"> </span><span class="n">sum</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">T_sum</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">tid</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">N</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">sum</span><span class="o">++</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">int</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">spawn</span><span class="p">(</span><span class="n">T_sum</span><span class="p">);</span>
+<span class="w">    </span><span class="n">spawn</span><span class="p">(</span><span class="n">T_sum</span><span class="p">);</span>
+<span class="w">    </span><span class="n">join</span><span class="p">();</span>
+<span class="w">    </span><span class="n">printf</span><span class="p">(</span><span class="s">"sum = %ld</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span><span class="w"> </span><span class="n">sum</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><code>sum++</code> 至少包含：</p>
+<div class="highlight"><pre><span></span><code>load sum → register
+add 1
+store register → sum
+</code></pre></div>
+
+<p>两个线程可能读同一个旧值，然后分别写回，后写者覆盖前写者。因此结果通常小于 <code>2N</code>，并且每次都不一样。</p>
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant T1 as Thread 1
+    participant M as sum
+    participant T2 as Thread 2
+    T1-&gt;&gt;M: load 1000
+    T2-&gt;&gt;M: load 1000
+    T1-&gt;&gt;T1: 1000 + 1
+    T2-&gt;&gt;T2: 1000 + 1
+    T1-&gt;&gt;M: store 1001
+    T2-&gt;&gt;M: store 1001
+    Note over M: 两次递增只增加 1
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_47_30.png" alt="多线程自增求和结果每次都不同" loading="lazy">
+  <p class="video-caption">📷 多线程自增求和结果每次都不同<br><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/?t=2850" target="_blank" rel="noopener">回到原视频 (00:47:30)</a></p>
+</div>
+
+<h3 id="46-np-hard">4.6 最小和是多少：一个 NP-hard 问题</h3>
+<p><em>(参考时间: 00:49)</em></p>
+<p>把 <code>sum++</code> 拆为三条可交错语句：</p>
+<div class="highlight"><pre><span></span><code>load R, sum
+add R, 1
+store sum, R
+</code></pre></div>
+
+<p>三个线程各执行三次。直觉会猜测最小值是 <code>3</code>，但正确最小值是 <code>2</code>。</p>
+<p>原因可以这样构造：</p>
+<ul>
+<li>让一个线程很晚才写回它在本轮读到的旧值；</li>
+<li>期间其他线程已经完成很多递增；</li>
+<li>最后再将旧值写回，覆盖掉大量增加。</li>
+</ul>
+<p>课程把判断运行历史是否可映射到一个顺序一致全局顺序的问题做成小游戏。该问题的泛化版本可以归约为 NP-complete。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["多个线程的局部读写历史"] --&gt; B["寻找全局串行顺序"]
+    B --&gt; C{"每次 load 都读到最近 store？"}
+    C -- "是" --&gt; D["Sequential consistency 成立"]
+    C -- "否" --&gt; E["调整事件顺序"]
+    E --&gt; B
+    B --&gt; F["问题泛化：NP-complete"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_50_30.png" alt="通过拖动事件寻找顺序一致执行" loading="lazy">
+  <p class="video-caption">📷 通过拖动事件寻找顺序一致执行<br><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/?t=3030" target="_blank" rel="noopener">回到原视频 (00:50:30)</a></p>
+</div>
+
+<h3 id="47-dekkerpeterson">4.7 Dekker、Peterson 与错误算法</h3>
+<p><em>(参考时间: 00:54)</em></p>
+<p>1960 年代，研究者试图在共享内存上实现原子性：</p>
+<ul>
+<li>最早的算法只能处理两个线程；</li>
+<li>很多算法被认为是正确的，后来却发现有漏洞；</li>
+<li>Dekker 算法是早期正确互斥算法之一；</li>
+<li>Peterson 的论文甚至指出，一些作者相信自己正确，其实不正确。</li>
+</ul>
+<p>“写对 1 + 1” 的难度并不来自代码长度，而来自必须证明：</p>
+<blockquote>
+<p>在所有线程交错和所有内存可见性结果下，互斥与进展性质都成立。</p>
+</blockquote>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["共享内存互斥问题"] --&gt; B["早期算法"]
+    B --&gt; C["大量算法被证明错误"]
+    C --&gt; D["Dekker：两线程互斥"]
+    D --&gt; E["Peterson：更一般化"]
+    E --&gt; F["仍需内存模型和原子性保证"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_55_00.png" alt="早期互斥算法与 Peterson 的论文讨论" loading="lazy">
+  <p class="video-caption">📷 早期互斥算法与 Peterson 的论文讨论<br><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/?t=3300" target="_blank" rel="noopener">回到原视频 (00:55:00)</a></p>
+</div>
+
+<h3 id="48-printf">4.8 <code>printf</code> 缓冲区也会共享</h3>
+<p><em>(参考时间: 00:56)</em></p>
+<p><code>printf</code> 中存在共享 <code>FILE</code> 缓冲：</p>
+<div class="highlight"><pre><span></span><code><span class="n">buf</span><span class="o">-&gt;</span><span class="n">pos</span><span class="o">++</span><span class="p">;</span>
+<span class="n">buf</span><span class="o">-&gt;</span><span class="n">data</span><span class="p">[</span><span class="n">pos</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ch</span><span class="p">;</span>
+</code></pre></div>
+
+<p>如果多个线程同时写同一个缓冲区，就可能出现覆盖、丢失和内容交错。</p>
+<p>标准库通过锁或其他同步机制保证 <code>printf</code> 的线程安全，但“线程安全”不等于多个调用会作为一个原子组合执行。多个 API 调用之间仍然需要应用自己同步。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Thread 1 printf"] --&gt; B["共享 stdout buffer"]
+    C["Thread 2 printf"] --&gt; B
+    B --&gt; D{"是否有内部同步？"}
+    D -- "是" --&gt; E["单次调用安全"]
+    D -- "否" --&gt; F["位置竞争与内容损失"]
+    E --&gt; G["多调用组合仍非原子"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_56_10.png" alt="多线程共享 stdio 缓冲区" loading="lazy">
+  <p class="video-caption">📷 多线程共享 stdio 缓冲区<br><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/?t=3370" target="_blank" rel="noopener">回到原视频 (00:56:10)</a></p>
+</div>
+
+<hr />
+<h2 id="5">5. 放弃二：并不存在顺序执行幻想</h2>
+<h3 id="51">5.1 编译器假设程序是确定性的</h3>
+<p><em>(参考时间: 00:59)</em></p>
+<p>性能非常昂贵，而编译器是性能优化的核心。Francis Allen 因编译优化贡献获得 2006 年图灵奖。</p>
+<p>编译器允许做：</p>
+<ul>
+<li>内联；</li>
+<li>常量传播；</li>
+<li>死代码删除；</li>
+<li>循环不变量外提；</li>
+<li>指令重排；</li>
+<li>消除重复 load / store。</li>
+</ul>
+<p>这些优化以“顺序程序语义不变”为前提。可一旦其他线程能修改共享变量，这个前提就不成立。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["C 源码"] --&gt; B["Inline"]
+    B --&gt; C["Constant propagation"]
+    C --&gt; D["Dead code elimination"]
+    D --&gt; E["Loop optimization"]
+    E --&gt; F["指令重排"]
+    F --&gt; G["高性能汇编"]
+    H["系统调用/volatile/barrier"] --&gt; I["优化边界"]
+    I --&gt; G
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_00_30.png" alt="编译器在顺序程序假设下进行优化" loading="lazy">
+  <p class="video-caption">📷 编译器在顺序程序假设下进行优化<br><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/?t=3630" target="_blank" rel="noopener">回到原视频 (01:00:30)</a></p>
+</div>
+
+<h3 id="52">5.2 等待旗子的代码为何会死循环</h3>
+<p><em>(参考时间: 01:03)</em></p>
+<p>两个线程像人一样共享教室空间：</p>
+<ul>
+<li>每个线程有自己的“脑子”，也就是私有栈；</li>
+<li>全局变量是教室里大家都能触碰的物体；</li>
+<li>一个线程举起 <code>flag</code>，另一个线程等待旗子。</li>
+</ul>
+<p>代码：</p>
+<div class="highlight"><pre><span></span><code><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">flag</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="cm">/* wait */</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>顺序程序里，如果循环中没有修改 <code>flag</code>，编译器可以假设 <code>flag</code> 永远不变：</p>
+<div class="highlight"><pre><span></span><code>if (!flag) {
+    while (1) { }
+}
+</code></pre></div>
+
+<p>于是另一个线程即使真的把 <code>flag</code> 设成 1，当前线程也可能永远读不到。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["while (!flag)"] --&gt; B["编译器分析顺序语义"]
+    B --&gt; C{"循环体内修改 flag？"}
+    C -- "否" --&gt; D["假设 flag 不变化"]
+    D --&gt; E["load flag 提到循环外"]
+    E --&gt; F["另一个线程写 flag 无效"]
+    F --&gt; G["死循环"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_04_40.png" alt="编译器把等待 flag 的循环优化成永久等待" loading="lazy">
+  <p class="video-caption">📷 编译器把等待 flag 的循环优化成永久等待<br><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/?t=3880" target="_blank" rel="noopener">回到原视频 (01:04:40)</a></p>
+</div>
+
+<h3 id="53-o1-o2">5.3 <code>-O1</code> 与 <code>-O2</code> 下完全不同的求和</h3>
+<p><em>(参考时间: 01:07)</em></p>
+<p>同一份多线程求和代码：</p>
+<ul>
+<li><code>-O1</code> 常得到 <code>N</code>；</li>
+<li><code>-O2</code> 却可能得到看起来正确的 <code>2N</code>。</li>
+</ul>
+<p><code>-O1</code> 的汇编可能把 <code>sum</code>：</p>
+<div class="highlight"><pre><span></span><code>load sum 一次
+循环在寄存器中 N 次加一
+store sum 一次
+</code></pre></div>
+
+<p>两个线程几乎同时加载相同旧值，最后各自写回，因此最终只增加一份 <code>N</code>。</p>
+<p><code>-O2</code> 可能把整个循环优化为：</p>
+<div class="highlight"><pre><span></span><code>sum += N
+</code></pre></div>
+
+<p>两个加法执行只有很少几条指令，碰撞窗口非常窄，反而“经常得到正确结果”。</p>
+<p>这正是最危险的情况：测试经常通过，但程序并没有正确同步。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["同一份并发求和代码"] --&gt; B["-O1"]
+    A --&gt; C["-O2"]
+    B --&gt; D["一件 load + 长循环 + 一件 store"]
+    D --&gt; E["两个线程覆盖彼此，结果常为 N"]
+    C --&gt; F["sum += N，仅几条指令"]
+    F --&gt; G["冲突窗口很小，结果常为 2N"]
+    E --&gt; H["两次运行行为不同"]
+    G --&gt; H
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_07_30.png" alt="`-O1` 与 `-O2` 产生完全不同的并发结果" loading="lazy">
+  <p class="video-caption">📷 `-O1` 与 `-O2` 产生完全不同的并发结果<br><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/?t=4050" target="_blank" rel="noopener">回到原视频 (01:07:30)</a></p>
+</div>
+
+<h3 id="54-compiler-barrier-volatile">5.4 Compiler Barrier 与 <code>volatile</code></h3>
+<p><em>(参考时间: 01:09)</em></p>
+<p>可以插入空汇编阻止优化穿透：</p>
+<div class="highlight"><pre><span></span><code><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">flag</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">asm</span><span class="w"> </span><span class="k">volatile</span><span class="p">(</span><span class="s">""</span><span class="w"> </span><span class="o">:::</span><span class="w"> </span><span class="s">"memory"</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>也可以让变量每次真实访问内存：</p>
+<div class="highlight"><pre><span></span><code><span class="k">volatile</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">flag</span><span class="p">;</span>
+</code></pre></div>
+
+<p>这些技术在嵌入式内存映射寄存器和底层代码中有用，但课程明确不建议用它们来“玩共享内存”。</p>
+<p>原因是：</p>
+<ul>
+<li>它们只约束编译器，不约束 CPU 乱序和缓存；</li>
+<li>语言级数据竞争在 C/C++ 中仍是 undefined behavior；</li>
+<li>正确方案应使用语言或系统提供的原子变量、锁和内存序。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["优化打破并发假设"] --&gt; B["Compiler barrier"]
+    A --&gt; C["volatile"]
+    B --&gt; D["限制编译器移动"]
+    C --&gt; E["限制编译器合并 load/store"]
+    D --&gt; F["仍无法单独解决 CPU/缓存乱序"]
+    E --&gt; F
+    F --&gt; G["使用标准原子与同步原语"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_09_30.png" alt="编译器屏障和 volatile 的适用范围" loading="lazy">
+  <p class="video-caption">📷 编译器屏障和 volatile 的适用范围<br><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/?t=4170" target="_blank" rel="noopener">回到原视频 (01:09:30)</a></p>
+</div>
+
+<hr />
+<h2 id="6">6. 放弃三：处理器也不是顺序执行</h2>
+<h3 id="61-cpu">6.1 CPU 也是一层编译器</h3>
+<p><em>(参考时间: 01:12)</em></p>
+<p>程序经历两层“编译”：</p>
+<div class="highlight"><pre><span></span><code>.c → .s：软件编译器优化
+.s → CPU 内部状态：处理器再次分析、重排和并行执行
+</code></pre></div>
+
+<p>现代 CPU：</p>
+<ul>
+<li>同时取入、译码多条指令；</li>
+<li>分析数据依赖；</li>
+<li>将互不依赖的指令并行执行；</li>
+<li>让慢速 load/store 后续的指令继续推进；</li>
+<li>使用分支预测提前执行可能路径。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["C 源码"] --&gt; B["编译器优化"]
+    B --&gt; C["汇编指令"]
+    C --&gt; D["CPU 取指 / 译码"]
+    D --&gt; E["动态数据流分析"]
+    E --&gt; F["乱序执行"]
+    F --&gt; G["结果按架构规则提交"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_13_30.png" alt="处理器在运行时做动态数据流分析与乱序执行" loading="lazy">
+  <p class="video-caption">📷 处理器在运行时做动态数据流分析与乱序执行<br><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/?t=4410" target="_blank" rel="noopener">回到原视频 (01:13:30)</a></p>
+</div>
+
+<h3 id="62">6.2 超标量与乱序执行</h3>
+<p><em>(参考时间: 01:15)</em></p>
+<p>两条彼此独立的指令可以被调换：</p>
+<div class="highlight"><pre><span></span><code><span class="nf">mov</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="no">x</span>
+<span class="nf">mov</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="no">y</span>
+</code></pre></div>
+
+<p>最终结果等价，但中间状态和内存可见顺序可能不同。现代处理器还可能在同一个时钟周期内执行多条指令。</p>
+<p>对单线程来说，硬件只需保证“可观察结果”等价；对多线程来说，其他处理器何时看到某个写，就变成了程序行为的一部分。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["指令 1: mov 1, x"] --&gt; C["重排窗口"]
+    B["指令 2: mov 2, y"] --&gt; C
+    C --&gt; D["并行执行"]
+    D --&gt; E["各自写入缓存 / store buffer"]
+    E --&gt; F["其他 CPU 可见顺序不确定"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_15_00.png" alt="处理器内部可同时持有和重排多条指令" loading="lazy">
+  <p class="video-caption">📷 处理器内部可同时持有和重排多条指令<br><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/?t=4500" target="_blank" rel="noopener">回到原视频 (01:15:00)</a></p>
+</div>
+
+<h3 id="63">6.3 宽松内存模型</h3>
+<p><em>(参考时间: 01:16)</em></p>
+<p>真实共享内存更像每 CPU 有一份本地缓存副本：</p>
+<ul>
+<li>store 先写本地缓存或 store buffer；</li>
+<li>稍后再同步给其他处理器；</li>
+<li>load 可能先看到本地旧值；</li>
+<li>所有内存最终收敛，但中间可见顺序没有统一瞬时视图。</li>
+</ul>
+<p>这与课程模型中的“每一步选择一个线程写全局内存”完全不同。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["CPU 0 store x=1"] --&gt; B["CPU 0 local cache"]
+    B --&gt; C["cache coherence / memory order"]
+    C --&gt; D["CPU 1 cache"]
+    E["CPU 1 load x"] --&gt; D
+    F["CPU 1 load y"] --&gt; G["CPU 1 store y=1"]
+    G --&gt; D
+    D --&gt; H["最终一致，但观察顺序可不同"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_17_30.png" alt="宽松内存模型允许本地缓存与延迟同步" loading="lazy">
+  <p class="video-caption">📷 宽松内存模型允许本地缓存与延迟同步<br><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/?t=4650" target="_blank" rel="noopener">回到原视频 (01:17:30)</a></p>
+</div>
+
+<h3 id="64-litmus-test-0-0">6.4 Litmus Test：理论上不可能出现的 0, 0</h3>
+<p><em>(参考时间: 01:18)</em></p>
+<p>考虑两个线程：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">int</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">T1</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">r1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">y</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">T2</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">r2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">x</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>在顺序一致模型中：</p>
+<ul>
+<li>至少有一个 store 先发生；</li>
+<li>因此不可能两个 load 都读到 0；</li>
+<li>可能结果包括 <code>(1,0)</code>、<code>(0,1)</code>、<code>(1,1)</code>；</li>
+<li>不可能出现 <code>(0,0)</code>。</li>
+</ul>
+<p>在宽松内存模型下，<code>(0,0)</code> 可能出现：</p>
+<ol>
+<li>CPU 0 把 <code>x=1</code> 写入本地 store buffer；</li>
+<li>CPU 1 把 <code>y=1</code> 写入本地 store buffer；</li>
+<li>CPU 0 还没有看到 <code>y=1</code>，读到 <code>y=0</code>；</li>
+<li>CPU 1 还没有看到 <code>x=1</code>，读到 <code>x=0</code>；</li>
+<li>最终两个 store 再传播。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant C0 as CPU 0 / T1
+    participant B0 as Store Buffer 0
+    participant B1 as Store Buffer 1
+    participant C1 as CPU 1 / T2
+    C0-&gt;&gt;B0: x = 1
+    C1-&gt;&gt;B1: y = 1
+    C0-&gt;&gt;C0: load y → 0
+    C1-&gt;&gt;C1: load x → 0
+    B0--&gt;&gt;C1: x = 1 later
+    B1--&gt;&gt;C0: y = 1 later
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["顺序一致模型"] --&gt; B["(0,0) 不可能"]
+    C["宽松内存模型"] --&gt; D["(0,0) 可能出现"]
+    D --&gt; E["两个 store 都仍在本地缓冲区"]
+    E --&gt; F["两个 load 都读到旧值"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_20_10.png" alt="Litmus test 在宽松内存模型下观察到 0, 0" loading="lazy">
+  <p class="video-caption">📷 Litmus test 在宽松内存模型下观察到 0, 0<br><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/?t=4810" target="_blank" rel="noopener">回到原视频 (01:20:10)</a></p>
+</div>
+
+<h3 id="65-unix">6.5 用 Unix 管道做大量实验</h3>
+<p><em>(参考时间: 01:20)</em></p>
+<p>课程反复运行 litmus test，再通过管道处理结果：</p>
+<div class="highlight"><pre><span></span><code>./litmus<span class="w"> </span><span class="p">|</span><span class="w"> </span>head<span class="w"> </span>-n<span class="w"> </span><span class="m">100000</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>sort<span class="w"> </span><span class="p">|</span><span class="w"> </span>uniq<span class="w"> </span>-c
+</code></pre></div>
+
+<p>实验可能观察到：</p>
+<div class="highlight"><pre><span></span><code>0 0   6xxxx times
+0 1   3xxxx times
+1 0   少量
+1 1   少量或不可见
+</code></pre></div>
+
+<p>具体数量会随机器、负载、打印和同步方式变化，但它证明 <code>(0,0)</code> 的确在现实中发生。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["litmus test"] --&gt; B["Head 限制次数"]
+    B --&gt; C["sort"]
+    C --&gt; D["uniq -c"]
+    D --&gt; E["统计每种观察结果"]
+    E --&gt; F["观察到违反顺序一致的结果"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_21_30.png" alt="大量实验结果中观察到顺序一致模型不允许的状态" loading="lazy">
+  <p class="video-caption">📷 大量实验结果中观察到顺序一致模型不允许的状态<br><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/?t=4890" target="_blank" rel="noopener">回到原视频 (01:21:30)</a></p>
+</div>
+
+<hr />
+<h2 id="7">7. 总结：要放弃的是什么</h2>
+<h3 id="71">7.1 放弃简化直觉，而不是并发编程</h3>
+<p><em>(参考时间: 01:22)</em></p>
+<p>“从入门到放弃”不是不再并发，而是放弃以下幻想：</p>
+<ul>
+<li>认为线程按源码语句逐条顺序执行；</li>
+<li>认为一次测试通过就代表程序正确；</li>
+<li>认为编译器不会重排共享内存访问；</li>
+<li>认为 CPU 会按程序顺序让其他处理器看到 store；</li>
+<li>认为 <code>sum++</code> 是一条不可分割的语句。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["需要放弃的幻想"] --&gt; B["状态迁移确定"]
+    A --&gt; C["顺序执行"]
+    A --&gt; D["指令顺序对全局可见"]
+    B --&gt; E["使用同步与原子操作"]
+    C --&gt; E
+    D --&gt; E
+    E --&gt; F["理解并发、控制并发"]
+</code></pre></div>
+
+<h3 id="72">7.2 正确工程的防线</h3>
+<p>后续课程会引入互斥、同步和并发控制：</p>
+<ul>
+<li>mutex / lock；</li>
+<li>condition variable；</li>
+<li>atomic operations；</li>
+<li>memory ordering；</li>
+<li>lock-free data structure 及其正确性证明。</li>
+</ul>
+<p>操作系统需要为线程提供稳定的同步原语，而不是把裸共享内存和宽松内存模型直接交给应用开发者。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["裸共享内存"] --&gt; B["Mutex"]
+    A --&gt; C["Condition Variable"]
+    A --&gt; D["Atomic"]
+    A --&gt; E["Memory Ordering"]
+    B --&gt; F["先保证互斥"]
+    C --&gt; G["等待与唤醒"]
+    D --&gt; H["不可分割读改写"]
+    E --&gt; I["限定可见顺序"]
+    F --&gt; J["可控的并发程序"]
+    G --&gt; J
+    H --&gt; J
+    I --&gt; J
+</code></pre></div>
+
+<h3 id="73-ai">7.3 AI 时代的思考</h3>
+<p><em>(参考时间: 01:22)</em></p>
+<p>如果把 AI 看作“核动力牛马”，人类不需要为了操作方便获得一把没有保护措施的刀。更合理的方向是：</p>
+<ul>
+<li>默认接口安全、可组合；</li>
+<li>只在 extreme hot path 上开放最低层机制；</li>
+<li>让 AI 处理复杂细节和验证；</li>
+<li>人类保留概念、目标和 critical thinking。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["AI 处理大量重复与低层细节"] --&gt; B["默认使用安全抽象"]
+    B --&gt; C["关键路径开放极致性能接口"]
+    C --&gt; D["工具验证并发正确性"]
+    D --&gt; E["人类控制目标、边界与风险"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_22_20.png" alt="AI 时代对共享内存与安全抽象的重新思考" loading="lazy">
+  <p class="video-caption">📷 AI 时代对共享内存与安全抽象的重新思考<br><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/?t=4940" target="_blank" rel="noopener">回到原视频 (01:22:20)</a></p>
+</div>
+
+<hr />
+<h2 id="8">8. 讲义延伸：并发程序的状态模型</h2>
+<blockquote>
+<p><strong>编者说明</strong>：以下是对官方讲义中状态机模型的归纳，用于连接本章概念。</p>
+</blockquote>
+<p>单线程程序：</p>
+<div class="highlight"><pre><span></span><code>Program State = Globals + Stack + PC
+NextState = f(ProgramState)
+</code></pre></div>
+
+<p>共享内存线程：</p>
+<div class="highlight"><pre><span></span><code>Program State =
+    Globals
+  + [Stack1 + PC1]
+  + [Stack2 + PC2]
+  + ...
+
+Next(State) =
+    choose(thread_i)
+    execute_one_step(thread_i, shared_globals)
+</code></pre></div>
+
+<p>概念模型非常简单，难点是：</p>
+<ul>
+<li><code>choose</code> 没有固定规则；</li>
+<li><code>execute_one_step</code> 中的 load/store 不一定直接访问全局内存；</li>
+<li>编译器和 CPU 会改变真实执行顺序；</li>
+<li>C/C++ 数据竞争本身进入 undefined behavior。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["概念模型：选择线程执行一步"] --&gt; B["规范层：Sequential Consistency"]
+    B --&gt; C["编译器实现层"]
+    C --&gt; D["CPU 乱序执行层"]
+    D --&gt; E["缓存与内存一致性层"]
+    E --&gt; F["语言内存模型"]
+    F --&gt; G["应用同步原语"]
+    G --&gt; H["真正可推理的并发行为"]
+</code></pre></div>
+
+<hr />
+<h2 id="9">9. 总结：现代计算机系统中最危险的抽象漏洞</h2>
+<p>这一讲从最容易理解的地方出发，却逐步拆掉了三个基础假设：</p>
+<ol>
+<li><strong>确定性</strong>：多线程执行不再只有一条状态迁移轨迹；</li>
+<li><strong>顺序执行</strong>：编译器会按单线程语义重写程序；</li>
+<li><strong>指令顺序</strong>：CPU 和缓存会让 store 对不同处理器以不同顺序可见。</li>
+</ol>
+<p>同时，课程用大量例子展示了后果：</p>
+<ul>
+<li>并发提款；</li>
+<li>Diablo 物品复制；</li>
+<li><code>sum++</code> 丢失更新；</li>
+<li>NP-complete 的执行历史重建；</li>
+<li><code>while (!flag)</code> 被优化成死循环；</li>
+<li><code>-O1</code> / <code>-O2</code> 下结果完全不同；</li>
+<li><code>(0,0)</code> 在 litmus test 中出现；</li>
+<li><code>printf</code> 的缓存也依赖线程安全实现。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["线程模型"] --&gt; B["非确定性"]
+    B --&gt; C["数据竞争"]
+    C --&gt; D["编译器优化"]
+    D --&gt; E["CPU 乱序"]
+    E --&gt; F["放宽内存模型"]
+    F --&gt; G["需要同步原语"]
+    G --&gt; H["从入门到放弃，再从控制中重建"]
+</code></pre></div>
+
+<p>课程的核心结论是：</p>
+<blockquote>
+<p>不要直接玩弄共享内存。</p>
+</blockquote>
+<p>并不是永远不用并发，而是要使用明确的同步机制，把不确定的交错限制在可推理的边界内。接下来的课程将正式进入互斥和同步，学习怎样把“魔鬼”重新装回盒子里。</p>
+<hr />
+<h2 id="_3">附：官方参考与延伸阅读</h2>
+<p>以下链接来自官方讲义第 13 讲及课堂内容：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/thread-lib">Mini thread library</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/thread-examples">Thread behavior examples</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/alipay">Fake Alipay demo</a></li>
+<li><a href="https://jyywiki.cn/OS/img/diablo-item-clone.mp4">Diablo item clone video</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/sum-mutexapi">Sum with mutex API</a></li>
+<li><a href="https://epubs.siam.org/doi/10.1137/S0097539794279614">Trace Recovery is NP-Complete</a></li>
+<li><a href="https://jyywiki.cn/OS/2026/vsc.html">VSC concurrency puzzle</a></li>
+<li><a href="https://en.wikipedia.org/wiki/Dekker%27s_algorithm">Dekker’s Algorithm</a></li>
+<li><a href="https://www.usenix.org/conference/osdi10/ad-hoc-synchronization-considered-harmful">Ad Hoc Synchronization Considered Harmful</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/mem-model">Relaxed memory model demo</a></li>
+<li><a href="https://research.swtch.com/mm">Russ Cox, Memory Models</a></li>
+<li><a href="https://sourceware.org/gdb/onlinedocs/gdb/Threads.html">GDB Threads</a></li>
+</ul>
+<p>阅读材料：</p>
+<ul>
+<li><em>Operating Systems: Three Easy Pieces</em> 第 25 章，Dialogue on Concurrency；</li>
+<li>第 26 章，Concurrency and Threads；</li>
+<li>第 27 章，Thread API；</li>
+<li>Russ Cox, Memory Models。</li>
+</ul>
+<p>官方课程资料：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/2026/">课程主页</a></li>
+<li><a href="https://jyywiki.cn/OS/2026/lect13.md">第 13 讲讲义：多处理器编程</a></li>
+<li><a href="https://www.bilibili.com/video/BV1vgQGBREyJ/">视频：13 - 多处理器编程：从入门到放弃</a></li>
+</ul>
+<blockquote>
+<p><strong>版权与署名</strong>：本讲课程材料由蒋炎岩（jyy）编写。课程讲义与幻灯片采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书保留课程出处、作者署名与许可说明。</p>
+</blockquote>
+    </article>
+
+    <!-- Mermaid 图表引擎初始化 -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            mermaid.initialize({ startOnLoad: false, theme: 'default' });
+            
+            // 兼容普通代码块以及丢失 language-mermaid 类名的情况 (CodeHilite 干扰)
+            const codeNodes = document.querySelectorAll('pre code, .highlight code');
+            codeNodes.forEach(function(node) {
+                const text = node.textContent.trim();
+                // 匹配常见的 mermaid 图表前缀
+                if (text.startsWith('graph ') || text.startsWith('flowchart ') || text.startsWith('sequenceDiagram') || text.startsWith('gantt') || text.startsWith('pie') || text.startsWith('classDiagram') || text.startsWith('stateDiagram') || text.startsWith('mindmap')) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.className = 'mermaid';
+                    tempDiv.textContent = text;
+                    
+                    // 获取需要替换的最外层父节点 (比如 div.highlight 或者 pre)
+                    const wrapper = node.closest('.highlight') || node.parentNode;
+                    wrapper.replaceWith(tempDiv); 
+                }
+            });
+            
+            // 所有节点转换完成，统一进行图表动态绘制
+            mermaid.run();
+        });
+    </script>
+    <!-- Lightbox：截图点击放大 -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const lightbox = document.createElement('div');
+            lightbox.className = 'lightbox';
+            lightbox.innerHTML = '<img alt=""><div class="lightbox-caption"></div>';
+            document.body.appendChild(lightbox);
+            const lbImg = lightbox.querySelector('img');
+            const lbCap = lightbox.querySelector('.lightbox-caption');
+            function openLightbox(src, alt) {
+                lbImg.src = src; lbImg.alt = alt || '';
+                lbCap.textContent = alt || '';
+                lightbox.classList.add('open');
+                document.body.style.overflow = 'hidden';
+            }
+            function closeLightbox() {
+                lightbox.classList.remove('open');
+                lbImg.src = '';
+                document.body.style.overflow = '';
+            }
+            document.querySelectorAll('.screenshot-card img').forEach(function(img) {
+                img.addEventListener('click', function() { openLightbox(img.src, img.alt); });
+            });
+            lightbox.addEventListener('click', closeLightbox);
+            document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
+        });
+    </script>
+</body>
+</html>
