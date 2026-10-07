@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>存储设备原理：一个 bit 如何跨越时间</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* ── 基础重置 ── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            color-scheme: light;
+            --bg-primary: #f7f7f8;
+            --bg-secondary: #ffffff;
+            --bg-card: #eef0f3;
+            --bg-code: #f2f3f5;
+            --text-primary: #1f2328;
+            --text-secondary: #57606a;
+            --text-muted: #6e7781;
+            --accent: #2563eb;
+            --accent-glow: rgba(37, 99, 235, 0.08);
+            --border: #d9dce1;
+            --border-subtle: #e7e9ec;
+            --radius: 12px;
+            --shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Serif SC', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.8;
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── 文章容器 ── */
+        .book-content {
+            max-width: 780px;
+            margin: 0 auto;
+            padding: 60px 32px 120px;
+        }
+
+        /* ── 标题 ── */
+        h1 {
+            font-size: 2.2em;
+            font-weight: 700;
+            margin: 0 0 12px;
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+        }
+
+        h2 {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 56px 0 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h3 {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: var(--accent);
+            margin: 36px 0 12px;
+        }
+
+        /* ── 段落与文字 ── */
+        p {
+            margin: 0 0 16px;
+            color: var(--text-primary);
+        }
+
+        strong {
+            color: #0f172a;
+            font-weight: 600;
+        }
+
+        em {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.2s;
+        }
+        a:hover {
+            border-bottom-color: var(--accent);
+        }
+
+        /* ── 引用 ── */
+        blockquote {
+            margin: 24px 0;
+            padding: 16px 20px;
+            background: var(--bg-secondary);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 var(--radius) var(--radius) 0;
+            color: var(--text-secondary);
+        }
+        blockquote p { margin: 0; }
+
+        /* ── 列表 ── */
+        ul, ol {
+            margin: 12px 0 20px 24px;
+            color: var(--text-primary);
+        }
+        li {
+            margin: 6px 0;
+        }
+
+        /* ── 分割线 ── */
+        hr {
+            border: none;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border), transparent);
+            margin: 48px 0;
+        }
+
+        /* ── 表格 ── */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 24px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+        thead {
+            background: var(--bg-card);
+        }
+        th {
+            padding: 12px 16px;
+            font-weight: 600;
+            text-align: left;
+            color: var(--accent);
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        td {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border-subtle);
+        }
+        tbody tr {
+            background: var(--bg-secondary);
+            transition: background 0.15s;
+        }
+        tbody tr:hover {
+            background: var(--bg-card);
+        }
+
+        /* ── 代码 ── */
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-code);
+            padding: 2px 7px;
+            border-radius: 5px;
+            font-size: 0.88em;
+            color: #6d28d9;
+        }
+
+        pre {
+            margin: 20px 0;
+            padding: 20px 24px;
+            background: var(--bg-code);
+            border-radius: var(--radius);
+            overflow-x: auto;
+            border: 1px solid var(--border);
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9em;
+            color: var(--text-primary);
+        }
+
+        /* ── 视频嵌入卡片 ── */
+        .video-card {
+            margin: 32px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .video-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(15, 23, 42, 0.12);
+        }
+
+        .video-wrapper {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 */
+            height: 0;
+            overflow: hidden;
+        }
+        .video-wrapper iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .video-card img {
+            width: 100%;
+            display: block;
+        }
+
+        .video-caption {
+            padding: 12px 16px;
+            font-size: 0.88em;
+            color: var(--text-secondary);
+            text-align: center;
+            line-height: 1.6;
+            margin: 0;
+        }
+        .video-caption a {
+            color: var(--accent);
+        }
+
+        .video-card.fallback {
+            padding: 20px;
+            text-align: center;
+        }
+
+        /* ── Lightbox：截图点击放大 ── */
+        .screenshot-card img { cursor: zoom-in; transition: opacity 0.15s; }
+        .screenshot-card img:hover { opacity: 0.9; }
+        .lightbox {
+            position: fixed; inset: 0; z-index: 999;
+            display: none; align-items: center; justify-content: center;
+            background: rgba(5, 5, 8, 0.92); backdrop-filter: blur(4px);
+            cursor: zoom-out; padding: 24px;
+        }
+        .lightbox.open { display: flex; }
+        .lightbox img {
+            max-width: 96vw; max-height: 90vh;
+            border-radius: 8px; box-shadow: 0 12px 60px rgba(0,0,0,0.7);
+        }
+        .lightbox-caption {
+            position: absolute; bottom: 14px; left: 0; right: 0;
+            text-align: center; color: var(--text-secondary); font-size: 0.85em;
+        }
+
+        /* ── 顶部信息栏 ── */
+        .book-content > blockquote:first-of-type {
+            background: var(--accent-glow);
+            border-left-color: var(--accent);
+            border-radius: var(--radius);
+            margin-bottom: 32px;
+        }
+
+        /* ── 图表居中 ── */
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            margin: 32px 0;
+            overflow-x: auto;
+        }
+
+        /* ── 滚动条 ── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* ── 响应式 ── */
+        @media (max-width: 640px) {
+            .book-content { padding: 32px 16px 80px; }
+            h1 { font-size: 1.7em; }
+            h2 { font-size: 1.3em; }
+        }
+    </style>
+</head>
+<body>
+    <article class="book-content">
+        <h1 id="bit">存储设备原理：一个 bit 如何跨越时间</h1>
+<blockquote>
+<p><strong>课程</strong>：2026 春季学期《操作系统原理》<br />
+<strong>讲师</strong>：蒋炎岩（jyy）<br />
+<strong>官方课程主页</strong>：<a href="https://jyywiki.cn/OS/2026/">https://jyywiki.cn/OS/2026/</a><br />
+<strong>官方讲义</strong>：<a href="https://jyywiki.cn/OS/2026/lect23.md">https://jyywiki.cn/OS/2026/lect23.md</a><br />
+<strong>视频来源</strong>：<a href="https://www.bilibili.com/video/BV1RHLh6pEqn/">Bilibili BV1RHLh6pEqn</a><br />
+<strong>版权说明</strong>：课程讲义与幻灯片归蒋炎岩所有，采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书是对课堂讲授的书面化重构，保留出处与许可说明。</p>
+</blockquote>
+<h2 id="_1">导语：持久化就是让状态跨越时间</h2>
+<p><em>(参考时间: 00:00)</em></p>
+<p>“持久化”并不神秘。只要存在一个能够反复读写、并且断电后仍能保持状态的结构，就可以记录一个 bit：</p>
+<div class="highlight"><pre><span></span><code>可写状态 = 0
+可写状态 = 1
+</code></pre></div>
+
+<p>真正的挑战是如何让这个状态：</p>
+<ul>
+<li>足够小，提高密度；</li>
+<li>足够快，匹配 CPU；</li>
+<li>足够稳定，跨越重启和时间；</li>
+<li>足够便宜，能够大规模制造。</li>
+</ul>
+<p>这张时间线从磁、坑、光一直走到电荷与集成电路。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["可改写状态"] --&gt; B["磁"]
+    A --&gt; C["坑 / 光"]
+    A --&gt; D["电荷 / 电路"]
+    B --&gt; E["磁带 → 磁鼓 → 磁盘 → 软盘"]
+    C --&gt; F["CD / DVD / 玻璃存储"]
+    D --&gt; G["Flash / SSD"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_04_30.png" alt="从可改写状态出发理解存储设备" loading="lazy">
+  <p class="video-caption">📷 从可改写状态出发理解存储设备<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=270" target="_blank" rel="noopener">回到原视频 (00:04:30)</a></p>
+</div>
+
+<hr />
+<h2 id="1">1. 从磁性画板到计算机存储</h2>
+<h3 id="11">1.1 一个能写、能擦、能读的状态</h3>
+<p><em>(参考时间: 00:05)</em></p>
+<p>磁性画板的铁粉可以被磁笔吸起，再用磁铁刷掉。人眼可以读出图案。</p>
+<p>计算机存储的要求更高：</p>
+<blockquote>
+<p>每一个 bit 必须能够被电信号写出，并被电信号读回。</p>
+</blockquote>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["物理状态"] --&gt; B{"能被读取？"}
+    B -- "否" --&gt; C["无法进入计算机"]
+    B -- "是" --&gt; D{"能被改写？"}
+    D -- "否" --&gt; E["只读介质"]
+    D -- "是" --&gt; F["可读写持久存储"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_06_30.png" alt="磁性画板体现可反复改写的状态" loading="lazy">
+  <p class="video-caption">📷 磁性画板体现可反复改写的状态<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=390" target="_blank" rel="noopener">回到原视频 (00:06:30)</a></p>
+</div>
+
+<h3 id="12">1.2 电磁感应连接数字与物理世界</h3>
+<p><em>(参考时间: 00:07)</em></p>
+<p>沿一条介质排列许多可磁化单元：</p>
+<ul>
+<li>磁化方向表示 0 或 1；</li>
+<li>读写头经过时切割磁感线；</li>
+<li>感应电流方向用于读取；</li>
+<li>强磁场用于写入。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Write Head"] --&gt; B["Strong Magnetic Field"]
+    B --&gt; C["Magnetization Direction"]
+    C --&gt; D["Stored Bit"]
+    D --&gt; E["Read Head"]
+    E --&gt; F["Induced Current"]
+    F --&gt; G["Recovered Bit"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_08_30.png" alt="电磁感应让磁场状态可以被电信号读写" loading="lazy">
+  <p class="video-caption">📷 电磁感应让磁场状态可以被电信号读写<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=510" target="_blank" rel="noopener">回到原视频 (00:08:30)</a></p>
+</div>
+
+<hr />
+<h2 id="2-bit">2. 磁存储：先把 bit 排成线，再把线卷起来</h2>
+<h3 id="21">2.1 磁带：一维存储</h3>
+<p><em>(参考时间: 00:09)</em></p>
+<p>磁带出现于 1928 年，介质是均匀涂覆铁磁材料的带子。</p>
+<p>特点：</p>
+<ul>
+<li>制造便宜；</li>
+<li>容量高；</li>
+<li>长时间保存可靠；</li>
+<li>顺序读写尚可；</li>
+<li>随机访问极慢。</li>
+</ul>
+<p>现代磁带利用高密度磁畴，可达到约 <code>300 Gb/in²</code>，单盘容量可到 <code>30 TB</code>。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["长条介质"] --&gt; B["连续磁畴"]
+    B --&gt; C["磁头顺序读取"]
+    C --&gt; D["顺序性能好"]
+    C --&gt; E["随机定位慢"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_10_30.png" alt="磁带把大量 bit 排成一维长序列" loading="lazy">
+  <p class="video-caption">📷 磁带把大量 bit 排成一维长序列<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=630" target="_blank" rel="noopener">回到原视频 (00:10:30)</a></p>
+</div>
+
+<h3 id="22">2.2 随机访问短板</h3>
+<p><em>(参考时间: 00:12)</em></p>
+<p>如果把整个磁带当作内存映射：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">char</span><span class="w"> </span><span class="o">*</span><span class="n">p</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">mmap</span><span class="p">(</span><span class="n">tape</span><span class="p">,</span><span class="w"> </span><span class="n">size</span><span class="p">,</span><span class="w"> </span><span class="p">...);</span>
+<span class="n">p</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+<span class="n">p</span><span class="p">[</span><span class="mi">100000000</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">2</span><span class="p">;</span>
+</code></pre></div>
+
+<p>第二次数数必须让磁带快速前进或倒带，等待时间可能非常长。</p>
+<p>因此磁带适合：</p>
+<ul>
+<li>冷数据归档；</li>
+<li>长期备份；</li>
+<li>音频、视频等顺序读写；</li>
+<li>很少随机访问的场景。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["读取位置 A"] --&gt; B["转动定位"]
+    B --&gt; C["读取位置 B"]
+    C --&gt; D{"位置方向相反？"}
+    D -- "是" --&gt; E["倒带 / 长距离移动"]
+    E --&gt; F["随机访问极慢"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_12_00.png" alt="一维磁带的高容量换来极高的随机访问延迟" loading="lazy">
+  <p class="video-caption">📷 一维磁带的高容量换来极高的随机访问延迟<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=720" target="_blank" rel="noopener">回到原视频 (00:12:00)</a></p>
+</div>
+
+<h3 id="23">2.3 磁鼓：把一维介质绕成圆</h3>
+<p><em>(参考时间: 00:17)</em></p>
+<p>磁鼓（1932）把一维介质绕在旋转圆柱上，并放置多个读写头：</p>
+<ul>
+<li>随机访问延迟不超过一个旋转周期；</li>
+<li>读写头可以并行；</li>
+<li>容量比磁带低，但随机性能明显改善。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["磁鼓"] --&gt; B["持续旋转"]
+    B --&gt; C1["Read Head 1"]
+    B --&gt; C2["Read Head 2"]
+    B --&gt; C3["Read Head N"]
+    C1 --&gt; D["多个位置并行读取"]
+    C2 --&gt; D
+    C3 --&gt; D
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_17_30.png" alt="磁鼓用旋转减少随机定位等待" loading="lazy">
+  <p class="video-caption">📷 磁鼓用旋转减少随机定位等待<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=1050" target="_blank" rel="noopener">回到原视频 (00:17:30)</a></p>
+</div>
+
+<h3 id="24">2.4 磁盘：二维平面上的多层磁带</h3>
+<p><em>(参考时间: 00:19)</em></p>
+<p>硬盘（1956）把数据写入多个盘片的双面磁道：</p>
+<ul>
+<li>盘片高速旋转；</li>
+<li>读写头沿半径方向移动；</li>
+<li>多个盘片并行读写；</li>
+<li>高密度、容量大、成本低。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["多个盘片"] --&gt; B1["上表面读写头"]
+    A --&gt; B2["下表面读写头"]
+    B1 --&gt; C["磁道"]
+    B2 --&gt; C
+    C --&gt; D["旋转 + 寻道定位"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_19_30.png" alt="磁盘通过多层盘片和磁道提高容量" loading="lazy">
+  <p class="video-caption">📷 磁盘通过多层盘片和磁道提高容量<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=1170" target="_blank" rel="noopener">回到原视频 (00:19:30)</a></p>
+</div>
+
+<h3 id="25">2.5 寻道与旋转延迟</h3>
+<p><em>(参考时间: 00:22)</em></p>
+<p>随机读取一个扇区通常要：</p>
+<ol>
+<li>把读写头移动到目标磁道；</li>
+<li>等盘片旋转到目标扇区；</li>
+<li>读写数据。</li>
+</ol>
+<p>7200 RPM 约等于每秒 120 转，平均旋转等待约 <code>4.17 ms</code>，最坏超过 <code>8.3 ms</code>。这些毫秒级延迟对 CPU 极其漫长。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["请求扇区"] --&gt; B["Seek 到目标磁道"]
+    B --&gt; C["等待旋转"]
+    C --&gt; D["读取扇区"]
+    D --&gt; E["返回上层"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_24_00.png" alt="磁盘随机读取包含寻道和旋转等待" loading="lazy">
+  <p class="video-caption">📷 磁盘随机读取包含寻道和旋转等待<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=1440" target="_blank" rel="noopener">回到原视频 (00:24:00)</a></p>
+</div>
+
+<h3 id="26-ncq">2.6 调度与 NCQ</h3>
+<p><em>(参考时间: 00:26)</em></p>
+<p>早期操作系统实现“电梯调度”：</p>
+<ul>
+<li>读写头只向一个方向移动；</li>
+<li>沿途处理请求；</li>
+<li>到端点后再反向。</li>
+</ul>
+<p>后来磁盘控制器承担更多调度：</p>
+<ul>
+<li>AHCI；</li>
+<li>Native Command Queuing；</li>
+<li>控制器根据真实机械参数排序请求。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["多个块请求"] --&gt; B["磁盘控制器队列"]
+    B --&gt; C["按磁道位置排序"]
+    C --&gt; D["电梯式批量执行"]
+    D --&gt; E["减少总寻道距离"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_27_00.png" alt="磁盘控制器使用队列和调度减少寻道成本" loading="lazy">
+  <p class="video-caption">📷 磁盘控制器使用队列和调度减少寻道成本<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=1620" target="_blank" rel="noopener">回到原视频 (00:27:00)</a></p>
+</div>
+
+<h3 id="27">2.7 软盘：可移动的磁性介质</h3>
+<p><em>(参考时间: 00:28)</em></p>
+<p>软盘把读写头与介质分离：</p>
+<ul>
+<li>驱动器包含磁头与电机；</li>
+<li>软盘本身只是可移动介质；</li>
+<li>8 英寸、5.25 英寸、3.5 英寸是主要规格。</li>
+</ul>
+<p>3.5 英寸软盘加入硬塑料外壳、滑盖和写保护开关。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Floppy Media"] --&gt; B["插入 Drive"]
+    B --&gt; C["Drive 旋转介质"]
+    C --&gt; D["磁头读写"]
+    E["Write Protect"] --&gt; C
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_29_30.png" alt="软盘把可移动介质和读写机械分离" loading="lazy">
+  <p class="video-caption">📷 软盘把可移动介质和读写机械分离<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=1770" target="_blank" rel="noopener">回到原视频 (00:29:30)</a></p>
+</div>
+
+<h3 id="28">2.8 软盘时代的数据交换</h3>
+<p><em>(参考时间: 00:33)</em></p>
+<p>1.44 MB 软盘曾能装下：</p>
+<ul>
+<li>一个完整 DOS；</li>
+<li>BASIC 程序；</li>
+<li>小型游戏；</li>
+<li>驱动和更新程序。</li>
+</ul>
+<p>大型软件被拆分成多张盘，提示用户更换软盘。今天的“保存”图标就是这段历史的遗迹。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["1.44 MB Floppy"] --&gt; B["System / Program"]
+    B --&gt; C["用户拔出"]
+    C --&gt; D["把数据带到另一台电脑"]
+    D --&gt; E["数据交换"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_34_30.png" alt="软盘是互联网普及前主要的数据交换介质" loading="lazy">
+  <p class="video-caption">📷 软盘是互联网普及前主要的数据交换介质<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=2070" target="_blank" rel="noopener">回到原视频 (00:34:30)</a></p>
+</div>
+
+<hr />
+<h2 id="3">3. 挖坑存储：从石板到光盘与玻璃</h2>
+<h3 id="31-1-0">3.1 有坑为 1，无坑为 0</h3>
+<p><em>(参考时间: 00:36)</em></p>
+<p>岩石或金属上的刻痕可以跨越千年。现代工业把这种“挖坑”缩小到微米级：</p>
+<ul>
+<li>激光沿螺旋轨道扫描；</li>
+<li>有坑与无坑产生不同反射；</li>
+<li>坑深造成干涉差异；</li>
+<li>光信号转成 0 和 1。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Laser"] --&gt; B["Optical Disc"]
+    B --&gt; C{"Pit？"}
+    C -- "是" --&gt; D["Diffracted Reflection"]
+    C -- "否" --&gt; E["Direct Reflection"]
+    D --&gt; F["Decode Bit"]
+    E --&gt; F
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_37_30.png" alt="CD 用激光读取微小坑槽表示数据" loading="lazy">
+  <p class="video-caption">📷 CD 用激光读取微小坑槽表示数据<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=2250" target="_blank" rel="noopener">回到原视频 (00:37:30)</a></p>
+</div>
+
+<h3 id="32-cd-efm">3.2 CD 与 EFM 编码</h3>
+<p><em>(参考时间: 00:39)</em></p>
+<p>CD（1980）最初为数字音频设计，容量约 700 MB，可保存约 74 分钟音乐。</p>
+<p>数据使用 Eight-to-Fourteen Modulation：</p>
+<div class="highlight"><pre><span></span><code>8 bit data → 14 bit channel code
+</code></pre></div>
+
+<p>编码增加冗余，帮助时钟恢复和纠错。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["8-bit Data"] --&gt; B["EFM 编码"]
+    B --&gt; C["14-bit Channel Bits"]
+    C --&gt; D["Pit / Land Stream"]
+    D --&gt; E["Laser Reading"]
+    E --&gt; F["Error Correction"]
+    F --&gt; G["Original Data"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_39_30.png" alt="光盘读取依赖光学干涉与编码纠错" loading="lazy">
+  <p class="video-caption">📷 光盘读取依赖光学干涉与编码纠错<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=2370" target="_blank" rel="noopener">回到原视频 (00:39:30)</a></p>
+</div>
+
+<h3 id="33">3.3 光盘最重要优势：复制便宜</h3>
+<p><em>(参考时间: 00:41)</em></p>
+<p>母盘做出微小凸起，再用模具压制透明塑料：</p>
+<ul>
+<li>几秒即可复制数百 MB；</li>
+<li>再镀反射膜；</li>
+<li>划伤透明面通常不会影响数据层。</li>
+</ul>
+<p>Blu-ray 生产甚至可达到约 <code>33 GB/s</code> 的等效写入速度。极端情况下，数据中心之间“用卡车运盘”也可能比网络传输更快。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Master Disc"] --&gt; B["Stamper"]
+    B --&gt; C["Mold Transparent Plastic"]
+    C --&gt; D["Pits Replicated"]
+    D --&gt; E["Reflective Coating"]
+    E --&gt; F["Finished Disc"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_41_30.png" alt="光盘通过压盘实现极低复制成本" loading="lazy">
+  <p class="video-caption">📷 光盘通过压盘实现极低复制成本<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=2490" target="_blank" rel="noopener">回到原视频 (00:41:30)</a></p>
+</div>
+
+<h3 id="34">3.4 光盘的限制与互联网替代</h3>
+<p><em>(参考时间: 00:44)</em></p>
+<p>光盘优点：</p>
+<ul>
+<li>价格极低；</li>
+<li>容量较高；</li>
+<li>只读数据可靠性好。</li>
+</ul>
+<p>缺点：</p>
+<ul>
+<li>顺序读取尚可；</li>
+<li>随机读取较差；</li>
+<li>写入困难；</li>
+<li>CD-RW 等可写介质寿命和兼容性有限。</li>
+</ul>
+<p>软件持续更新、内容即时分发，让互联网逐渐取代物理盘。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Physical Disc"] --&gt; B["High Copy Speed"]
+    A --&gt; C["Random Write Hard"]
+    D["Internet"] --&gt; E["Instant Delivery"]
+    D --&gt; F["Live Updates"]
+    E --&gt; G["Replace Physical Media"]
+    F --&gt; G
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_44_30.png" alt="互联网取代光盘成为主要内容分发渠道" loading="lazy">
+  <p class="video-caption">📷 互联网取代光盘成为主要内容分发渠道<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=2670" target="_blank" rel="noopener">回到原视频 (00:44:30)</a></p>
+</div>
+
+<hr />
+<h2 id="4-random-read-append-only-write">4. Random Read + Append-only Write = 任何数据结构</h2>
+<h3 id="41">4.1 追加写也可以实现随机修改</h3>
+<p><em>(参考时间: 00:46)</em></p>
+<p>假设设备支持：</p>
+<ul>
+<li>任意位置读取；</li>
+<li>只能向尾部追加写入。</li>
+</ul>
+<p>仍然可以实现任何可变数据结构：</p>
+<div class="highlight"><pre><span></span><code>read(address) → data
+append(data) → new_address
+</code></pre></div>
+
+<p>修改数据时不覆盖旧位置，而是写入新副本，再更新指针。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Old Node"] --&gt; B["Read"]
+    C["Append New Node"] --&gt; D["New Address"]
+    B --&gt; E["Update Parent Pointer"]
+    D --&gt; E
+    E --&gt; F["Visible New Version"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_46_30.png" alt="追加写设备可以通过复制路径实现逻辑修改" loading="lazy">
+  <p class="video-caption">📷 追加写设备可以通过复制路径实现逻辑修改<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=2790" target="_blank" rel="noopener">回到原视频 (00:46:30)</a></p>
+</div>
+
+<h3 id="42-persistent-data-structure">4.2 Persistent Data Structure</h3>
+<p><em>(参考时间: 00:48)</em></p>
+<p>例如修改二叉树的一个叶子：</p>
+<ol>
+<li>复制从根到叶子的路径；</li>
+<li>新节点指向旧树中未修改的子树；</li>
+<li>旧根仍代表旧版本；</li>
+<li>新根代表新版本。</li>
+</ol>
+<p>修改成本与树高成正比，约为 <code>O(log N)</code>。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Old Root"] --&gt; B["Shared Subtree"]
+    C["New Root"] --&gt; D["New Copy"]
+    D --&gt; E["New Leaf"]
+    D --&gt; B
+    A --&gt; F["Old Version"]
+    C --&gt; G["New Version"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_49_30.png" alt="路径复制让追加写设备保存多个数据结构版本" loading="lazy">
+  <p class="video-caption">📷 路径复制让追加写设备保存多个数据结构版本<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=2970" target="_blank" rel="noopener">回到原视频 (00:49:30)</a></p>
+</div>
+
+<h3 id="43-project-silica">4.3 Project Silica</h3>
+<p><em>(参考时间: 00:51)</em></p>
+<p>Project Silica 用飞秒激光在玻璃内部写入微小结构：</p>
+<ul>
+<li>随机读取；</li>
+<li>只能追加写；</li>
+<li>机器人从架子上取出玻璃并定位数据；</li>
+<li>长期归档。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Laser"] --&gt; B["Glass Volume"]
+    B --&gt; C["Voxel State"]
+    C --&gt; D["Persistent Data"]
+    D --&gt; E["Robot Archive"]
+    E --&gt; F["Random Read"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_52_30.png" alt="Project Silica 用玻璃和机器人实现长期归档" loading="lazy">
+  <p class="video-caption">📷 Project Silica 用玻璃和机器人实现长期归档<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=3150" target="_blank" rel="noopener">回到原视频 (00:52:30)</a></p>
+</div>
+
+<hr />
+<h2 id="5-flash-bit">5. Flash：用电荷存储 bit</h2>
+<h3 id="51-floating-gate">5.1 Floating Gate</h3>
+<p><em>(参考时间: 00:54)</em></p>
+<p>Flash 在晶体管中增加 Floating Gate：</p>
+<ul>
+<li>注入电子：一个状态；</li>
+<li>放出电子：另一个状态；</li>
+<li>通过阈值电压判断 bit。</li>
+</ul>
+<p>通过精确控制电荷量，一个 cell 可以保存多 bit：</p>
+<ul>
+<li>SLC：1 bit；</li>
+<li>MLC：2 bit；</li>
+<li>TLC：3 bit；</li>
+<li>QLC：4 bit。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Floating Gate"] --&gt; B{"Charge Level"}
+    B --&gt; C1["Level 0"]
+    B --&gt; C2["Level 1"]
+    B --&gt; C3["Level 2"]
+    B --&gt; C4["Level 3"]
+    C1 --&gt; D["Decoded Bits"]
+    C2 --&gt; D
+    C3 --&gt; D
+    C4 --&gt; D
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_55_30.png" alt="Flash 用 Floating Gate 电荷量表示一个或多个 bit" loading="lazy">
+  <p class="video-caption">📷 Flash 用 Floating Gate 电荷量表示一个或多个 bit<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=3330" target="_blank" rel="noopener">回到原视频 (00:55:30)</a></p>
+</div>
+
+<h3 id="52-ssd">5.2 SSD 的“不讲道理”优势</h3>
+<p><em>(参考时间: 00:57)</em></p>
+<p>Flash 的优势：</p>
+<ul>
+<li>大规模集成电路带来低成本；</li>
+<li>封装可靠，不怕摔、不怕水；</li>
+<li>电路天然并行；</li>
+<li>容量越大，颗粒越多，带宽越高。</li>
+</ul>
+<p>Jim Gray 在 2006 年预言：</p>
+<blockquote>
+<p>Tape is Dead, Disk is Tape, Flash is Disk, RAM Locality is King.</p>
+</blockquote>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["更多 Flash Chips"] --&gt; B["更多并行通道"]
+    B --&gt; C["更高带宽"]
+    A --&gt; D["更大容量"]
+    C --&gt; E["SSD Performance Scales"]
+    D --&gt; E
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_57_30.png" alt="Flash 的并行颗粒让容量增长同时提高带宽" loading="lazy">
+  <p class="video-caption">📷 Flash 的并行颗粒让容量增长同时提高带宽<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=3450" target="_blank" rel="noopener">回到原视频 (00:57:30)</a></p>
+</div>
+
+<h3 id="53-u">5.3 U 盘时代</h3>
+<p><em>(参考时间: 00:59)</em></p>
+<p>USB Flash Drive 把 Flash 芯片和 USB 接口封装在同一设备中，取代软盘进行数据交换。</p>
+<p>早期容量：</p>
+<ul>
+<li>软盘：1.44 MB；</li>
+<li>早期 U 盘：128 MB。</li>
+</ul>
+<p>一个 U 盘就能携带几十到上百倍的数据。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Floppy 1.44 MB"] --&gt; B["USB Flash Drive"]
+    B --&gt; C["128 MB / GB+"]
+    C --&gt; D["图片 / 视频 / 软件"]
+    D --&gt; E["人际数据交换"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_59_30.png" alt="U 盘把 Flash 变成随身携带的高速介质" loading="lazy">
+  <p class="video-caption">📷 U 盘把 Flash 变成随身携带的高速介质<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=3570" target="_blank" rel="noopener">回到原视频 (00:59:30)</a></p>
+</div>
+
+<h3 id="54-erase-saturation">5.4 Erase Saturation 与写寿命</h3>
+<p><em>(参考时间: 01:01)</em></p>
+<p>写入和擦除带来不可逆磨损：</p>
+<ul>
+<li>擦除无法完全清除电子；</li>
+<li>数千到数万次后，cell 接近“永远充电”状态；</li>
+<li>QLC 可能只有约 1000 次写入寿命。</li>
+</ul>
+<div class="highlight"><pre><span></span><code><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">1000</span><span class="p">;</span><span class="w"> </span><span class="o">++</span><span class="n">i</span><span class="p">)</span>
+<span class="w">    </span><span class="n">write_text</span><span class="p">(</span><span class="s">"a.txt"</span><span class="p">,</span><span class="w"> </span><span class="n">i</span><span class="p">);</span>
+</code></pre></div>
+
+<p>如果软件不做处理，一个文件反复修改就可能磨损固定 cell。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Write / Erase"] --&gt; B["残余电子"]
+    B --&gt; C["Threshold Drift"]
+    C --&gt; D["Erase Failure"]
+    D --&gt; E["Dead Cell"]
+    F["Repeated Writes"] --&gt; A
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_01_30.png" alt="Flash 擦除不彻底，反复写入会耗尽 cell" loading="lazy">
+  <p class="video-caption">📷 Flash 擦除不彻底，反复写入会耗尽 cell<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=3690" target="_blank" rel="noopener">回到原视频 (01:01:30)</a></p>
+</div>
+
+<hr />
+<h2 id="6-ftl-wear-leveling">6. 软件定义磁盘：FTL 与 Wear Leveling</h2>
+<h3 id="61-ftl">6.1 FTL 维护逻辑到物理映射</h3>
+<p><em>(参考时间: 01:02)</em></p>
+<p>SSD 内部软件层称为 Flash Translation Layer：</p>
+<ul>
+<li>操作系统看到的是连续逻辑块；</li>
+<li>FTL 将逻辑块映射到物理 Flash 块；</li>
+<li>每次写入可以分配到不同物理块；</li>
+<li>旧块延迟回收。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Logical Block 1"] --&gt; B["L2P Table"]
+    B --&gt; C1["Physical Block 1"]
+    B --&gt; C2["Physical Block 7"]
+    B --&gt; C3["Physical Block 9"]
+    C1 --&gt; D["Flash Array"]
+    C2 --&gt; D
+    C3 --&gt; D
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_03_30.png" alt="FTL 通过逻辑到物理映射隐藏 Flash 块变化" loading="lazy">
+  <p class="video-caption">📷 FTL 通过逻辑到物理映射隐藏 Flash 块变化<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=3810" target="_blank" rel="noopener">回到原视频 (01:03:30)</a></p>
+</div>
+
+<h3 id="62-wear-leveling">6.2 Wear Leveling</h3>
+<p><em>(参考时间: 01:04)</em></p>
+<p>FTL 记录每个物理块的写入次数，优先使用写入较少的块：</p>
+<div class="highlight"><pre><span></span><code>write logical block 1
+    ↓
+do not overwrite physical block 1
+    ↓
+allocate less-worn physical block 7
+    ↓
+update L2P table
+</code></pre></div>
+
+<p>这与虚拟内存很像：逻辑地址不变，物理位置变化。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Logical Write"] --&gt; B["查看 Physical Wear Count"]
+    B --&gt; C["选择写入较少的 Block"]
+    C --&gt; D["追加写入新数据"]
+    D --&gt; E["更新 L2P Table"]
+    E --&gt; F["回收旧 Block"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_04_30.png" alt="Wear leveling 把写操作均匀分散到所有 Flash 块" loading="lazy">
+  <p class="video-caption">📷 Wear leveling 把写操作均匀分散到所有 Flash 块<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=3870" target="_blank" rel="noopener">回到原视频 (01:04:30)</a></p>
+</div>
+
+<h3 id="63-ssd">6.3 SSD 内部就是一台计算机</h3>
+<p><em>(参考时间: 01:06)</em></p>
+<p>SSD 封装中通常包含：</p>
+<ul>
+<li>Flash 颗粒；</li>
+<li>主控 CPU；</li>
+<li>DRAM；</li>
+<li>缓存；</li>
+<li>Store Buffer；</li>
+<li>FTL 软件。</li>
+</ul>
+<p>SD 卡、TF 卡同样可能包含完整嵌入式系统。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["SSD Controller"] --&gt; B["CPU"]
+    A --&gt; C["DRAM / Cache"]
+    A --&gt; D["FTL Software"]
+    A --&gt; E["NAND Flash"]
+    A --&gt; F["Host Interface"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_06_30.png" alt="SSD 是包含 CPU、内存、软件和 Flash 的完整系统" loading="lazy">
+  <p class="video-caption">📷 SSD 是包含 CPU、内存、软件和 Flash 的完整系统<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=3990" target="_blank" rel="noopener">回到原视频 (01:06:30)</a></p>
+</div>
+
+<h3 id="64">6.4 廉价设备可能伪造容量</h3>
+<p><em>(参考时间: 01:07)</em></p>
+<p>设备和驱动通过协议交换信息。既然容量是协议返回值，就可能被伪造：</p>
+<div class="highlight"><pre><span></span><code>真实容量 = 64 GB
+主控返回 = 1 TB
+超过 64 GB 的写入 = 丢弃
+</code></pre></div>
+
+<p>刚写入少量数据时看似正常，写满后数据会丢失。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Host 写入 1TB SSD"] --&gt; B["Fake Controller"]
+    B --&gt; C{"地址 &lt; 64GB？"}
+    C -- "是" --&gt; D["写入真实 Flash"]
+    C -- "否" --&gt; E["丢弃数据"]
+    D --&gt; F["短期看似正常"]
+    E --&gt; F
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_07_30.png" alt="伪造主控可以报告异常大的虚假容量" loading="lazy">
+  <p class="video-caption">📷 伪造主控可以报告异常大的虚假容量<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=4050" target="_blank" rel="noopener">回到原视频 (01:07:30)</a></p>
+</div>
+
+<hr />
+<h2 id="7-block-device">7. 操作系统视角：Block Device</h2>
+<h3 id="71">7.1 寻址是有代价的</h3>
+<p><em>(参考时间: 01:09)</em></p>
+<p>不同介质的定位方式不同：</p>
+<ul>
+<li>磁盘：读写头寻道 + 盘片旋转；</li>
+<li>光盘：激光头定位；</li>
+<li>Project Silica：机器人 + 光学定位；</li>
+<li>Flash：Die、Plane、Block、Page 选通。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["存储介质"] --&gt; B["Disk: Mechanical Seek"]
+    A --&gt; C["Optical: Laser Positioning"]
+    A --&gt; D["Glass: Robot + Optics"]
+    A --&gt; E["Flash: Die / Plane / Block / Page"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_10_30.png" alt="所有随机访问设备都必须解决寻址成本" loading="lazy">
+  <p class="video-caption">📷 所有随机访问设备都必须解决寻址成本<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=4230" target="_blank" rel="noopener">回到原视频 (01:10:30)</a></p>
+</div>
+
+<h3 id="72">7.2 按块访问减少选通电路</h3>
+<p><em>(参考时间: 01:10)</em></p>
+<p>让一个 Page 或 Sector 内的大量 bit 共享定位与选通电路：</p>
+<ul>
+<li>SSD Page 通常约 16 KB；</li>
+<li>Erase Block 可能数 MB；</li>
+<li>磁盘 Sector 通常 512 B 或 4 KB。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Random Address"] --&gt; B["Select Block / Page"]
+    B --&gt; C["Parallel Read Entire Page"]
+    C --&gt; D["Return Block Data"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_12_30.png" alt="按块访问省去了为每一个 bit 单独寻址的电路" loading="lazy">
+  <p class="video-caption">📷 按块访问省去了为每一个 bit 单独寻址的电路<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=4350" target="_blank" rel="noopener">回到原视频 (01:12:30)</a></p>
+</div>
+
+<h3 id="73-block-array">7.3 Block Array 抽象</h3>
+<p><em>(参考时间: 01:13)</em></p>
+<p>操作系统看到：</p>
+<div class="highlight"><pre><span></span><code><span class="k">struct</span><span class="w"> </span><span class="nc">block</span><span class="w"> </span><span class="n">disk</span><span class="p">[</span><span class="n">NUM_BLOCKS</span><span class="p">];</span>
+</code></pre></div>
+
+<p>上层可以：</p>
+<ol>
+<li>读取第 <code>i</code> 个块；</li>
+<li>写入第 <code>j</code> 个块；</li>
+<li>一次读写连续多个块。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["File System"] --&gt; B["Block Device"]
+    B --&gt; C1["Read Block 3"]
+    B --&gt; C2["Write Block 8"]
+    B --&gt; C3["Read Blocks 10..20"]
+    C1 --&gt; D["Storage Hardware"]
+    C2 --&gt; D
+    C3 --&gt; D
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_13_30.png" alt="块设备把存储抽象成可随机访问的 block array" loading="lazy">
+  <p class="video-caption">📷 块设备把存储抽象成可随机访问的 block array<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=4410" target="_blank" rel="noopener">回到原视频 (01:13:30)</a></p>
+</div>
+
+<h3 id="74">7.4 读写放大</h3>
+<p><em>(参考时间: 01:14)</em></p>
+<p>如果只修改一个字节，但设备最小单位是 4 KB 或 16 KB：</p>
+<div class="highlight"><pre><span></span><code>read 16 KB block
+modify 1 byte
+write 16 KB block back
+</code></pre></div>
+
+<p>这会产生：</p>
+<ul>
+<li>读放大：读入了很多不需要的字节；</li>
+<li>写放大：为了一个字节写回整块；</li>
+<li>Flash 额外放大：垃圾回收时搬运有效页。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Write 1 Byte"] --&gt; B["Read 16KB Block"]
+    B --&gt; C["Modify Byte"]
+    C --&gt; D["Write 16KB Block"]
+    D --&gt; E["Read / Write Amplification"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_14_00.png" alt="小块误用大块接口会带来读写放大" loading="lazy">
+  <p class="video-caption">📷 小块误用大块接口会带来读写放大<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=4440" target="_blank" rel="noopener">回到原视频 (01:14:00)</a></p>
+</div>
+
+<h3 id="75-block_device_operations">7.5 <code>block_device_operations</code></h3>
+<p><em>(参考时间: 01:15)</em></p>
+<p>Linux 为存储设备提供块设备接口：</p>
+<div class="highlight"><pre><span></span><code><span class="k">struct</span><span class="w"> </span><span class="nc">block_device_operations</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="p">(</span><span class="o">*</span><span class="n">open</span><span class="p">)(</span><span class="k">struct</span><span class="w"> </span><span class="nc">block_device</span><span class="w"> </span><span class="o">*</span><span class="p">,</span><span class="w"> </span><span class="n">fmode_t</span><span class="p">);</span>
+<span class="w">    </span><span class="kt">void</span><span class="w"> </span><span class="p">(</span><span class="o">*</span><span class="n">release</span><span class="p">)(</span><span class="k">struct</span><span class="w"> </span><span class="nc">gendisk</span><span class="w"> </span><span class="o">*</span><span class="p">,</span><span class="w"> </span><span class="n">fmode_t</span><span class="p">);</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="p">(</span><span class="o">*</span><span class="n">ioctl</span><span class="p">)(</span><span class="k">struct</span><span class="w"> </span><span class="nc">block_device</span><span class="w"> </span><span class="o">*</span><span class="p">,</span><span class="w"> </span><span class="n">fmode_t</span><span class="p">,</span><span class="w"> </span><span class="kt">unsigned</span><span class="p">,</span><span class="w"> </span><span class="kt">unsigned</span><span class="w"> </span><span class="kt">long</span><span class="p">);</span>
+<span class="w">    </span><span class="c1">// ...</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<p>驱动还需要配置 <code>request_queue</code>，负责把块请求排入设备队列。</p>
+<p>一旦实现块读写，文件系统就可以在上面提供：</p>
+<ul>
+<li><code>read</code>；</li>
+<li><code>write</code>；</li>
+<li><code>mmap</code>；</li>
+<li>文件与目录。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["read / write / mmap"] --&gt; B["File System"]
+    B --&gt; C["Block Layer / request_queue"]
+    C --&gt; D["block_device_operations"]
+    D --&gt; E["Storage Device"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_15_30.png" alt="文件系统把块设备接口进一步抽象成文件与 mmap" loading="lazy">
+  <p class="video-caption">📷 文件系统把块设备接口进一步抽象成文件与 mmap<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=4530" target="_blank" rel="noopener">回到原视频 (01:15:30)</a></p>
+</div>
+
+<h3 id="76-nvme-zns">7.6 NVMe ZNS</h3>
+<p><em>(参考时间: 01:14)</em></p>
+<p>传统块设备隐藏 Flash 内部的追加写和擦除特性，软件难以避免额外搬运。NVMe Zoned Namespaces 暴露分区顺序写模型：</p>
+<ul>
+<li>Zone 内顺序写；</li>
+<li>Zone 整体重置；</li>
+<li>上层主动管理数据布局；</li>
+<li>减少 FTL 和垃圾回收开销。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Traditional Block Device"] --&gt; B["FTL Hides Append-only"]
+    B --&gt; C["GC / Write Amplification"]
+    D["ZNS"] --&gt; E["Expose Zones"]
+    E --&gt; F["Sequential Writes"]
+    F --&gt; G["Host Controls Layout"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_14_30.png" alt="ZNS 直接暴露追加写 Zone，减少隐藏开销" loading="lazy">
+  <p class="video-caption">📷 ZNS 直接暴露追加写 Zone，减少隐藏开销<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=4470" target="_blank" rel="noopener">回到原视频 (01:14:30)</a></p>
+</div>
+
+<hr />
+<h2 id="8-linux-block-io">8. 打开 Linux Block I/O</h2>
+<h3 id="81-first-principles">8.1 从 first principles 观察块读写</h3>
+<p><em>(参考时间: 01:15)</em></p>
+<p>操作系统本身也是程序。既然块 I/O 由内核代码执行，就可以插入探针记录：</p>
+<ul>
+<li>谁发起 I/O；</li>
+<li>读还是写；</li>
+<li>读写多少块；</li>
+<li>延迟是多少；</li>
+<li>哪个进程产生最多 I/O。</li>
+</ul>
+<p>课程借助 AI 使用 eBPF 实现了一个块 I/O 可视化工具。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Application"] --&gt; B["File System"]
+    B --&gt; C["Block I/O"]
+    C --&gt; D["eBPF Probe"]
+    D --&gt; E["Event Stream"]
+    E --&gt; F["Visualization Tool"]
+    F --&gt; G["Read / Write / Latency"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_17_30.png" alt="用 eBPF 在内核中观察块 I/O 事件" loading="lazy">
+  <p class="video-caption">📷 用 eBPF 在内核中观察块 I/O 事件<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=4650" target="_blank" rel="noopener">回到原视频 (01:17:30)</a></p>
+</div>
+
+<h3 id="82-find">8.2 观察 <code>find</code> 与写文件</h3>
+<p><em>(参考时间: 01:18)</em></p>
+<p>实验：</p>
+<div class="highlight"><pre><span></span><code>find<span class="w"> </span>/
+dd<span class="w"> </span><span class="k">if</span><span class="o">=</span>/dev/zero<span class="w"> </span><span class="nv">of</span><span class="o">=</span>a.txt<span class="w"> </span><span class="nv">bs</span><span class="o">=</span>1M<span class="w"> </span><span class="nv">count</span><span class="o">=</span><span class="m">100</span>
+</code></pre></div>
+
+<p>工具展示：</p>
+<ul>
+<li>蓝色事件：读；</li>
+<li>黄色事件：写；</li>
+<li>橙色事件：同步；</li>
+<li>每个进程的 I/O 延迟分布；</li>
+<li>哪些进程产生最多块 I/O。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["find /"] --&gt; B["大量 Read"]
+    C["dd 写文件"] --&gt; D["大量 Write"]
+    B --&gt; E["Block I/O Events"]
+    D --&gt; E
+    E --&gt; F["Latency / Process / Type"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_18_30.png" alt="块 I/O 可视化展示进程、类型与延迟分布" loading="lazy">
+  <p class="video-caption">📷 块 I/O 可视化展示进程、类型与延迟分布<br><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/?t=4710" target="_blank" rel="noopener">回到原视频 (01:18:30)</a></p>
+</div>
+
+<hr />
+<h2 id="9">9. 总结：最终胜出的仍然是电子</h2>
+<p>从磁带、磁盘到光盘，再到 Flash：</p>
+<ul>
+<li>磁和坑都能持久保存 bit；</li>
+<li>机械定位带来毫秒级随机访问延迟；</li>
+<li>光学挖坑适合低成本复制，却不适合随机写；</li>
+<li>Flash 的密度、速度和集成电路制造优势最终使其胜出；</li>
+<li>Flash 有磨损问题，需要 FTL 和 Wear Leveling；</li>
+<li>所有存储设备最终向操作系统暴露为块数组；</li>
+<li>文件系统再把块设备抽象成字节序列、文件和 <code>mmap</code>。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Tape"] --&gt; B["Drum"]
+    B --&gt; C["Disk"]
+    C --&gt; D["Floppy"]
+    D --&gt; E["Optical Disc"]
+    E --&gt; F["Flash / SSD"]
+    F --&gt; G["Block Device"]
+    G --&gt; H["File System"]
+</code></pre></div>
+
+<p>课程的最终结论：</p>
+<blockquote>
+<p>物理限制无法突破，但可以用软件重新组织数据来隐藏或分摊代价。Random Read + Append-only Write 的模式足以实现任何数据结构；理解这一原理，可以在 FTL、文件系统甚至新的非易失存储出现时推导出新的系统设计。</p>
+</blockquote>
+<hr />
+<h2 id="_2">附：官方参考与延伸阅读</h2>
+<ul>
+<li><a href="https://jyywiki.cn/OS/demos/persistence/gpio-led">GPIO LED</a></li>
+<li><a href="https://jyywiki.cn/OS/manuals/CalComp-Software-Reference.pdf">磁带与磁性存储历史资料</a></li>
+<li><a href="https://www.bilibili.com/video/BV1BS4y1X76n/">软盘驱动器视频</a></li>
+<li><a href="https://www.scientificamerican.com/article/how-do-rewriteable-cds-wo/">CD-RW 原理</a></li>
+<li><a href="https://www.nature.com/articles/s41586-025-10042-w">Project Silica Nature Paper</a></li>
+<li><a href="https://www.bilibili.com/video/BV1Wu4y187Dh/">Project Silica Video</a></li>
+<li><a href="https://www.bunniestudios.com/blog/?p=898">Bunnie: SD Card Internals</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/persistence/bio">Linux Block I/O 实验</a></li>
+<li><a href="https://github.com/mikeroyal/SSD-Guide">SSD Guide</a></li>
+<li><a href="https://codecapsule.com/2014/02/12/coding-for-ssds-part-1-introduction-and-table-of-contents/">Coding for SSDs</a></li>
+<li><a href="https://pages.cs.wisc.edu/~remzi/OSTEP/file-disks.pdf">OSTEP Chapter 37: Hard Disk Drives</a></li>
+<li><a href="https://pages.cs.wisc.edu/~remzi/OSTEP/file-ssd.pdf">OSTEP Chapter 44: Flash-based SSDs</a></li>
+</ul>
+<p>官方课程资料：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/2026/">课程主页</a></li>
+<li><a href="https://jyywiki.cn/OS/2026/lect23.md">第 23 讲讲义：持久数据的存储</a></li>
+<li><a href="https://www.bilibili.com/video/BV1RHLh6pEqn/">视频：23 - 存储设备原理</a></li>
+</ul>
+<blockquote>
+<p><strong>版权与署名</strong>：本讲课程材料由蒋炎岩（jyy）编写。课程讲义与幻灯片采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书保留课程出处、作者署名与许可说明。</p>
+</blockquote>
+    </article>
+
+    <!-- Mermaid 图表引擎初始化 -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            mermaid.initialize({ startOnLoad: false, theme: 'default' });
+            
+            // 兼容普通代码块以及丢失 language-mermaid 类名的情况 (CodeHilite 干扰)
+            const codeNodes = document.querySelectorAll('pre code, .highlight code');
+            codeNodes.forEach(function(node) {
+                const text = node.textContent.trim();
+                // 匹配常见的 mermaid 图表前缀
+                if (text.startsWith('graph ') || text.startsWith('flowchart ') || text.startsWith('sequenceDiagram') || text.startsWith('gantt') || text.startsWith('pie') || text.startsWith('classDiagram') || text.startsWith('stateDiagram') || text.startsWith('mindmap')) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.className = 'mermaid';
+                    tempDiv.textContent = text;
+                    
+                    // 获取需要替换的最外层父节点 (比如 div.highlight 或者 pre)
+                    const wrapper = node.closest('.highlight') || node.parentNode;
+                    wrapper.replaceWith(tempDiv); 
+                }
+            });
+            
+            // 所有节点转换完成，统一进行图表动态绘制
+            mermaid.run();
+        });
+    </script>
+    <!-- Lightbox：截图点击放大 -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const lightbox = document.createElement('div');
+            lightbox.className = 'lightbox';
+            lightbox.innerHTML = '<img alt=""><div class="lightbox-caption"></div>';
+            document.body.appendChild(lightbox);
+            const lbImg = lightbox.querySelector('img');
+            const lbCap = lightbox.querySelector('.lightbox-caption');
+            function openLightbox(src, alt) {
+                lbImg.src = src; lbImg.alt = alt || '';
+                lbCap.textContent = alt || '';
+                lightbox.classList.add('open');
+                document.body.style.overflow = 'hidden';
+            }
+            function closeLightbox() {
+                lightbox.classList.remove('open');
+                lbImg.src = '';
+                document.body.style.overflow = '';
+            }
+            document.querySelectorAll('.screenshot-card img').forEach(function(img) {
+                img.addEventListener('click', function() { openLightbox(img.src, img.alt); });
+            });
+            lightbox.addEventListener('click', closeLightbox);
+            document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
+        });
+    </script>
+</body>
+</html>
