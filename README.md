@@ -100,3 +100,7 @@
   - [Markdown 源稿](./24-文件系统API-1/book.md)
   - 视频：[Bilibili BV1hAGr6vEi9](https://www.bilibili.com/video/BV1hAGr6vEi9/)
   - 官方讲义：[第 24 讲](https://jyywiki.cn/OS/2026/lect24.md)
+- [第 25 讲：文件系统 API (2)](./25-文件系统API-2/book.html)
+  - [Markdown 源稿](./25-文件系统API-2/book.md)
+  - 视频：[Bilibili BV12gVs6SExQ](https://www.bilibili.com/video/BV12gVs6SExQ/)
+  - 官方讲义：[第 25 讲](https://jyywiki.cn/OS/2026/lect25.md)

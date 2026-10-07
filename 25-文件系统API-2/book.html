@@ -1,0 +1,1480 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文件系统 API (2)：监控、快照、覆盖与任意数据结构</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* ── 基础重置 ── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            color-scheme: light;
+            --bg-primary: #f7f7f8;
+            --bg-secondary: #ffffff;
+            --bg-card: #eef0f3;
+            --bg-code: #f2f3f5;
+            --text-primary: #1f2328;
+            --text-secondary: #57606a;
+            --text-muted: #6e7781;
+            --accent: #2563eb;
+            --accent-glow: rgba(37, 99, 235, 0.08);
+            --border: #d9dce1;
+            --border-subtle: #e7e9ec;
+            --radius: 12px;
+            --shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Serif SC', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.8;
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── 文章容器 ── */
+        .book-content {
+            max-width: 780px;
+            margin: 0 auto;
+            padding: 60px 32px 120px;
+        }
+
+        /* ── 标题 ── */
+        h1 {
+            font-size: 2.2em;
+            font-weight: 700;
+            margin: 0 0 12px;
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+        }
+
+        h2 {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 56px 0 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h3 {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: var(--accent);
+            margin: 36px 0 12px;
+        }
+
+        /* ── 段落与文字 ── */
+        p {
+            margin: 0 0 16px;
+            color: var(--text-primary);
+        }
+
+        strong {
+            color: #0f172a;
+            font-weight: 600;
+        }
+
+        em {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.2s;
+        }
+        a:hover {
+            border-bottom-color: var(--accent);
+        }
+
+        /* ── 引用 ── */
+        blockquote {
+            margin: 24px 0;
+            padding: 16px 20px;
+            background: var(--bg-secondary);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 var(--radius) var(--radius) 0;
+            color: var(--text-secondary);
+        }
+        blockquote p { margin: 0; }
+
+        /* ── 列表 ── */
+        ul, ol {
+            margin: 12px 0 20px 24px;
+            color: var(--text-primary);
+        }
+        li {
+            margin: 6px 0;
+        }
+
+        /* ── 分割线 ── */
+        hr {
+            border: none;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border), transparent);
+            margin: 48px 0;
+        }
+
+        /* ── 表格 ── */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 24px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+        thead {
+            background: var(--bg-card);
+        }
+        th {
+            padding: 12px 16px;
+            font-weight: 600;
+            text-align: left;
+            color: var(--accent);
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        td {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border-subtle);
+        }
+        tbody tr {
+            background: var(--bg-secondary);
+            transition: background 0.15s;
+        }
+        tbody tr:hover {
+            background: var(--bg-card);
+        }
+
+        /* ── 代码 ── */
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-code);
+            padding: 2px 7px;
+            border-radius: 5px;
+            font-size: 0.88em;
+            color: #6d28d9;
+        }
+
+        pre {
+            margin: 20px 0;
+            padding: 20px 24px;
+            background: var(--bg-code);
+            border-radius: var(--radius);
+            overflow-x: auto;
+            border: 1px solid var(--border);
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9em;
+            color: var(--text-primary);
+        }
+
+        /* ── 视频嵌入卡片 ── */
+        .video-card {
+            margin: 32px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .video-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(15, 23, 42, 0.12);
+        }
+
+        .video-wrapper {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 */
+            height: 0;
+            overflow: hidden;
+        }
+        .video-wrapper iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .video-card img {
+            width: 100%;
+            display: block;
+        }
+
+        .video-caption {
+            padding: 12px 16px;
+            font-size: 0.88em;
+            color: var(--text-secondary);
+            text-align: center;
+            line-height: 1.6;
+            margin: 0;
+        }
+        .video-caption a {
+            color: var(--accent);
+        }
+
+        .video-card.fallback {
+            padding: 20px;
+            text-align: center;
+        }
+
+        /* ── Lightbox：截图点击放大 ── */
+        .screenshot-card img { cursor: zoom-in; transition: opacity 0.15s; }
+        .screenshot-card img:hover { opacity: 0.9; }
+        .lightbox {
+            position: fixed; inset: 0; z-index: 999;
+            display: none; align-items: center; justify-content: center;
+            background: rgba(5, 5, 8, 0.92); backdrop-filter: blur(4px);
+            cursor: zoom-out; padding: 24px;
+        }
+        .lightbox.open { display: flex; }
+        .lightbox img {
+            max-width: 96vw; max-height: 90vh;
+            border-radius: 8px; box-shadow: 0 12px 60px rgba(0,0,0,0.7);
+        }
+        .lightbox-caption {
+            position: absolute; bottom: 14px; left: 0; right: 0;
+            text-align: center; color: var(--text-secondary); font-size: 0.85em;
+        }
+
+        /* ── 顶部信息栏 ── */
+        .book-content > blockquote:first-of-type {
+            background: var(--accent-glow);
+            border-left-color: var(--accent);
+            border-radius: var(--radius);
+            margin-bottom: 32px;
+        }
+
+        /* ── 图表居中 ── */
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            margin: 32px 0;
+            overflow-x: auto;
+        }
+
+        /* ── 滚动条 ── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* ── 响应式 ── */
+        @media (max-width: 640px) {
+            .book-content { padding: 32px 16px 80px; }
+            h1 { font-size: 1.7em; }
+            h2 { font-size: 1.3em; }
+        }
+    </style>
+</head>
+<body>
+    <article class="book-content">
+        <h1 id="api-2">文件系统 API (2)：监控、快照、覆盖与任意数据结构</h1>
+<blockquote>
+<p><strong>课程</strong>：2026 春季学期《操作系统原理》<br />
+<strong>讲师</strong>：蒋炎岩（jyy）<br />
+<strong>官方课程主页</strong>：<a href="https://jyywiki.cn/OS/2026/">https://jyywiki.cn/OS/2026/</a><br />
+<strong>官方讲义</strong>：<a href="https://jyywiki.cn/OS/2026/lect25.md">https://jyywiki.cn/OS/2026/lect25.md</a><br />
+<strong>视频来源</strong>：<a href="https://www.bilibili.com/video/BV12gVs6SExQ/">Bilibili BV12gVs6SExQ</a><br />
+<strong>版权说明</strong>：课程讲义与幻灯片归蒋炎岩所有，采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书是对课堂讲授的书面化重构，保留出处与许可说明。</p>
+</blockquote>
+<h2 id="_1">导语：文件系统不只是增删改查</h2>
+<p><em>(参考时间: 00:00)</em></p>
+<p>上一讲学习了文件系统的 CRUD API：</p>
+<ul>
+<li><code>mkdir</code> / <code>rmdir</code>；</li>
+<li><code>link</code> / <code>symlink</code> / <code>unlink</code>；</li>
+<li>文件权限、xattr、ACL；</li>
+<li><code>mount</code> / <code>umount</code>。</li>
+</ul>
+<p>这些都是一次修改一个对象的“一小步操作”。这一讲讨论更高级的问题：</p>
+<blockquote>
+<p>文件系统作为一个 Abstract Data Type，还能提供哪些操作？</p>
+</blockquote>
+<p>课程选择四类能力：</p>
+<ol>
+<li><strong>监控</strong>：文件改变时主动通知应用；</li>
+<li><strong>快照</strong>：保留并返回过去某个时间点的状态；</li>
+<li><strong>覆盖</strong>：把多个目录拼成一个虚拟目录；</li>
+<li><strong>FUSE</strong>：在用户态实现任意文件系统。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["文件系统 CRUD"] --&gt; B["监控"]
+    A --&gt; C["快照"]
+    A --&gt; D["覆盖 / Union"]
+    A --&gt; E["FUSE 自定义文件系统"]
+    B --&gt; F["高级 ADT 操作"]
+    C --&gt; F
+    D --&gt; F
+    E --&gt; F
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_03_00.png" alt="文件系统是可定义高级操作的数据结构" loading="lazy">
+  <p class="video-caption">📷 文件系统是可定义高级操作的数据结构<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=180" target="_blank" rel="noopener">回到原视频 (00:03:00)</a></p>
+</div>
+
+<hr />
+<h2 id="1">1. 文件监控：从轮询到事件</h2>
+<h3 id="11-crud">1.1 用 CRUD 实现监控</h3>
+<p><em>(参考时间: 00:05)</em></p>
+<p>Web Server 的 debug mode、IDE、文件管理器都需要知道：</p>
+<blockquote>
+<p>哪个文件什么时候改变了？</p>
+</blockquote>
+<p>只用 CRUD 也能实现：</p>
+<div class="highlight"><pre><span></span><code>diff<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>&lt;<span class="o">(</span>stat<span class="w"> </span>-c<span class="w"> </span><span class="s1">'%n %y'</span><span class="w"> </span>**<span class="o">)</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>&lt;<span class="o">(</span>sleep<span class="w"> </span><span class="m">2</span><span class="p">;</span><span class="w"> </span>date<span class="w"> </span>&gt;<span class="w"> </span>a.txt<span class="p">;</span><span class="w"> </span>stat<span class="w"> </span>-c<span class="w"> </span><span class="s1">'%n %y'</span><span class="w"> </span>**<span class="o">)</span>
+</code></pre></div>
+
+<p>流程是：</p>
+<ol>
+<li>枚举所有文件；</li>
+<li>记录修改时间；</li>
+<li>等一段时间；</li>
+<li>再枚举并比较。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["枚举目录"] --&gt; B["读取 stat / mtime"]
+    B --&gt; C["等待"]
+    C --&gt; D["再次枚举"]
+    D --&gt; E["对比前后快照"]
+    E --&gt; F["找出改变的文件"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_06_00.png" alt="轮询 stat 并做 diff 可以实现文件监控" loading="lazy">
+  <p class="video-caption">📷 轮询 stat 并做 diff 可以实现文件监控<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=360" target="_blank" rel="noopener">回到原视频 (00:06:00)</a></p>
+</div>
+
+<h3 id="12">1.2 轮询的扩展性问题</h3>
+<p><em>(参考时间: 00:08)</em></p>
+<p>如果目录里有几百万文件，每次轮询都需要数百万次元数据查询。</p>
+<p>即使文件系统缓存让单次查询变快，这种方案仍然浪费：</p>
+<ul>
+<li>CPU；</li>
+<li>内存带宽；</li>
+<li>文件系统锁；</li>
+<li>I/O。</li>
+</ul>
+<p>真正需要的是由内核主动产生事件。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Millions of Files"] --&gt; B["Polling Every File"]
+    B --&gt; C["Millions of stat Calls"]
+    C --&gt; D["High Overhead"]
+    E["Kernel Event API"] --&gt; F["Only Changed Files"]
+    F --&gt; G["Low Overhead"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_08_30.png" alt="百万文件上的轮询会造成巨大开销" loading="lazy">
+  <p class="video-caption">📷 百万文件上的轮询会造成巨大开销<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=510" target="_blank" rel="noopener">回到原视频 (00:08:30)</a></p>
+</div>
+
+<h3 id="13-inotify">1.3 inotify</h3>
+<p><em>(参考时间: 00:09)</em></p>
+<p>Linux 提供 inotify：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">int</span><span class="w"> </span><span class="n">fd</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">inotify_init</span><span class="p">();</span>
+<span class="kt">int</span><span class="w"> </span><span class="n">wd</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">inotify_add_watch</span><span class="p">(</span>
+<span class="w">    </span><span class="n">fd</span><span class="p">,</span>
+<span class="w">    </span><span class="s">"/path/to/watch"</span><span class="p">,</span>
+<span class="w">    </span><span class="n">IN_CREATE</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="n">IN_MODIFY</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="n">IN_DELETE</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="n">IN_MOVE</span>
+<span class="p">);</span>
+
+<span class="k">struct</span><span class="w"> </span><span class="nc">inotify_event</span><span class="w"> </span><span class="n">event</span><span class="p">;</span>
+<span class="n">read</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">event</span><span class="p">,</span><span class="w"> </span><span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">));</span>
+</code></pre></div>
+
+<p>特点：</p>
+<ul>
+<li><code>inotify_init()</code> 返回文件描述符；</li>
+<li>可以与 <code>select</code>、<code>poll</code>、<code>epoll</code> 一起使用；</li>
+<li>每个 watch 产生事件；</li>
+<li>默认不递归监听子目录。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["inotify_init()"] --&gt; B["Event fd"]
+    C["add_watch(path)"] --&gt; D["Kernel Watch"]
+    D --&gt; E["File Changed"]
+    E --&gt; B
+    B --&gt; F["read / epoll"]
+    F --&gt; G["Application Event Handler"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_09_30.png" alt="inotify 用文件描述符向用户态发送文件事件" loading="lazy">
+  <p class="video-caption">📷 inotify 用文件描述符向用户态发送文件事件<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=570" target="_blank" rel="noopener">回到原视频 (00:09:30)</a></p>
+</div>
+
+<h3 id="14-watchdog">1.4 watchdog 实验</h3>
+<p><em>(参考时间: 00:11)</em></p>
+<p>Python watchdog 封装了 inotify：</p>
+<div class="highlight"><pre><span></span><code><span class="n">observer</span> <span class="o">=</span> <span class="n">Observer</span><span class="p">()</span>
+<span class="n">observer</span><span class="o">.</span><span class="n">schedule</span><span class="p">(</span><span class="n">event_handler</span><span class="p">,</span> <span class="s2">"."</span><span class="p">,</span> <span class="n">recursive</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">observer</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+</code></pre></div>
+
+<p>创建文件时，可以看到多类事件：</p>
+<ol>
+<li>新文件 <code>CREATE</code>；</li>
+<li>新文件 <code>MODIFY</code>；</li>
+<li>父目录的 <code>MODIFY</code>。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["touch a.txt"] --&gt; B["CREATE a.txt"]
+    A --&gt; C["MODIFY a.txt"]
+    A --&gt; D["Parent Directory MODIFY"]
+    B --&gt; E["watchdog Event"]
+    C --&gt; E
+    D --&gt; E
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_11_00.png" alt="watchdog 演示文件创建与父目录修改事件" loading="lazy">
+  <p class="video-caption">📷 watchdog 演示文件创建与父目录修改事件<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=660" target="_blank" rel="noopener">回到原视频 (00:11:00)</a></p>
+</div>
+
+<h3 id="15">1.5 修改时间只向一级目录传播</h3>
+<p><em>(参考时间: 00:12)</em></p>
+<p>在深层目录中修改文件：</p>
+<div class="highlight"><pre><span></span><code>t/1/2/a.txt
+</code></pre></div>
+
+<p>会更新：</p>
+<ul>
+<li><code>a.txt</code>；</li>
+<li><code>2/</code> 的 mtime。</li>
+</ul>
+<p>但不会继续更新：</p>
+<ul>
+<li><code>1/</code>；</li>
+<li><code>t/</code>。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Modify t/1/2/a.txt"] --&gt; B["Update a.txt mtime"]
+    B --&gt; C["Update 2/ mtime"]
+    C --&gt; D["Stop"]
+    D --&gt; E["1/ and t/ unchanged"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_12_30.png" alt="文件修改只向上传播一级目录时间戳" loading="lazy">
+  <p class="video-caption">📷 文件修改只向上传播一级目录时间戳<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=750" target="_blank" rel="noopener">回到原视频 (00:12:30)</a></p>
+</div>
+
+<hr />
+<h2 id="2">2. 从监控到可编程内核探针</h2>
+<h3 id="21">2.1 所有监控都在提取内核执行信息</h3>
+<p><em>(参考时间: 00:14)</em></p>
+<p>课程列举多种观测工具：</p>
+<ul>
+<li><code>strace</code>：系统调用；</li>
+<li><code>ltrace</code>：库函数；</li>
+<li>inotify：文件系统事件；</li>
+<li>block trace：块设备 I/O；</li>
+<li>profiling：CPU 与缓存行为。</li>
+</ul>
+<p>它们都希望回答同一类问题：</p>
+<div class="highlight"><pre><span></span><code>内核执行到某个位置时，发生了什么？
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Kernel Execution"] --&gt; B["strace"]
+    A --&gt; C["inotify"]
+    A --&gt; D["Block Trace"]
+    A --&gt; E["Profiler"]
+    B --&gt; F["Observable Events"]
+    C --&gt; F
+    D --&gt; F
+    E --&gt; F
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_15_00.png" alt="不同监控工具都在从内核执行中提取事件" loading="lazy">
+  <p class="video-caption">📷 不同监控工具都在从内核执行中提取事件<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=900" target="_blank" rel="noopener">回到原视频 (00:15:00)</a></p>
+</div>
+
+<h3 id="22-ebpf">2.2 eBPF：可编程的只读内核虚拟机</h3>
+<p><em>(参考时间: 00:16)</em></p>
+<p>如果允许用户上传一段小程序，并在内核 hook point 执行，就可以定制监控。</p>
+<p>这就是 eBPF：</p>
+<ul>
+<li>RISC-like 指令集；</li>
+<li><code>r0-r10</code> 共 11 个寄存器；</li>
+<li><code>r0</code> 为返回值；</li>
+<li>probe 入口的 <code>r1</code> 指向 context；</li>
+<li>可以调用受控 helper。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["User Program"] --&gt; B["Compile to eBPF Bytecode"]
+    B --&gt; C["BPF System Call"]
+    C --&gt; D["Verifier"]
+    D --&gt; E["In-kernel JIT"]
+    E --&gt; F["Attach to Hook Point"]
+    F --&gt; G["Collect Events"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_16_30.png" alt="eBPF 把可编程 probe 安全地附加到内核" loading="lazy">
+  <p class="video-caption">📷 eBPF 把可编程 probe 安全地附加到内核<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=990" target="_blank" rel="noopener">回到原视频 (00:16:30)</a></p>
+</div>
+
+<h3 id="23">2.3 为什么最初为网络而设计</h3>
+<p><em>(参考时间: 00:18)</em></p>
+<p>网络设备每秒可能到达数百万包，不适合每次都陷入用户态再决定是否丢弃。</p>
+<p>防火墙只做少量判断：</p>
+<div class="highlight"><pre><span></span><code>if source_ip in blocked_set:
+    drop_packet()
+</code></pre></div>
+
+<p>把这类逻辑放进内核，可以避免频繁上下文切换。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Network Packet"] --&gt; B["eBPF Hook"]
+    B --&gt; C{"Allow？"}
+    C -- "是" --&gt; D["Continue Stack"]
+    C -- "否" --&gt; E["Drop"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_18_30.png" alt="eBPF 起源于高性能网络包过滤" loading="lazy">
+  <p class="video-caption">📷 eBPF 起源于高性能网络包过滤<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=1110" target="_blank" rel="noopener">回到原视频 (00:18:30)</a></p>
+</div>
+
+<h3 id="24-helper-map">2.4 Helper 与 Map</h3>
+<p><em>(参考时间: 00:20)</em></p>
+<p>eBPF 程序不能随意读写任意内核内存，只能使用受控接口：</p>
+<div class="highlight"><pre><span></span><code><span class="n">bpf_get_current_pid_tgid</span><span class="p">();</span>
+<span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="n">map</span><span class="p">,</span><span class="w"> </span><span class="n">key</span><span class="p">);</span>
+<span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="n">map</span><span class="p">,</span><span class="w"> </span><span class="n">key</span><span class="p">,</span><span class="w"> </span><span class="n">value</span><span class="p">,</span><span class="w"> </span><span class="n">flags</span><span class="p">);</span>
+</code></pre></div>
+
+<p>需要计数器或历史记录时，使用内核提供的 BPF Map。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["eBPF Program"] --&gt; B["Helper Call"]
+    B --&gt; C["Current PID"]
+    B --&gt; D["Map Lookup"]
+    B --&gt; E["Timestamp"]
+    D --&gt; F["BPF Map"]
+    F --&gt; G["Userspace Reader"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_20_30.png" alt="eBPF helper 和 map 提供受控的内核数据访问" loading="lazy">
+  <p class="video-caption">📷 eBPF helper 和 map 提供受控的内核数据访问<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=1230" target="_blank" rel="noopener">回到原视频 (00:20:30)</a></p>
+</div>
+
+<h3 id="25-verifier-bounded-execution">2.5 Verifier 与 bounded execution</h3>
+<p><em>(参考时间: 00:21)</em></p>
+<p>eBPF 验证器要求：</p>
+<ul>
+<li>程序不能无限循环；</li>
+<li>访问范围必须有界；</li>
+<li>类型与寄存器状态合法；</li>
+<li>只能使用允许的 helper；</li>
+<li>不能随意改内核数据。</li>
+</ul>
+<p>但验证器与优化器本身也可能有 bug。课程提到生产环境中曾出现明确不应被删除的代码被错误优化掉。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["eBPF Bytecode"] --&gt; B["Static Verifier"]
+    B --&gt; C{"Bounded / Safe？"}
+    C -- "否" --&gt; D["Reject"]
+    C -- "是" --&gt; E["Optimizer / JIT"]
+    E --&gt; F["Attach to Kernel"]
+    G["Verifier Optimizer Bug"] --&gt; F
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_22_30.png" alt="严格验证器保证有限执行，但实现仍可能有 bug" loading="lazy">
+  <p class="video-caption">📷 严格验证器保证有限执行，但实现仍可能有 bug<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=1350" target="_blank" rel="noopener">回到原视频 (00:22:30)</a></p>
+</div>
+
+<h3 id="26">2.6 从文件监控到任意内核观测</h3>
+<p><em>(参考时间: 00:23)</em></p>
+<p>如果 hook 点足够多，就可以组合：</p>
+<ul>
+<li>键盘与鼠标事件；</li>
+<li><code>execve</code>；</li>
+<li>文件系统事件；</li>
+<li>网络事件；</li>
+<li>块设备 I/O；</li>
+<li>调度与进程状态。</li>
+</ul>
+<p>这可以形成完整行为轨迹，也能用于学习工具与系统诊断。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Keyboard / Mouse"] --&gt; F["Unified Event Stream"]
+    B["execve"] --&gt; F
+    C["Filesystem"] --&gt; F
+    D["Network"] --&gt; F
+    E["Block I/O"] --&gt; F
+    F --&gt; G["Reconstruct Activity"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_23_30.png" alt="多类 eBPF trace 可以重建系统行为轨迹" loading="lazy">
+  <p class="video-caption">📷 多类 eBPF trace 可以重建系统行为轨迹<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=1410" target="_blank" rel="noopener">回到原视频 (00:23:30)</a></p>
+</div>
+
+<hr />
+<h2 id="3-spec-is-all-you-need">3. Spec Is All You Need</h2>
+<h3 id="31">3.1 先写正确但不高效的实现</h3>
+<p><em>(参考时间: 00:26)</em></p>
+<p>需求可以用一行高开销脚本表达：</p>
+<div class="highlight"><pre><span></span><code>diff<span class="w"> </span>&lt;<span class="o">(</span>stat<span class="w"> </span>...<span class="o">)</span><span class="w"> </span>&lt;<span class="o">(</span>sleep<span class="w"> </span><span class="m">2</span><span class="p">;</span><span class="w"> </span>modify<span class="p">;</span><span class="w"> </span>stat<span class="w"> </span>...<span class="o">)</span>
+</code></pre></div>
+
+<p>但它的 Specification 很清楚：</p>
+<blockquote>
+<p>当文件改变时，高效地告诉我改变了什么。</p>
+</blockquote>
+<p>然后让 AI 搜索操作系统已有机制，收敛到 inotify、eBPF 或 fanotify。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Functional Specification"] --&gt; B["Naive Correct Implementation"]
+    B --&gt; C["AI Explores OS Mechanisms"]
+    C --&gt; D1["Polling"]
+    C --&gt; D2["inotify"]
+    C --&gt; D3["fanotify"]
+    C --&gt; D4["eBPF"]
+    D2 --&gt; E["Efficient Implementation"]
+    D3 --&gt; E
+    D4 --&gt; E
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_27_30.png" alt="先描述清楚要什么，再让系统选择高效机制" loading="lazy">
+  <p class="video-caption">📷 先描述清楚要什么，再让系统选择高效机制<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=1650" target="_blank" rel="noopener">回到原视频 (00:27:30)</a></p>
+</div>
+
+<h3 id="32-just-in-time-systems">3.2 Just-in-Time Systems</h3>
+<p><em>(参考时间: 00:29)</em></p>
+<p>课程引用 <em>The time is here for just-in-time systems</em>：</p>
+<ul>
+<li>根据环境；</li>
+<li>根据 workload；</li>
+<li>根据系统性质；</li>
+<li>从零合成专用系统。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Specification"] --&gt; B["Agent"]
+    C["Environment"] --&gt; B
+    D["Workload"] --&gt; B
+    E["Required Properties"] --&gt; B
+    B --&gt; F["Synthesize System"]
+    F --&gt; G["Measure"]
+    G --&gt; B
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_29_30.png" alt="Agent 可以根据规范、环境和负载合成专用系统" loading="lazy">
+  <p class="video-caption">📷 Agent 可以根据规范、环境和负载合成专用系统<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=1770" target="_blank" rel="noopener">回到原视频 (00:29:30)</a></p>
+</div>
+
+<hr />
+<h2 id="4-git">4. 从持久化数据结构到 Git</h2>
+<h3 id="41">4.1 路径复制</h3>
+<p><em>(参考时间: 00:31)</em></p>
+<p>回顾上一讲的核心：</p>
+<blockquote>
+<p>Random read + append-only write = 任何持久化数据结构。</p>
+</blockquote>
+<p>修改树中一个节点时：</p>
+<ol>
+<li>复制从根到该节点的路径；</li>
+<li>新节点指向旧树中的共享子树；</li>
+<li>旧根保留旧版本；</li>
+<li>新根代表新版本。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Old Root"] --&gt; B["Shared Subtree"]
+    C["New Root"] --&gt; D["Copied Path"]
+    D --&gt; E["New Node"]
+    D --&gt; B
+    A --&gt; F["Version 0"]
+    C --&gt; G["Version 1"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_31_30.png" alt="路径复制同时保留新旧树版本" loading="lazy">
+  <p class="video-caption">📷 路径复制同时保留新旧树版本<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=1890" target="_blank" rel="noopener">回到原视频 (00:31:30)</a></p>
+</div>
+
+<h3 id="42-git">4.2 Git 是持久化对象图</h3>
+<p><em>(参考时间: 00:32)</em></p>
+<p>Git 把自己的所有内容放在 <code>.git/objects/</code>：</p>
+<ul>
+<li><strong>blob</strong>：文件内容；</li>
+<li><strong>tree</strong>：目录结构、权限与文件名；</li>
+<li><strong>commit</strong>：root tree、parent、作者和提交信息。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>blob [length]\0[content]
+
+tree:
+  100644 a.txt\0&lt;blob-hash&gt;
+  100755 script\0&lt;blob-hash&gt;
+
+commit:
+  tree &lt;hash&gt;
+  parent &lt;hash&gt;
+  author ...
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Commit"] --&gt; B["Root Tree"]
+    B --&gt; C1["Blob a.txt"]
+    B --&gt; C2["Subtree dir"]
+    C2 --&gt; D1["Blob b.txt"]
+    C2 --&gt; D2["Blob c.txt"]
+    A --&gt; E["Parent Commit"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_34_00.png" alt="Git 用 blob、tree、commit 组成内容寻址对象图" loading="lazy">
+  <p class="video-caption">📷 Git 用 blob、tree、commit 组成内容寻址对象图<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=2040" target="_blank" rel="noopener">回到原视频 (00:34:00)</a></p>
+</div>
+
+<h3 id="43-git-object">4.3 直接阅读 Git Object</h3>
+<p><em>(参考时间: 00:36)</em></p>
+<p>对象采用压缩存储，但可以写工具解压：</p>
+<div class="highlight"><pre><span></span><code>find<span class="w"> </span>.git/objects<span class="w"> </span>-type<span class="w"> </span>f<span class="w"> </span><span class="p">|</span>
+<span class="w">    </span>xargs<span class="w"> </span>./git-cat
+</code></pre></div>
+
+<p>旧文件与新文件会同时存在：</p>
+<div class="highlight"><pre><span></span><code>hello
+hello world
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A[".git/objects"] --&gt; B["Compressed Blob 1"]
+    A --&gt; C["Compressed Blob 2"]
+    B --&gt; D["Old File Version"]
+    C --&gt; E["New File Version"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_36_30.png" alt="Git 对象池同时保留同一文件的所有历史版本" loading="lazy">
+  <p class="video-caption">📷 Git 对象池同时保留同一文件的所有历史版本<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=2190" target="_blank" rel="noopener">回到原视频 (00:36:30)</a></p>
+</div>
+
+<h3 id="44-refs-head">4.4 <code>refs</code> 与 <code>HEAD</code></h3>
+<p><em>(参考时间: 00:39)</em></p>
+<p>分支是指向 commit 的文件：</p>
+<div class="highlight"><pre><span></span><code>.git/refs/heads/main  →  commit hash
+</code></pre></div>
+
+<p><code>HEAD</code> 指向分支：</p>
+<div class="highlight"><pre><span></span><code>.git/HEAD  →  ref: refs/heads/main
+</code></pre></div>
+
+<p>因此 <code>HEAD</code> 是“指针的指针”。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    H["HEAD"] --&gt; R["refs/heads/main"]
+    R --&gt; C["Commit Object"]
+    C --&gt; T["Tree Object"]
+    T --&gt; B1["Blob"]
+    T --&gt; B2["Blob"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_39_30.png" alt="HEAD 通过 ref 指向 commit" loading="lazy">
+  <p class="video-caption">📷 HEAD 通过 ref 指向 commit<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=2370" target="_blank" rel="noopener">回到原视频 (00:39:30)</a></p>
+</div>
+
+<h3 id="45-tail">4.5 创建自定义 <code>TAIL</code></h3>
+<p><em>(参考时间: 00:40)</em></p>
+<p>可以手动创建一个引用：</p>
+<div class="highlight"><pre><span></span><code>.git/refs/tail  →  old commit hash
+git diff HEAD tail
+</code></pre></div>
+
+<p>这再一次说明 Git 没有隐藏魔法，只是文件与指针。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["HEAD"] --&gt; B["New Commit"]
+    C["TAIL"] --&gt; D["Old Commit"]
+    B --&gt; E["git diff"]
+    D --&gt; E
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_40_30.png" alt="自定义引用 TAIL 也能参与 Git diff" loading="lazy">
+  <p class="video-caption">📷 自定义引用 TAIL 也能参与 Git diff<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=2430" target="_blank" rel="noopener">回到原视频 (00:40:30)</a></p>
+</div>
+
+<h3 id="46-stash-parent-commit">4.6 Stash 是带两个 parent 的 commit</h3>
+<p><em>(参考时间: 00:42)</em></p>
+<p>Stash 不是特殊存储区，而是一串 commit：</p>
+<div class="highlight"><pre><span></span><code>stash commit
+├── parent 1: HEAD
+└── parent 2: previous stash
+</code></pre></div>
+
+<p>因此可以 <code>push</code> / <code>pop</code>，形成栈结构。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    H["HEAD Commit"] --&gt; S1["Stash 1"]
+    S1 --&gt; S2["Stash 2"]
+    S1 --&gt; P2["Previous Stash Parent"]
+    S2 --&gt; S1
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_42_30.png" alt="Stash 用双亲 commit 串成栈" loading="lazy">
+  <p class="video-caption">📷 Stash 用双亲 commit 串成栈<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=2550" target="_blank" rel="noopener">回到原视频 (00:42:30)</a></p>
+</div>
+
+<hr />
+<h2 id="5-mergecherry-pick-rebase">5. Merge、Cherry-pick 与 Rebase</h2>
+<h3 id="51-merge">5.1 Merge</h3>
+<p><em>(参考时间: 00:44)</em></p>
+<p>两条历史：</p>
+<div class="highlight"><pre><span></span><code>Local:   CA → A → B
+Remote:  CA → C → D
+</code></pre></div>
+
+<p>普通 merge 创建 <code>E</code>：两个 parent 分别指向 <code>B</code> 与 <code>D</code>。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    CA["Common Ancestor"] --&gt; A
+    A --&gt; B
+    CA --&gt; C
+    C --&gt; D
+    B --&gt; E["Merge Commit"]
+    D --&gt; E
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_45_30.png" alt="Merge 创建具有两个 parent 的新提交" loading="lazy">
+  <p class="video-caption">📷 Merge 创建具有两个 parent 的新提交<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=2730" target="_blank" rel="noopener">回到原视频 (00:45:30)</a></p>
+</div>
+
+<h3 id="52-fast-forward">5.2 Fast-forward</h3>
+<p><em>(参考时间: 00:47)</em></p>
+<p>如果本地没有 <code>A</code>、<code>B</code>，远端直接包含本地历史，就只需移动分支指针：</p>
+<div class="highlight"><pre><span></span><code>CA → C → D
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["CA"] --&gt; B["C"] --&gt; C["D"]
+    D["D"] --&gt; E["Local Branch Pointer"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_47_30.png" alt="Fast-forward 只移动分支指针" loading="lazy">
+  <p class="video-caption">📷 Fast-forward 只移动分支指针<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=2850" target="_blank" rel="noopener">回到原视频 (00:47:30)</a></p>
+</div>
+
+<h3 id="53-cherry-pick">5.3 Cherry-pick</h3>
+<p><em>(参考时间: 00:48)</em></p>
+<p>一个 commit 可以视为一个 diff：</p>
+<div class="highlight"><pre><span></span><code>diff = tree(A) → tree(B)
+</code></pre></div>
+
+<p>Cherry-pick 把该 diff 应用到另一条历史，生成新的 commit，而不是复制原 commit hash。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Commit A"] --&gt; B["Commit B"]
+    A --&gt; D["diff A→B"]
+    B --&gt; D
+    D --&gt; C["Apply to Target Branch"]
+    C --&gt; E["New Commit B'"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_48_30.png" alt="Cherry-pick 抽取单次提交的补丁并重新应用" loading="lazy">
+  <p class="video-caption">📷 Cherry-pick 抽取单次提交的补丁并重新应用<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=2910" target="_blank" rel="noopener">回到原视频 (00:48:30)</a></p>
+</div>
+
+<h3 id="54-rebase">5.4 Rebase</h3>
+<p><em>(参考时间: 00:50)</em></p>
+<p>Rebase：</p>
+<ol>
+<li>切换到远端 <code>C</code>、<code>D</code>；</li>
+<li>把 <code>CA→A</code> 的 diff 应用为新 <code>A'</code>；</li>
+<li>把 <code>A→B</code> 的 diff 应用为新 <code>B'</code>；</li>
+<li>丢掉旧 <code>A</code>、<code>B</code> 的引用。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Local A → B"] --&gt; D1["diff 1: CA→A"]
+    A --&gt; D2["diff 2: A→B"]
+    C["Remote C → D"] --&gt; R1["A'"]
+    D1 --&gt; R1
+    R1 --&gt; R2["B'"]
+    D2 --&gt; R2
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_50_30.png" alt="Rebase 顺序重放本地提交的 diff" loading="lazy">
+  <p class="video-caption">📷 Rebase 顺序重放本地提交的 diff<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=3030" target="_blank" rel="noopener">回到原视频 (00:50:30)</a></p>
+</div>
+
+<h3 id="55-rebase">5.5 Rebase 的风险</h3>
+<p><em>(参考时间: 00:51)</em></p>
+<p>Rebase 可能隐藏逻辑冲突：</p>
+<ul>
+<li>文件层面没有冲突；</li>
+<li>语义却已矛盾；</li>
+<li>必须重新 review 每个重放后的 diff；</li>
+<li>多处冲突时回退到 merge 往往更安全。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Automatic Rebase"] --&gt; B{"Text Conflict？"}
+    B -- "是" --&gt; C["Painful Resolution"]
+    B -- "否" --&gt; D["Rewrite Succeeded"]
+    D --&gt; E{"Logical Conflict？"}
+    E -- "可能" --&gt; F["Manual Review Required"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_51_30.png" alt="自动 Rebase 成功仍可能隐藏语义冲突" loading="lazy">
+  <p class="video-caption">📷 自动 Rebase 成功仍可能隐藏语义冲突<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=3090" target="_blank" rel="noopener">回到原视频 (00:51:30)</a></p>
+</div>
+
+<hr />
+<h2 id="6-git-worktree">6. Git Worktree：持久化结构带来的“免费复制”</h2>
+<h3 id="61-git">6.1 Git 最初是单工作区模型</h3>
+<p><em>(参考时间: 00:53)</em></p>
+<p>Git 类似早期 UNIX：</p>
+<ul>
+<li>一个 worktree；</li>
+<li>一个 HEAD；</li>
+<li>线性提交；</li>
+<li>需要临时切换时使用 stash。</li>
+</ul>
+<p>频繁、多任务切换会造成 stash 地狱。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Current Work"] --&gt; B["stash"]
+    B --&gt; C["Checkout Hotfix"]
+    C --&gt; D["Work Halfway"]
+    D --&gt; E["stash Again"]
+    E --&gt; F["Stash Stack Grows"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_53_30.png" alt="多任务切换使单工作区 Git 很快遇到限制" loading="lazy">
+  <p class="video-caption">📷 多任务切换使单工作区 Git 很快遇到限制<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=3210" target="_blank" rel="noopener">回到原视频 (00:53:30)</a></p>
+</div>
+
+<h3 id="62-worktree">6.2 Worktree</h3>
+<p><em>(参考时间: 00:55)</em></p>
+<p>创建第二个工作目录：</p>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>worktree<span class="w"> </span>add<span class="w"> </span>../hotfix<span class="w"> </span>hotfix
+</code></pre></div>
+
+<p>新目录中的 <code>.git</code> 不是完整对象库，而是一个文本指针：</p>
+<div class="highlight"><pre><span></span><code>gitdir: /main/repo/.git/worktrees/hotfix
+</code></pre></div>
+
+<p>所有版本对象共享，只有工作区和引用不同。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    O["Shared .git/objects"] --&gt; W1["Worktree main"]
+    O --&gt; W2["Worktree hotfix"]
+    O --&gt; W3["Worktree agent-1"]
+    W1 --&gt; R1["HEAD 1"]
+    W2 --&gt; R2["HEAD 2"]
+    W3 --&gt; R3["HEAD 3"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_56_30.png" alt="Worktree 共享对象库，只复制指针和工作区" loading="lazy">
+  <p class="video-caption">📷 Worktree 共享对象库，只复制指针和工作区<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=3390" target="_blank" rel="noopener">回到原视频 (00:56:30)</a></p>
+</div>
+
+<h3 id="63-agent-swarm">6.3 Agent Swarm 时代</h3>
+<p><em>(参考时间: 00:57)</em></p>
+<p>多个 Agent 可以：</p>
+<ol>
+<li>在独立 worktree 工作；</li>
+<li>在干净分支上提交；</li>
+<li>主 Agent 负责合并；</li>
+<li>减少相互污染。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    M["Main Agent"] --&gt; A1["Sub-agent Worktree 1"]
+    M --&gt; A2["Sub-agent Worktree 2"]
+    M --&gt; A3["Sub-agent Worktree 3"]
+    A1 --&gt; R1["Branch 1"]
+    A2 --&gt; R2["Branch 2"]
+    A3 --&gt; R3["Branch 3"]
+    R1 --&gt; M
+    R2 --&gt; M
+    R3 --&gt; M
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_57_30.png" alt="Worktree 为多 Agent 并行开发提供隔离环境" loading="lazy">
+  <p class="video-caption">📷 Worktree 为多 Agent 并行开发提供隔离环境<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=3450" target="_blank" rel="noopener">回到原视频 (00:57:30)</a></p>
+</div>
+
+<hr />
+<h2 id="7">7. 文件系统级快照</h2>
+<h3 id="71-btrfs-copy-on-write">7.1 Btrfs Copy-on-Write</h3>
+<p><em>(参考时间: 00:58)</em></p>
+<p>Btrfs 使用 B-tree 和 copy-on-write：</p>
+<ul>
+<li>修改数据不覆盖旧块；</li>
+<li>新根指向新数据；</li>
+<li>旧根仍指向旧数据；</li>
+<li>创建快照只需记录旧根。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Current Root"] --&gt; B["B-tree"]
+    C["Snapshot Root"] --&gt; B
+    B --&gt; D1["Shared Old Blocks"]
+    A --&gt; E["New Blocks"]
+    E --&gt; F["Updated B-tree"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_59_30.png" alt="Btrfs 通过 CoW 树共享旧块实现快照" loading="lazy">
+  <p class="video-caption">📷 Btrfs 通过 CoW 树共享旧块实现快照<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=3570" target="_blank" rel="noopener">回到原视频 (00:59:30)</a></p>
+</div>
+
+<h3 id="72-snapshot-ioctl">7.2 Snapshot ioctl</h3>
+<p><em>(参考时间: 00:59)</em></p>
+<div class="highlight"><pre><span></span><code><span class="n">ioctl</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span><span class="w"> </span><span class="n">BTRFS_IOC_SNAP_CREATE</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">args</span><span class="p">);</span>
+</code></pre></div>
+
+<p>创建快照本质上只是记录一个 root 指针。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Open Filesystem FD"] --&gt; B["BTRFS_IOC_SNAP_CREATE"]
+    B --&gt; C["Record Current Root"]
+    C --&gt; D["Snapshot Visible"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_00_30.png" alt="文件系统通过 ioctl 创建瞬时快照" loading="lazy">
+  <p class="video-caption">📷 文件系统通过 ioctl 创建瞬时快照<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=3630" target="_blank" rel="noopener">回到原视频 (01:00:30)</a></p>
+</div>
+
+<hr />
+<h2 id="8-overlayfs">8. OverlayFS：把目录叠加起来</h2>
+<h3 id="81-union">8.1 Union 的基本语义</h3>
+<p><em>(参考时间: 01:01)</em></p>
+<p>OverlayFS 把：</p>
+<ul>
+<li>一个 upper；</li>
+<li>一个或多个 lower；</li>
+</ul>
+<p>合并成一个虚拟目录。</p>
+<p>查找规则：</p>
+<ol>
+<li>先看 upper；</li>
+<li>没有再看 lower；</li>
+<li>写入只修改 upper；</li>
+<li>lower 保持不变。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["lookup merged/a.txt"] --&gt; B{"upper/a.txt exists？"}
+    B -- "是" --&gt; C["Use upper version"]
+    B -- "否" --&gt; D{"lower/a.txt exists？"}
+    D -- "是" --&gt; E["Use lower version"]
+    D -- "否" --&gt; F["Not Found"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_01_30.png" alt="Overlay 查找优先使用 upper 文件" loading="lazy">
+  <p class="video-caption">📷 Overlay 查找优先使用 upper 文件<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=3690" target="_blank" rel="noopener">回到原视频 (01:01:30)</a></p>
+</div>
+
+<h3 id="82-killer-app-cd-key">8.2 Killer App：并行刻盘与不同 CD Key</h3>
+<p><em>(参考时间: 01:03)</em></p>
+<p>同一份 600 MB 内容需要写入 16 张盘，每张只多一个不同 CD Key：</p>
+<div class="highlight"><pre><span></span><code>15 × lower 共享 600MB
+16 × upper 各放 CDKey.exe
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart LR
+    L["Shared Lower 600MB"] --&gt; M1["Merged CD 1"]
+    L --&gt; M2["Merged CD 2"]
+    L --&gt; M3["Merged CD 16"]
+    U1["Upper CDKey 1"] --&gt; M1
+    U2["Upper CDKey 2"] --&gt; M2
+    U3["Upper CDKey 16"] --&gt; M3
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_03_30.png" alt="Overlay 让多张光盘共享同一份只读内容" loading="lazy">
+  <p class="video-caption">📷 Overlay 让多张光盘共享同一份只读内容<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=3810" target="_blank" rel="noopener">回到原视频 (01:03:30)</a></p>
+</div>
+
+<h3 id="83-killer-app">8.3 Killer App：试升级</h3>
+<p><em>(参考时间: 01:05)</em></p>
+<p>把系统根作为 lower，在另一个磁盘创建空 upper，执行危险升级：</p>
+<div class="highlight"><pre><span></span><code>lower = old rootfs
+upper = new disk
+merged = /
+</code></pre></div>
+
+<p>升级失败时丢弃 upper；成功时再同步到真实系统。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Old Root as Lower"] --&gt; C["Merged Root"]
+    B["Empty Upper on New Disk"] --&gt; C
+    C --&gt; D["Run apt dist-upgrade"]
+    D --&gt; E{"Success？"}
+    E -- "否" --&gt; F["Discard Upper"]
+    E -- "是" --&gt; G["Commit Changes"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_05_30.png" alt="Overlayroot 让危险升级变成可回滚实验" loading="lazy">
+  <p class="video-caption">📷 Overlayroot 让危险升级变成可回滚实验<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=3930" target="_blank" rel="noopener">回到原视频 (01:05:30)</a></p>
+</div>
+
+<h3 id="84-mount-overlayfs">8.4 Mount OverlayFS</h3>
+<p><em>(参考时间: 01:08)</em></p>
+<div class="highlight"><pre><span></span><code>mount<span class="w"> </span>-t<span class="w"> </span>overlay<span class="w"> </span>overlay<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-o<span class="w"> </span><span class="nv">lowerdir</span><span class="o">=</span>L1:L2:...,upperdir<span class="o">=</span>U,workdir<span class="o">=</span>W<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>merged/
+</code></pre></div>
+
+<p>规则：</p>
+<ul>
+<li>多个 lower；</li>
+<li>只允许一个 upper；</li>
+<li>workdir 是内部临时空间；</li>
+<li>workdir 必须为空。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    L1["Lower L1"] --&gt; M["Merged"]
+    L2["Lower L2"] --&gt; M
+    U["Upper U"] --&gt; M
+    W["Workdir W"] --&gt; M
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_08_30.png" alt="OverlayFS 支持多层 lower 和单一 upper" loading="lazy">
+  <p class="video-caption">📷 OverlayFS 支持多层 lower 和单一 upper<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=4110" target="_blank" rel="noopener">回到原视频 (01:08:30)</a></p>
+</div>
+
+<h3 id="85-whiteout">8.5 Whiteout</h3>
+<p><em>(参考时间: 01:10)</em></p>
+<p>删除 lower 中的文件不能在 lower 中改数据，因此 upper 会创建 whiteout：</p>
+<div class="highlight"><pre><span></span><code>lower/lower.txt
+    ↓ delete in merged
+upper/.wh.lower.txt
+</code></pre></div>
+
+<p>merged 中文件消失，但 lower 保持不变。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Delete merged/lower.txt"] --&gt; B["Create Whiteout in Upper"]
+    B --&gt; C["Merged Hides File"]
+    D["Lower File"] --&gt; E["Still Unchanged"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_10_30.png" alt="Whiteout 用 upper 中的特殊节点隐藏 lower 文件" loading="lazy">
+  <p class="video-caption">📷 Whiteout 用 upper 中的特殊节点隐藏 lower 文件<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=4230" target="_blank" rel="noopener">回到原视频 (01:10:30)</a></p>
+</div>
+
+<h3 id="86">8.6 考试机与网吧管理</h3>
+<p><em>(参考时间: 01:11)</em></p>
+<p>系统根和 home 作为 lower，每场考试或每个用户分配不同 upper：</p>
+<ul>
+<li>用户看不到上一场的数据；</li>
+<li>重启或换 upper 即恢复干净环境；</li>
+<li>管理员仍保留真实 upper 用于审计。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    S["System Lower"] --&gt; M1["Morning Exam"]
+    S --&gt; M2["Afternoon Exam"]
+    U1["Morning Upper"] --&gt; M1
+    U2["Afternoon Upper"] --&gt; M2
+    M1 --&gt; A["Admin Audit"]
+    M2 --&gt; A
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_11_30.png" alt="Overlay 可以隔离并审计每场考试的用户修改" loading="lazy">
+  <p class="video-caption">📷 Overlay 可以隔离并审计每场考试的用户修改<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=4290" target="_blank" rel="noopener">回到原视频 (01:11:30)</a></p>
+</div>
+
+<hr />
+<h2 id="9-docker-layer">9. Docker Layer</h2>
+<p><em>(参考时间: 01:12)</em></p>
+<p>Dockerfile：</p>
+<div class="highlight"><pre><span></span><code><span class="k">FROM</span><span class="w"> </span><span class="s">ubuntu:22.04</span>
+<span class="k">RUN</span><span class="w"> </span>apt-get<span class="w"> </span>update
+<span class="k">RUN</span><span class="w"> </span>apt-get<span class="w"> </span>install<span class="w"> </span>-y<span class="w"> </span>software-a
+<span class="k">RUN</span><span class="w"> </span>apt-get<span class="w"> </span>install<span class="w"> </span>-y<span class="w"> </span>software-b
+</code></pre></div>
+
+<p>每个 <code>RUN</code>：</p>
+<ol>
+<li>把之前的镜像作为 lower；</li>
+<li>创建空 upper；</li>
+<li>在容器内执行命令；</li>
+<li>把 upper 提交成新 layer；</li>
+<li>新 layer 成为下一次构建的 lower。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Base Image Layer"] --&gt; B["RUN apt update"]
+    B --&gt; C["Update Layer"]
+    C --&gt; D["RUN install A"]
+    D --&gt; E["Software A Layer"]
+    E --&gt; F["RUN install B"]
+    F --&gt; G["Software B Layer"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_13_30.png" alt="每个 Docker RUN 生成一个不可变文件系统层" loading="lazy">
+  <p class="video-caption">📷 每个 Docker RUN 生成一个不可变文件系统层<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=4410" target="_blank" rel="noopener">回到原视频 (01:13:30)</a></p>
+</div>
+
+<p>如果忘记安装软件，正确方式是在末尾增加新的 <code>RUN</code>，而不是修改早期 <code>RUN</code>，因为后者会让后续所有 layer cache 失效。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Existing Layers"] --&gt; B["New RUN"]
+    B --&gt; C["Additional Layer"]
+    C --&gt; D["Updated Image"]
+    E["Edit Old RUN"] --&gt; F["Invalidate All Later Layers"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_15_30.png" alt="追加新 layer 比修改历史 layer 更符合容器模型" loading="lazy">
+  <p class="video-caption">📷 追加新 layer 比修改历史 layer 更符合容器模型<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=4530" target="_blank" rel="noopener">回到原视频 (01:15:30)</a></p>
+</div>
+
+<hr />
+<h2 id="10-fuse">10. FUSE：在用户态实现文件系统</h2>
+<h3 id="101">10.1 内核把操作转发给用户态</h3>
+<p><em>(参考时间: 01:16)</em></p>
+<p>FUSE 提供 <code>struct fuse_operations</code>：</p>
+<div class="highlight"><pre><span></span><code><span class="k">struct</span><span class="w"> </span><span class="nc">fuse_operations</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="p">(</span><span class="o">*</span><span class="n">getattr</span><span class="p">)(</span><span class="k">const</span><span class="w"> </span><span class="kt">char</span><span class="w"> </span><span class="o">*</span><span class="p">,</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="nc">stat</span><span class="w"> </span><span class="o">*</span><span class="p">);</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="p">(</span><span class="o">*</span><span class="n">readdir</span><span class="p">)(...);</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="p">(</span><span class="o">*</span><span class="n">open</span><span class="p">)(</span><span class="k">const</span><span class="w"> </span><span class="kt">char</span><span class="w"> </span><span class="o">*</span><span class="p">,</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="nc">fuse_file_info</span><span class="w"> </span><span class="o">*</span><span class="p">);</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="p">(</span><span class="o">*</span><span class="n">read</span><span class="p">)(...);</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="p">(</span><span class="o">*</span><span class="n">write</span><span class="p">)(...);</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="p">(</span><span class="o">*</span><span class="n">setxattr</span><span class="p">)(...);</span>
+<span class="w">    </span><span class="c1">// ...</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<p>内核收到文件操作后，把请求转发到 FUSE daemon，daemon 可以返回任意计算得到的结果。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Application"] --&gt; B["VFS"]
+    B --&gt; C["FUSE Kernel Module"]
+    C --&gt; D["FUSE Daemon"]
+    D --&gt; E["Custom Logic / Database / Network"]
+    E --&gt; D
+    D --&gt; C
+    C --&gt; A
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_16_30.png" alt="FUSE 把 lookup/read/write 转发给用户态实现" loading="lazy">
+  <p class="video-caption">📷 FUSE 把 lookup/read/write 转发给用户态实现<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=4590" target="_blank" rel="noopener">回到原视频 (01:16:30)</a></p>
+</div>
+
+<h3 id="102-ggfsgalgame">10.2 GGFS：Galgame 文件系统</h3>
+<p><em>(参考时间: 01:18)</em></p>
+<p>课程实现了一个 GGFS：</p>
+<ul>
+<li>目录和文件由程序即时生成；</li>
+<li>读取文件触发自定义逻辑；</li>
+<li>写入任意文件驱动剧情状态；</li>
+<li>不要求背后有真实的磁盘文件。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Read GGFS File"] --&gt; B["Generate Synthetic Data"]
+    C["Write GGFS File"] --&gt; D["Update Game State"]
+    D --&gt; E["Rebuild Virtual Directory"]
+    E --&gt; F["Files Change"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_18_30.png" alt="GGFS 用文件系统接口驱动一个 Galgame" loading="lazy">
+  <p class="video-caption">📷 GGFS 用文件系统接口驱动一个 Galgame<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=4710" target="_blank" rel="noopener">回到原视频 (01:18:30)</a></p>
+</div>
+
+<h3 id="103-fuse">10.3 用 FUSE 映射任意后端</h3>
+<p><em>(参考时间: 01:20)</em></p>
+<p>示例：</p>
+<ul>
+<li><code>sshfs</code>：远程 SSH 目录；</li>
+<li><code>aitfs</code>：远程 Git 仓库；</li>
+<li><code>dbfs</code>：数据库作为文件系统后端；</li>
+<li><code>ffs</code>：JSON 或其他数据源变成文件系统；</li>
+<li>GGFS：游戏状态变成文件系统。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["SSH"] --&gt; F["FUSE"]
+    B["Git"] --&gt; F
+    C["Database"] --&gt; F
+    D["JSON"] --&gt; F
+    E["Custom State Machine"] --&gt; F
+    F --&gt; G["Ordinary Files and Directories"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_20_30.png" alt="FUSE 可以把网络、数据库或任意状态映射成文件" loading="lazy">
+  <p class="video-caption">📷 FUSE 可以把网络、数据库或任意状态映射成文件<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=4830" target="_blank" rel="noopener">回到原视频 (01:20:30)</a></p>
+</div>
+
+<h3 id="104">10.4 非常规文件系统行为</h3>
+<p><em>(参考时间: 01:21)</em></p>
+<p>FUSE 可以违背普通文件系统的直觉：</p>
+<ul>
+<li><code>getdents64</code> 看不到某个目录；</li>
+<li>知道名字的程序仍可 <code>cd</code> 进入；</li>
+<li>读取返回随机或生成数据；</li>
+<li>写入任何文件都能改变内部状态；</li>
+<li>文件系统可以是一个状态机。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Virtual Directory"] --&gt; B{"List Directory?"}
+    B -- "是" --&gt; C["Hide Secret Entry"]
+    B -- "否" --&gt; D{"Know Exact Name？"}
+    D -- "否" --&gt; E["Not Found"]
+    D -- "是" --&gt; F["Return Virtual Node"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_21_30.png" alt="FUSE 可以自定义目录可见性和状态转换" loading="lazy">
+  <p class="video-caption">📷 FUSE 可以自定义目录可见性和状态转换<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=4890" target="_blank" rel="noopener">回到原视频 (01:21:30)</a></p>
+</div>
+
+<h3 id="105-symlink-game">10.5 Symlink Game</h3>
+<p><em>(参考时间: 01:21)</em></p>
+<p>符号链接也可以构造任意有向图：</p>
+<div class="highlight"><pre><span></span><code>a → b
+b → c
+c → a
+</code></pre></div>
+
+<p>操作系统会按照路径解析规则逐段解析，这再次说明“文件系统机制”可以被当作创作空间。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Room A"] --&gt; B["Room B"]
+    B --&gt; C["Room C"]
+    C --&gt; D["Ending"]
+    C --&gt; A
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_22_00.png" alt="符号链接可以构造任意状态机和图结构" loading="lazy">
+  <p class="video-caption">📷 符号链接可以构造任意状态机和图结构<br><a href="https://www.bilibili.com/video/BV12gVs6SExQ/?t=4920" target="_blank" rel="noopener">回到原视频 (01:22:00)</a></p>
+</div>
+
+<hr />
+<h2 id="11-all-you-need-is-a-data-structure">11. 总结：All You Need Is a Data Structure</h2>
+<p>如果摆脱“文件系统只能是块设备上的固定结构”这一固有印象，把它看作 ADT，就可以自由设计操作：</p>
+<ul>
+<li>inotify 提供事件监控；</li>
+<li>eBPF 提供可编程内核探针；</li>
+<li>Git 用持久化 object graph 实现历史与分支；</li>
+<li>Btrfs 通过 CoW 提供文件系统快照；</li>
+<li>OverlayFS 把多个目录组合成一个虚拟目录；</li>
+<li>Docker 用多层 Overlay 构建不可变镜像；</li>
+<li>FUSE 允许在用户态实现任意文件系统。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Filesystem = ADT"] --&gt; B["Monitor"]
+    A --&gt; C["Snapshot"]
+    A --&gt; D["Overlay"]
+    A --&gt; E["FUSE"]
+    B --&gt; F["Unbounded OS Mechanisms"]
+    C --&gt; F
+    D --&gt; F
+    E --&gt; F
+</code></pre></div>
+
+<p>核心结论：</p>
+<blockquote>
+<p>文件系统不是一组必须照本宣科实现的系统调用，而是一个可以被重新设计的数据结构。只要机制足够通用，想象力就是接口的边界。</p>
+</blockquote>
+<hr />
+<h2 id="_2">附：官方参考与延伸阅读</h2>
+<ul>
+<li><a href="https://jyywiki.cn/OS/demos/persistence/watchdog">watchdog 文件监控实验</a></li>
+<li><a href="https://github.com/gorakhargosh/watchdog">watchdog 项目</a></li>
+<li><a href="https://blog.igns.top/posts/ebpf-promises/">eBPF Promises 与其验证器问题</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/persistence/bio">Linux Block I/O eBPF 实验</a></li>
+<li><a href="https://arxiv.org/abs/2605.24096">The time is here for just-in-time systems</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/persistence/overlay">OverlayFS 实验</a></li>
+<li><a href="https://libfuse.github.io/doxygen/structfuse__operations.html">libfuse <code>fuse_operations</code> 文档</a></li>
+<li><a href="https://mgree.github.io/ffs/">ffs：把任意数据变成文件系统</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/persistence/ggmaker">Symlink Game</a></li>
+</ul>
+<p>官方课程资料：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/2026/">课程主页</a></li>
+<li><a href="https://jyywiki.cn/OS/2026/lect25.md">第 25 讲讲义：文件系统 API (2)</a></li>
+<li><a href="https://www.bilibili.com/video/BV12gVs6SExQ/">视频：25 - 文件系统 API (2)</a></li>
+</ul>
+<blockquote>
+<p><strong>版权与署名</strong>：本讲课程材料由蒋炎岩（jyy）编写。课程讲义与幻灯片采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书保留课程出处、作者署名与许可说明。</p>
+</blockquote>
+    </article>
+
+    <!-- Mermaid 图表引擎初始化 -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            mermaid.initialize({ startOnLoad: false, theme: 'default' });
+            
+            // 兼容普通代码块以及丢失 language-mermaid 类名的情况 (CodeHilite 干扰)
+            const codeNodes = document.querySelectorAll('pre code, .highlight code');
+            codeNodes.forEach(function(node) {
+                const text = node.textContent.trim();
+                // 匹配常见的 mermaid 图表前缀
+                if (text.startsWith('graph ') || text.startsWith('flowchart ') || text.startsWith('sequenceDiagram') || text.startsWith('gantt') || text.startsWith('pie') || text.startsWith('classDiagram') || text.startsWith('stateDiagram') || text.startsWith('mindmap')) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.className = 'mermaid';
+                    tempDiv.textContent = text;
+                    
+                    // 获取需要替换的最外层父节点 (比如 div.highlight 或者 pre)
+                    const wrapper = node.closest('.highlight') || node.parentNode;
+                    wrapper.replaceWith(tempDiv); 
+                }
+            });
+            
+            // 所有节点转换完成，统一进行图表动态绘制
+            mermaid.run();
+        });
+    </script>
+    <!-- Lightbox：截图点击放大 -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const lightbox = document.createElement('div');
+            lightbox.className = 'lightbox';
+            lightbox.innerHTML = '<img alt=""><div class="lightbox-caption"></div>';
+            document.body.appendChild(lightbox);
+            const lbImg = lightbox.querySelector('img');
+            const lbCap = lightbox.querySelector('.lightbox-caption');
+            function openLightbox(src, alt) {
+                lbImg.src = src; lbImg.alt = alt || '';
+                lbCap.textContent = alt || '';
+                lightbox.classList.add('open');
+                document.body.style.overflow = 'hidden';
+            }
+            function closeLightbox() {
+                lightbox.classList.remove('open');
+                lbImg.src = '';
+                document.body.style.overflow = '';
+            }
+            document.querySelectorAll('.screenshot-card img').forEach(function(img) {
+                img.addEventListener('click', function() { openLightbox(img.src, img.alt); });
+            });
+            lightbox.addEventListener('click', closeLightbox);
+            document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
+        });
+    </script>
+</body>
+</html>
