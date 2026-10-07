@@ -1,0 +1,1241 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>并行算法和数据结构：从正确性走向可扩展性</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* ── 基础重置 ── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            color-scheme: light;
+            --bg-primary: #f7f7f8;
+            --bg-secondary: #ffffff;
+            --bg-card: #eef0f3;
+            --bg-code: #f2f3f5;
+            --text-primary: #1f2328;
+            --text-secondary: #57606a;
+            --text-muted: #6e7781;
+            --accent: #2563eb;
+            --accent-glow: rgba(37, 99, 235, 0.08);
+            --border: #d9dce1;
+            --border-subtle: #e7e9ec;
+            --radius: 12px;
+            --shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Serif SC', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.8;
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── 文章容器 ── */
+        .book-content {
+            max-width: 780px;
+            margin: 0 auto;
+            padding: 60px 32px 120px;
+        }
+
+        /* ── 标题 ── */
+        h1 {
+            font-size: 2.2em;
+            font-weight: 700;
+            margin: 0 0 12px;
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+        }
+
+        h2 {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 56px 0 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h3 {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: var(--accent);
+            margin: 36px 0 12px;
+        }
+
+        /* ── 段落与文字 ── */
+        p {
+            margin: 0 0 16px;
+            color: var(--text-primary);
+        }
+
+        strong {
+            color: #0f172a;
+            font-weight: 600;
+        }
+
+        em {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.2s;
+        }
+        a:hover {
+            border-bottom-color: var(--accent);
+        }
+
+        /* ── 引用 ── */
+        blockquote {
+            margin: 24px 0;
+            padding: 16px 20px;
+            background: var(--bg-secondary);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 var(--radius) var(--radius) 0;
+            color: var(--text-secondary);
+        }
+        blockquote p { margin: 0; }
+
+        /* ── 列表 ── */
+        ul, ol {
+            margin: 12px 0 20px 24px;
+            color: var(--text-primary);
+        }
+        li {
+            margin: 6px 0;
+        }
+
+        /* ── 分割线 ── */
+        hr {
+            border: none;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border), transparent);
+            margin: 48px 0;
+        }
+
+        /* ── 表格 ── */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 24px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+        thead {
+            background: var(--bg-card);
+        }
+        th {
+            padding: 12px 16px;
+            font-weight: 600;
+            text-align: left;
+            color: var(--accent);
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        td {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border-subtle);
+        }
+        tbody tr {
+            background: var(--bg-secondary);
+            transition: background 0.15s;
+        }
+        tbody tr:hover {
+            background: var(--bg-card);
+        }
+
+        /* ── 代码 ── */
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-code);
+            padding: 2px 7px;
+            border-radius: 5px;
+            font-size: 0.88em;
+            color: #6d28d9;
+        }
+
+        pre {
+            margin: 20px 0;
+            padding: 20px 24px;
+            background: var(--bg-code);
+            border-radius: var(--radius);
+            overflow-x: auto;
+            border: 1px solid var(--border);
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9em;
+            color: var(--text-primary);
+        }
+
+        /* ── 视频嵌入卡片 ── */
+        .video-card {
+            margin: 32px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .video-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(15, 23, 42, 0.12);
+        }
+
+        .video-wrapper {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 */
+            height: 0;
+            overflow: hidden;
+        }
+        .video-wrapper iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .video-card img {
+            width: 100%;
+            display: block;
+        }
+
+        .video-caption {
+            padding: 12px 16px;
+            font-size: 0.88em;
+            color: var(--text-secondary);
+            text-align: center;
+            line-height: 1.6;
+            margin: 0;
+        }
+        .video-caption a {
+            color: var(--accent);
+        }
+
+        .video-card.fallback {
+            padding: 20px;
+            text-align: center;
+        }
+
+        /* ── Lightbox：截图点击放大 ── */
+        .screenshot-card img { cursor: zoom-in; transition: opacity 0.15s; }
+        .screenshot-card img:hover { opacity: 0.9; }
+        .lightbox {
+            position: fixed; inset: 0; z-index: 999;
+            display: none; align-items: center; justify-content: center;
+            background: rgba(5, 5, 8, 0.92); backdrop-filter: blur(4px);
+            cursor: zoom-out; padding: 24px;
+        }
+        .lightbox.open { display: flex; }
+        .lightbox img {
+            max-width: 96vw; max-height: 90vh;
+            border-radius: 8px; box-shadow: 0 12px 60px rgba(0,0,0,0.7);
+        }
+        .lightbox-caption {
+            position: absolute; bottom: 14px; left: 0; right: 0;
+            text-align: center; color: var(--text-secondary); font-size: 0.85em;
+        }
+
+        /* ── 顶部信息栏 ── */
+        .book-content > blockquote:first-of-type {
+            background: var(--accent-glow);
+            border-left-color: var(--accent);
+            border-radius: var(--radius);
+            margin-bottom: 32px;
+        }
+
+        /* ── 图表居中 ── */
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            margin: 32px 0;
+            overflow-x: auto;
+        }
+
+        /* ── 滚动条 ── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* ── 响应式 ── */
+        @media (max-width: 640px) {
+            .book-content { padding: 32px 16px 80px; }
+            h1 { font-size: 1.7em; }
+            h2 { font-size: 1.3em; }
+        }
+    </style>
+</head>
+<body>
+    <article class="book-content">
+        <h1 id="_1">并行算法和数据结构：从正确性走向可扩展性</h1>
+<blockquote>
+<p><strong>课程</strong>：2026 春季学期《操作系统原理》<br />
+<strong>讲师</strong>：蒋炎岩（jyy）<br />
+<strong>官方课程主页</strong>：<a href="https://jyywiki.cn/OS/2026/">https://jyywiki.cn/OS/2026/</a><br />
+<strong>官方讲义</strong>：<a href="https://jyywiki.cn/OS/2026/lect18.md">https://jyywiki.cn/OS/2026/lect18.md</a><br />
+<strong>视频来源</strong>：<a href="https://www.bilibili.com/video/BV1WqdTBiEkN/">Bilibili BV1WqdTBiEkN</a><br />
+<strong>版权说明</strong>：课程讲义与幻灯片归蒋炎岩所有，采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书是对课堂讲授的书面化重构，保留出处与许可说明。</p>
+</blockquote>
+<h2 id="_2">导语：锁保证了正确，却不保证扩展</h2>
+<p><em>(参考时间: 00:00)</em></p>
+<p>前几讲解决了并发程序“怎么才能正确”的问题：</p>
+<ul>
+<li>互斥锁阻止数据竞争；</li>
+<li>条件变量实现任意同步条件；</li>
+<li>信号量管理计数型资源；</li>
+<li>并发 bug 的工具与工程约束帮助发现问题。</li>
+</ul>
+<p>这一讲转向性能：</p>
+<blockquote>
+<p>当程序已经正确后，如何让性能随线程、CPU 和机器数量增长？</p>
+</blockquote>
+<p>两个关键概念：</p>
+<ul>
+<li><strong>Scale Up</strong>：在同一台机器上增加线程 / CPU，性能继续增长；</li>
+<li><strong>Scale Out</strong>：增加机器节点，性能继续增长。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["正确性：Mutex / CV / Semaphore"] --&gt; B["性能：Scale Up"]
+    B --&gt; C["更多 CPU / 线程"]
+    A --&gt; D["Scale Out"]
+    D --&gt; E["更多机器 / 节点"]
+    C --&gt; F["并行算法"]
+    E --&gt; F
+    F --&gt; G["并行数据结构"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_14_30.png" alt="从互斥和同步转向并行算法与数据结构" loading="lazy">
+  <p class="video-caption">📷 从互斥和同步转向并行算法与数据结构<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=870" target="_blank" rel="noopener">回到原视频 (00:14:30)</a></p>
+</div>
+
+<hr />
+<h2 id="1-sum">1. <code>sum++</code> 为什么无法扩展</h2>
+<h3 id="11">1.1 完全串行化</h3>
+<p><em>(参考时间: 00:14)</em></p>
+<div class="highlight"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="nf">T_sum</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="w">    </span><span class="n">sum</span><span class="o">++</span><span class="p">;</span>
+<span class="w">    </span><span class="n">mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>锁确保正确，但也把每次 <code>sum++</code> 完全串行化。</p>
+<p>如果总操作次数为 <code>N</code>，临界区每步耗时 <code>t</code>：</p>
+<div class="highlight"><pre><span></span><code>大量线程下，T ≈ N × t
+</code></pre></div>
+
+<p>增加 CPU 并不能减少串行部分，只增加等待和竞争。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    T1["线程 1"] --&gt; L["同一把锁"]
+    T2["线程 2"] --&gt; L
+    T3["线程 3"] --&gt; L
+    T4["线程 4"] --&gt; L
+    L --&gt; S["sum++ 串行执行"]
+</code></pre></div>
+
+<h3 id="12">1.2 实测扩展性</h3>
+<p><em>(参考时间: 00:16)</em></p>
+<p>实验比较：</p>
+<ul>
+<li>atomic；</li>
+<li>mutex；</li>
+<li>spinlock；</li>
+<li>每次进入内核的 naive futex。</li>
+</ul>
+<p>现象：</p>
+<ol>
+<li>单线程最快；</li>
+<li>多线程竞争后，每次操作成本上升；</li>
+<li>mutex 与 atomic 最终趋于平台；</li>
+<li>spinlock 在线程超过 CPU 数后显著退化；</li>
+<li>强制系统调用版本始终受几百纳秒的内核切换成本限制。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["线程数增加"] --&gt; B["原子竞争增加"]
+    B --&gt; C["同一 cache line 频繁迁移"]
+    C --&gt; D["操作成本上升"]
+    D --&gt; E["吞吐饱和"]
+    E --&gt; F["Mutex / atomic 不再扩展"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_16_30.png" alt="线程数增加后，串行化 sum++ 无法继续加速" loading="lazy">
+  <p class="video-caption">📷 线程数增加后，串行化 sum++ 无法继续加速<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=990" target="_blank" rel="noopener">回到原视频 (00:16:30)</a></p>
+</div>
+
+<h3 id="13-scale-up-scale-out">1.3 Scale Up 与 Scale Out</h3>
+<p><em>(参考时间: 00:20)</em></p>
+<p><strong>Scale Up</strong>：</p>
+<ul>
+<li>单机增加核心与线程；</li>
+<li>共享内存；</li>
+<li>同步成本低但 cache coherence 开销高。</li>
+</ul>
+<p><strong>Scale Out</strong>：</p>
+<ul>
+<li>增加机器节点；</li>
+<li>通过消息通信；</li>
+<li>节点内共享内存，节点间网络；</li>
+<li>真正瓶颈变成网络、容错、功耗和调度。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Scale Up"] --&gt; B["更多 CPU / 线程 / 核心"]
+    A --&gt; C["共享内存"]
+    A --&gt; D["Cache coherence / NUMA"]
+    E["Scale Out"] --&gt; F["更多机器 / 节点"]
+    E --&gt; G["消息通信"]
+    E --&gt; H["网络 / 容错 / 功耗"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_20_30.png" alt="Scale Up 与 Scale Out 的两种增长路线" loading="lazy">
+  <p class="video-caption">📷 Scale Up 与 Scale Out 的两种增长路线<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=1230" target="_blank" rel="noopener">回到原视频 (00:20:30)</a></p>
+</div>
+
+<hr />
+<h2 id="2">2. 用计算图分解问题</h2>
+<h3 id="21">2.1 任意并行问题都是计算图</h3>
+<p><em>(参考时间: 00:21)</em></p>
+<p>节点表示计算，边表示依赖：</p>
+<div class="highlight"><pre><span></span><code>u → v
+</code></pre></div>
+
+<p>表示 <code>u</code> 的结果必须先行产生。</p>
+<p>如果每个节点的本地计算远多于同步开销，程序就可以扩展。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["节点 0"] --&gt; B["节点 1"]
+    A --&gt; C["节点 2"]
+    A --&gt; D["节点 3"]
+    B --&gt; E["节点 4"]
+    C --&gt; E
+    D --&gt; E
+</code></pre></div>
+
+<h3 id="22">2.2 太细的任务划分反而糟糕</h3>
+<p><em>(参考时间: 00:22)</em></p>
+<p>例如动态规划：</p>
+<div class="highlight"><pre><span></span><code>dp[i][j] = f(dp[i-1][j], dp[i][j-1], dp[i-1][j-1])
+</code></pre></div>
+
+<p>为每个 <code>dp[i][j]</code> 创建线程和条件变量：</p>
+<ul>
+<li>每个节点只有几条算术运算；</li>
+<li>同步和唤醒开销远大于计算；</li>
+<li>并行度大不等于性能好。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["每个 dp[i][j] 一个节点"] --&gt; B["极小计算量"]
+    B --&gt; C["大量锁 / 条件变量 / 唤醒"]
+    C --&gt; D["同步开销主导"]
+    D --&gt; E["扩展性反而下降"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_21_30.png" alt="为每个最小 DP 状态创建任务会造成同步开销过大" loading="lazy">
+  <p class="video-caption">📷 为每个最小 DP 状态创建任务会造成同步开销过大<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=1290" target="_blank" rel="noopener">回到原视频 (00:21:30)</a></p>
+</div>
+
+<h3 id="23">2.3 分块、斜切与流水线</h3>
+<p><em>(参考时间: 00:23)</em></p>
+<p>更好的划分方式：</p>
+<ul>
+<li>初始小三角整体串行计算；</li>
+<li>中间按对角线分块；</li>
+<li>并行度增大后再切成更多块；</li>
+<li>块内独立计算，块间按层同步。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["小规模：整体串行"] --&gt; B["中等规模：按对角线切块"]
+    B --&gt; C["更大规模：更多块并行"]
+    C --&gt; D["每轮边界同步"]
+    D --&gt; E["下一层计算"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_23_00.png" alt="动态规划按对角线分块以减少同步" loading="lazy">
+  <p class="video-caption">📷 动态规划按对角线分块以减少同步<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=1380" target="_blank" rel="noopener">回到原视频 (00:23:00)</a></p>
+</div>
+
+<hr />
+<h2 id="3">3. 高性能计算</h2>
+<h3 id="31">3.1 从数值模拟开始</h3>
+<p><em>(参考时间: 00:25)</em></p>
+<p>高性能计算（HPC）最初服务于数值密集型科学任务：</p>
+<ul>
+<li>物理系统模拟；</li>
+<li>核爆炸和有限元；</li>
+<li>天气预报；</li>
+<li>航天、制造、能源和制药；</li>
+<li>区块链 proof-of-work；</li>
+<li>AI 推理与训练。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["物理模型"] --&gt; B["网格离散化"]
+    B --&gt; C["大规模数值计算"]
+    C --&gt; D["超级计算机 / 集群"]
+    D --&gt; E["更高精度模拟"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_25_00.png" alt="高性能计算把物理模型转化为超大规模数值计算" loading="lazy">
+  <p class="video-caption">📷 高性能计算把物理模型转化为超大规模数值计算<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=1500" target="_blank" rel="noopener">回到原视频 (00:25:00)</a></p>
+</div>
+
+<h3 id="32-cray-1">3.2 Cray-1：超级计算机的历史</h3>
+<p><em>(参考时间: 00:28)</em></p>
+<p>Cray-1（1976）被称为“世界上最昂贵的沙发”：</p>
+<ul>
+<li>138 MFLOPS；</li>
+<li>功耗约 115 kW；</li>
+<li>底座造型甚至被戏称为可以坐人。</li>
+</ul>
+<p>对比今天：</p>
+<ul>
+<li>移动端 SoC 可达数 TFLOPS；</li>
+<li>专用 AI ASIC 可达到数百 TOPS；</li>
+<li>中国超算榜单使用 PFLOPs 计量。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Cray-1: 138 MFLOPS / 115kW"] --&gt; B["现代移动 SoC: TFLOPS"]
+    B --&gt; C["专用 ASIC: 数百 TOPS"]
+    C --&gt; D["超算: PFLOPs"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_28_20.png" alt="Cray-1 的历史设计与现代算力对比" loading="lazy">
+  <p class="video-caption">📷 Cray-1 的历史设计与现代算力对比<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=1700" target="_blank" rel="noopener">回到原视频 (00:28:20)</a></p>
+</div>
+
+<h3 id="33">3.3 空间局部性与网格计算</h3>
+<p><em>(参考时间: 00:33)</em></p>
+<p>物理世界具有空间局部性：</p>
+<ul>
+<li>大系统可切分为网格；</li>
+<li>网格内部独立计算；</li>
+<li>只有边界与其他网格交互；</li>
+<li>计算量远大于边界同步。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["全局物理系统"] --&gt; B["切分为大量网格块"]
+    B --&gt; C["块内本地计算"]
+    C --&gt; D["边界数据交换"]
+    D --&gt; E["进入下一时间步"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_33_00.png" alt="网格分块让绝大部分计算在本地完成" loading="lazy">
+  <p class="video-caption">📷 网格分块让绝大部分计算在本地完成<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=1980" target="_blank" rel="noopener">回到原视频 (00:33:00)</a></p>
+</div>
+
+<h3 id="34-linpack">3.4 Linpack 与线性方程组</h3>
+<p><em>(参考时间: 00:34)</em></p>
+<p>HPC 基准 Linpack 求解稠密线性方程组：</p>
+<div class="highlight"><pre><span></span><code>Ax = b
+</code></pre></div>
+
+<p>线性方程组重要，是因为很多非线性系统可以通过 Newton 方法离散化为线性系统：</p>
+<div class="highlight"><pre><span></span><code>nonlinear system
+  → Newton iteration
+  → sparse linear system
+  → dense local blocks
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["非线性物理系统"] --&gt; B["Newton 法"]
+    B --&gt; C["稀疏线性系统"]
+    C --&gt; D["分块求解"]
+    D --&gt; E["稠密线性代数计算"]
+</code></pre></div>
+
+<h3 id="35-embarrassingly-parallel">3.5 Embarrassingly Parallel</h3>
+<p><em>(参考时间: 00:36)</em></p>
+<p>有些任务几乎不需要同步：</p>
+<ul>
+<li>fork-based DFS；</li>
+<li>Monte Carlo 采样；</li>
+<li>视频逐帧处理；</li>
+<li>图像的每个像素计算。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["大任务"] --&gt; B["拆成大量独立子任务"]
+    B --&gt; C1["任务 1"]
+    B --&gt; C2["任务 2"]
+    B --&gt; C3["任务 3"]
+    B --&gt; CN["任务 N"]
+    C1 --&gt; D["汇总结果"]
+    C2 --&gt; D
+    C3 --&gt; D
+    CN --&gt; D
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_36_30.png" alt="Embarrassingly Parallel：任务几乎不需要同步" loading="lazy">
+  <p class="video-caption">📷 Embarrassingly Parallel：任务几乎不需要同步<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=2190" target="_blank" rel="noopener">回到原视频 (00:36:30)</a></p>
+</div>
+
+<h3 id="36">3.6 并行树搜索</h3>
+<p><em>(参考时间: 00:39)</em></p>
+<p>以围棋搜索为例：</p>
+<ol>
+<li>先串行展开若干层；</li>
+<li>得到数百万个搜索节点；</li>
+<li>将节点公平分配到线程或机器；</li>
+<li>独立搜索；</li>
+<li>合并最优结果。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["根节点"] --&gt; B["串行展开几层"]
+    B --&gt; C["大量叶子任务"]
+    C --&gt; D1["Worker 1"]
+    C --&gt; D2["Worker 2"]
+    C --&gt; D3["Worker 3"]
+    D1 --&gt; E["合并结果"]
+    D2 --&gt; E
+    D3 --&gt; E
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_39_30.png" alt="并行树搜索先产生任务，再大规模并行" loading="lazy">
+  <p class="video-caption">📷 并行树搜索先产生任务，再大规模并行<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=2370" target="_blank" rel="noopener">回到原视频 (00:39:30)</a></p>
+</div>
+
+<hr />
+<h2 id="4-mandelbrot-openmp">4. Mandelbrot 与 OpenMP</h2>
+<h3 id="41">4.1 每个像素独立</h3>
+<p><em>(参考时间: 00:42)</em></p>
+<p>Mandelbrot 集合研究复迭代：</p>
+<div class="highlight"><pre><span></span><code>z_{n+1} = z_n^2 + c
+</code></pre></div>
+
+<p>对复平面上每个 <code>c</code> 判断轨迹是否有界。</p>
+<p>每个像素完全独立，因此可以：</p>
+<ul>
+<li>按像素分配；</li>
+<li>按行列块分配；</li>
+<li>动态任务调度。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["复平面区域"] --&gt; B["采样每个点 c"]
+    B --&gt; C["迭代 z² + c"]
+    C --&gt; D{"是否发散？"}
+    D -- "是" --&gt; E["按迭代次数着色"]
+    D -- "否" --&gt; F["属于集合"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_42_00.png" alt="Mandelbrot 集的每个像素都是独立计算" loading="lazy">
+  <p class="video-caption">📷 Mandelbrot 集的每个像素都是独立计算<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=2520" target="_blank" rel="noopener">回到原视频 (00:42:00)</a></p>
+</div>
+
+<h3 id="42">4.2 分形边界与可视化</h3>
+<p><em>(参考时间: 00:45)</em></p>
+<p>分形边界不断放大仍能出现精细结构。可视化有助于重新走一遍数学概念形成的过程，而不是只记公式。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["数学定义"] --&gt; B["交互式可视化"]
+    B --&gt; C["观察分形结构"]
+    C --&gt; D["形成直觉"]
+    D --&gt; E["回到计算 / 推导"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_45_30.png" alt="Mandelbrot 集合边界的自相似细节" loading="lazy">
+  <p class="video-caption">📷 Mandelbrot 集合边界的自相似细节<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=2730" target="_blank" rel="noopener">回到原视频 (00:45:30)</a></p>
+</div>
+
+<h3 id="43-openmp">4.3 OpenMP 的最小并行化</h3>
+<p><em>(参考时间: 00:48)</em></p>
+<p>原本是顺序循环：</p>
+<div class="highlight"><pre><span></span><code><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">width</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">render_column</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>加入：</p>
+<div class="highlight"><pre><span></span><code><span class="cp">#pragma omp parallel for</span>
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">width</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">render_column</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>程序自动并行。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["顺序 for 循环"] --&gt; B["#pragma omp parallel for"]
+    B --&gt; C["编译器生成并行代码"]
+    C --&gt; D["线程池"]
+    D --&gt; E["迭代分配给线程"]
+    E --&gt; F["隐式同步"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_48_30.png" alt="OpenMP pragma 自动并行化独立循环" loading="lazy">
+  <p class="video-caption">📷 OpenMP pragma 自动并行化独立循环<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=2910" target="_blank" rel="noopener">回到原视频 (00:48:30)</a></p>
+</div>
+
+<h3 id="44-16">4.4 单线程与 16 线程</h3>
+<p><em>(参考时间: 00:51)</em></p>
+<p>6400×6400 图像：</p>
+<ul>
+<li>单线程约 18 秒；</li>
+<li>16 线程约 3 秒；</li>
+<li>未达到理想 16 倍，但已有显著提升。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["单线程：约 18s"] --&gt; B["16 线程：约 3s"]
+    B --&gt; C["接近 6x 加速"]
+    C --&gt; D["受启动 / 内存 / 调度限制"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_51_40.png" alt="Mandelbrot 单线程和 16 线程渲染时间对比" loading="lazy">
+  <p class="video-caption">📷 Mandelbrot 单线程和 16 线程渲染时间对比<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=3100" target="_blank" rel="noopener">回到原视频 (00:51:40)</a></p>
+</div>
+
+<h3 id="45-hpc">4.5 HPC 真正的困难</h3>
+<p><em>(参考时间: 00:55)</em></p>
+<p>并行循环只是表面。实际 HPC 还包含：</p>
+<ul>
+<li>高速网络；</li>
+<li>机柜内 / 机柜间带宽不对称；</li>
+<li>NUMA 延迟；</li>
+<li>通信不可靠；</li>
+<li>功耗和散热；</li>
+<li>节点故障；</li>
+<li>存储与容错；</li>
+<li>工具链与部署。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["HPC 难题"] --&gt; B["网络带宽 / 延迟"]
+    A --&gt; C["功耗 / 散热"]
+    A --&gt; D["稳定性和容错"]
+    A --&gt; E["存储和检查点"]
+    A --&gt; F["工具链"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_55_00.png" alt="HPC 的瓶颈不只在计算，还包括网络、功耗与容错" loading="lazy">
+  <p class="video-caption">📷 HPC 的瓶颈不只在计算，还包括网络、功耗与容错<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=3300" target="_blank" rel="noopener">回到原视频 (00:55:00)</a></p>
+</div>
+
+<h3 id="46-gpt">4.6 实验：并行 GPT 推理</h3>
+<p><em>(参考时间: 00:56)</em></p>
+<p>实验给出一个顺序 GPT 推理程序。并行化相关部分很少：</p>
+<div class="highlight"><pre><span></span><code><span class="cp">#ifdef OMP</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;omp.h&gt;</span>
+<span class="cp">#endif</span>
+
+<span class="cp">#pragma omp parallel for</span>
+<span class="p">...</span>
+
+<span class="cp">#pragma omp parallel for collapse(2)</span>
+<span class="p">...</span>
+</code></pre></div>
+
+<p>关键是识别计算图中最顶层、最可并行化的循环，而不是盲目给所有循环加 pragma。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["顺序 GPT 推理"] --&gt; B["Profiler 找到热点"]
+    B --&gt; C["识别最外层可并行循环"]
+    C --&gt; D["OpenMP / 线程库并行化"]
+    D --&gt; E["验证结果与性能"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_56_30.png" alt="GPT 推理实验只需少量并行化代码" loading="lazy">
+  <p class="video-caption">📷 GPT 推理实验只需少量并行化代码<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=3390" target="_blank" rel="noopener">回到原视频 (00:56:30)</a></p>
+</div>
+
+<h3 id="47-profiler">4.7 Profiler 驱动优化</h3>
+<p><em>(参考时间: 00:58)</em></p>
+<p>性能优化必须先测量：</p>
+<ol>
+<li>Profiler 找热点；</li>
+<li>构造计算图；</li>
+<li>识别独立子任务；</li>
+<li>减少同步；</li>
+<li>比较加速比；</li>
+<li>检查瓶颈是否转移到 memory / I/O。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["运行 Profiler"] --&gt; B["定位热点"]
+    B --&gt; C["构造计算图"]
+    C --&gt; D["并行化"]
+    D --&gt; E["测量加速"]
+    E --&gt; F{"瓶颈转移？"}
+    F -- "是" --&gt; B
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_58_20.png" alt="用 profiler 找到真正需要并行化的部分" loading="lazy">
+  <p class="video-caption">📷 用 profiler 找到真正需要并行化的部分<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=3500" target="_blank" rel="noopener">回到原视频 (00:58:20)</a></p>
+</div>
+
+<hr />
+<h2 id="5">5. 并行数据结构：从大锁到局部锁</h2>
+<h3 id="51-sum">5.1 <code>sum++</code> 不只是数字</h3>
+<p><em>(参考时间: 01:00)</em></p>
+<p>大量实际系统频繁执行类似操作：</p>
+<ul>
+<li>操作系统对象计数；</li>
+<li>数据库索引；</li>
+<li>点赞和热点统计；</li>
+<li>游戏服务器位置更新；</li>
+<li>HFT 订单状态。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["锁保护的共享更新"] --&gt; B["操作系统内核"]
+    A --&gt; C["数据库"]
+    A --&gt; D["社交平台计数器"]
+    A --&gt; E["游戏服务器"]
+    A --&gt; F["交易系统"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_00_00.png" alt="高频共享更新来自操作系统、数据库和在线服务" loading="lazy">
+  <p class="video-caption">📷 高频共享更新来自操作系统、数据库和在线服务<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=3600" target="_blank" rel="noopener">回到原视频 (01:00:00)</a></p>
+</div>
+
+<h3 id="52">5.2 可见性代价</h3>
+<p><em>(参考时间: 01:02)</em></p>
+<p>一次 store 要传播到其他 CPU：</p>
+<ul>
+<li>cache coherence 协议；</li>
+<li>缓存行所有权迁移；</li>
+<li>总线或互连网络流量；</li>
+<li>内存屏障。</li>
+</ul>
+<p>严格可见性很贵。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["CPU 0 store"] --&gt; B["L1 cache"]
+    B --&gt; C["Coherence / Directory"]
+    C --&gt; D["CPU 1 cache"]
+    C --&gt; E["CPU 2 cache"]
+    D --&gt; F["可见"]
+    E --&gt; F
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_02_30.png" alt="严格可见性的传播依赖缓存一致性协议" loading="lazy">
+  <p class="video-caption">📷 严格可见性的传播依赖缓存一致性协议<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=3750" target="_blank" rel="noopener">回到原视频 (01:02:30)</a></p>
+</div>
+
+<h3 id="53-sloppy-counter">5.3 Sloppy Counter</h3>
+<p><em>(参考时间: 01:04)</em></p>
+<p>线程本地累计：</p>
+<div class="highlight"><pre><span></span><code><span class="k">thread_local</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">sum_local</span><span class="p">;</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">T_sum</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">++</span><span class="n">sum_local</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">100</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="w">        </span><span class="n">sum</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="n">sum_local</span><span class="p">;</span>
+<span class="w">        </span><span class="n">mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="w">        </span><span class="n">sum_local</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>绝大多数更新只写线程本地缓存，只有每 100 次才同步一次全局值。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["线程本地 sum_local++"] --&gt; B{"达到阈值？"}
+    B -- "否" --&gt; A
+    B -- "是" --&gt; C["锁全局 sum"]
+    C --&gt; D["sum += local"]
+    D --&gt; E["local = 0"]
+    E --&gt; A
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_04_00.png" alt="Sloppy Counter 通过本地累计减少共享写" loading="lazy">
+  <p class="video-caption">📷 Sloppy Counter 通过本地累计减少共享写<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=3840" target="_blank" rel="noopener">回到原视频 (01:04:00)</a></p>
+</div>
+
+<h3 id="54">5.4 用时间上限保证旧值不会太旧</h3>
+<p><em>(参考时间: 01:06)</em></p>
+<p>只按阈值刷新，在流量低时可能长时间不更新。可以增加超时：</p>
+<div class="highlight"><pre><span></span><code>if local &gt;= 100 or elapsed &gt;= 1ms:
+    flush local to global
+</code></pre></div>
+
+<p>这样任何读者看到的值最多落后约 1 毫秒。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["本地更新"] --&gt; B{"达到 100 次？"}
+    B -- "是" --&gt; E["Flush"]
+    B -- "否" --&gt; C{"超过 1ms？"}
+    C -- "是" --&gt; E
+    C -- "否" --&gt; A
+    E --&gt; F["全局 sum 更新"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_06_30.png" alt="阈值加超时控制本地累积的延迟上限" loading="lazy">
+  <p class="video-caption">📷 阈值加超时控制本地累积的延迟上限<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=3990" target="_blank" rel="noopener">回到原视频 (01:06:30)</a></p>
+</div>
+
+<hr />
+<h2 id="6-thread-local-storage">6. Thread-Local Storage</h2>
+<h3 id="61-thread_local">6.1 <code>thread_local</code></h3>
+<p><em>(参考时间: 01:07)</em></p>
+<p>C++11 / C23：</p>
+<div class="highlight"><pre><span></span><code><span class="k">thread_local</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">sum_local</span><span class="p">;</span>
+
+<span class="k">thread_local</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">42</span><span class="p">;</span>
+</code></pre></div>
+
+<p>每个线程得到独立副本。</p>
+<p>局部作用域中不能定义 <code>thread_local</code>，因为“每次函数调用的栈变量”和“每线程一份”语义冲突。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["thread_local int x"] --&gt; B["Thread 1 独立 x"]
+    A --&gt; C["Thread 2 独立 x"]
+    A --&gt; D["Thread 3 独立 x"]
+    B --&gt; E["地址互不相同"]
+    C --&gt; E
+    D --&gt; E
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_07_20.png" alt="`thread_local` 为每个线程生成独立变量" loading="lazy">
+  <p class="video-caption">📷 `thread_local` 为每个线程生成独立变量<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=4040" target="_blank" rel="noopener">回到原视频 (01:07:20)</a></p>
+</div>
+
+<h3 id="62-tls">6.2 TLS 地址</h3>
+<p><em>(参考时间: 01:08)</em></p>
+<p>访问方式：</p>
+<div class="highlight"><pre><span></span><code>global x   → RIP-relative
+local y    → RSP-relative
+thread_local z → TLS base + offset
+</code></pre></div>
+
+<p>x86-64 利用 <code>fs</code> 段寄存器保存当前线程的 TLS base。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["全局变量"] --&gt; B["RIP / 数据区"]
+    C["栈变量"] --&gt; D["RSP + offset"]
+    E["thread_local"] --&gt; F["FS base + TLS offset"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_08_20.png" alt="TLS 变量通过线程基址和固定偏移访问" loading="lazy">
+  <p class="video-caption">📷 TLS 变量通过线程基址和固定偏移访问<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=4100" target="_blank" rel="noopener">回到原视频 (01:08:20)</a></p>
+</div>
+
+<h3 id="63-tdata">6.3 汇编与 <code>.tdata</code></h3>
+<p><em>(参考时间: 01:09)</em></p>
+<p>线程局部变量存放在：</p>
+<ul>
+<li><code>.tdata</code>：有初值的模板数据；</li>
+<li><code>.tbss</code>：零初始化数据；</li>
+<li>TLS 区域大小在编译时确定。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A[".tdata"] --&gt; B["有初值的 TLS 模板"]
+    C[".tbss"] --&gt; D["零初始化 TLS"]
+    B --&gt; E["线程创建时复制 / 初始化"]
+    D --&gt; E
+    E --&gt; F["线程私有 TLS 区域"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_09_50.png" alt="ELF 中的 `.tdata` / `.tbss` 段" loading="lazy">
+  <p class="video-caption">📷 ELF 中的 `.tdata` / `.tbss` 段<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=4190" target="_blank" rel="noopener">回到原视频 (01:09:50)</a></p>
+</div>
+
+<h3 id="64">6.4 初始值由谁设置</h3>
+<p><em>(参考时间: 01:11)</em></p>
+<p><code>thread_local int x = 42</code> 的 42 首先位于 ELF 的 TLS 模板中。</p>
+<p>线程创建时，运行时或 libc：</p>
+<ol>
+<li>分配线程控制块；</li>
+<li>分配栈和 TLS 区域；</li>
+<li>把 <code>.tdata</code> 模板复制到新线程 TLS；</li>
+<li>设置 <code>fs</code> base；</li>
+<li>再启动线程函数。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["创建线程"] --&gt; B["分配栈 / TCB / TLS"]
+    B --&gt; C["复制 .tdata 初值"]
+    C --&gt; D["设置 FS / TLS base"]
+    D --&gt; E["启动线程函数"]
+    E --&gt; F["thread_local x 初始为 42"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_11_00.png" alt="线程创建时复制 TLS 初始化模板" loading="lazy">
+  <p class="video-caption">📷 线程创建时复制 TLS 初始化模板<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=4260" target="_blank" rel="noopener">回到原视频 (01:11:00)</a></p>
+</div>
+
+<hr />
+<h2 id="7">7. 细分锁</h2>
+<h3 id="71">7.1 数据结构天生具有局部性</h3>
+<p><em>(参考时间: 01:16)</em></p>
+<p>数据结构以分散方式存储：</p>
+<ul>
+<li>数组；</li>
+<li>链表；</li>
+<li>平衡树；</li>
+<li>图；</li>
+<li>哈希表。</li>
+</ul>
+<p>访问不同元素往往互不冲突。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["整个数据结构一把大锁"] --&gt; B["所有访问排队"]
+    B --&gt; C["扩展性差"]
+    D["按元素 / 分段上锁"] --&gt; E["不同部分并行"]
+    E --&gt; F["冲突时才排队"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_16_30.png" alt="数据结构局部性允许把一把大锁拆成多把锁" loading="lazy">
+  <p class="video-caption">📷 数据结构局部性允许把一把大锁拆成多把锁<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=4590" target="_blank" rel="noopener">回到原视频 (01:16:30)</a></p>
+</div>
+
+<h3 id="72">7.2 三种常见锁拆分方式</h3>
+<p><em>(参考时间: 01:19)</em></p>
+<ol>
+<li>能用原子指令，就不用锁；</li>
+<li>区分读锁与写锁；</li>
+<li>按分段 / 元素加锁。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["锁拆分"] --&gt; B["Atomic"]
+    A --&gt; C["Reader / Writer Lock"]
+    A --&gt; D["Segment / Element Lock"]
+    B --&gt; E["最常见数值更新"]
+    C --&gt; F["多读少写"]
+    D --&gt; G["哈希表 / 数组 / 树"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_19_50.png" alt="原子操作、读写锁和分段锁三种拆分策略" loading="lazy">
+  <p class="video-caption">📷 原子操作、读写锁和分段锁三种拆分策略<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=4790" target="_blank" rel="noopener">回到原视频 (01:19:50)</a></p>
+</div>
+
+<h3 id="73">7.3 在线评测的原子日志</h3>
+<p><em>(参考时间: 01:21)</em></p>
+<p>课程 Online Judge 使用大日志数组记录并发操作：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">size_t</span><span class="w"> </span><span class="n">slot</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">atomic_fetch_add</span><span class="p">(</span><span class="o">&amp;</span><span class="n">tail</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span>
+<span class="n">log</span><span class="p">[</span><span class="n">slot</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">event</span><span class="p">;</span>
+</code></pre></div>
+
+<ul>
+<li>原子计数器负责分配唯一槽位；</li>
+<li>每个线程写入自己的槽位；</li>
+<li>读者按顺序分析日志。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["T1 分配 slot"] --&gt; D["大日志数组"]
+    B["T2 分配 slot"] --&gt; D
+    C["T3 分配 slot"] --&gt; D
+    E["原子 tail++"] --&gt; A
+    E --&gt; B
+    E --&gt; C
+    D --&gt; F["顺序分析日志"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_21_30.png" alt="原子计数器为并发日志分配唯一槽位" loading="lazy">
+  <p class="video-caption">📷 原子计数器为并发日志分配唯一槽位<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=4890" target="_blank" rel="noopener">回到原视频 (01:21:30)</a></p>
+</div>
+
+<h3 id="74-bucket">7.4 哈希表按 bucket 加锁</h3>
+<p><em>(参考时间: 01:22)</em></p>
+<div class="highlight"><pre><span></span><code><span class="kt">size_t</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">hash</span><span class="p">(</span><span class="n">key</span><span class="p">)</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="n">nbuckets</span><span class="p">;</span>
+<span class="n">lock</span><span class="p">(</span><span class="n">buckets</span><span class="p">[</span><span class="n">b</span><span class="p">].</span><span class="n">lock</span><span class="p">);</span>
+<span class="cm">/* lookup / insert */</span>
+<span class="n">unlock</span><span class="p">(</span><span class="n">buckets</span><span class="p">[</span><span class="n">b</span><span class="p">].</span><span class="n">lock</span><span class="p">);</span>
+</code></pre></div>
+
+<p>不同 bucket 可并行。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["key"] --&gt; B["hash(key) % N"]
+    B --&gt; C["bucket index"]
+    C --&gt; D["bucket lock"]
+    D --&gt; E["查找 / 插入 / 删除"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_22_50.png" alt="哈希表按 bucket 细粒度加锁" loading="lazy">
+  <p class="video-caption">📷 哈希表按 bucket 细粒度加锁<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=4970" target="_blank" rel="noopener">回到原视频 (01:22:50)</a></p>
+</div>
+
+<h3 id="75-open-addressing-tombstone">7.5 Open Addressing 的 Tombstone</h3>
+<p><em>(参考时间: 01:24)</em></p>
+<p>开放寻址中，冲突元素会沿探测序列放置：</p>
+<div class="highlight"><pre><span></span><code>X at h(X)
+Z at next(h(X))
+W at next(next(h(X)))
+</code></pre></div>
+
+<p>删除 Z 不能直接清空，否则查找 W 的路径断裂。</p>
+<p>必须写入 tombstone，表示“此处曾占用，仍需继续探测”。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["h(X)"] --&gt; B["X"]
+    B --&gt; C["Z"]
+    C --&gt; D["W"]
+    C --&gt;|"直接删除"| E["查找 W 提前终止"]
+    C --&gt;|"Tombstone"| F["查找继续到 W"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_24_30.png" alt="Open Addressing 删除需要 Tombstone" loading="lazy">
+  <p class="video-caption">📷 Open Addressing 删除需要 Tombstone<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=5070" target="_blank" rel="noopener">回到原视频 (01:24:30)</a></p>
+</div>
+
+<h3 id="76-resize">7.6 Resize：并发哈希表最难的时刻</h3>
+<p><em>(参考时间: 01:25)</em></p>
+<p>扩容时：</p>
+<ul>
+<li>分配新表；</li>
+<li>迁移所有旧元素；</li>
+<li>同时处理并发查找、插入和删除；</li>
+<li>不能长时间冻结整个数据结构；</li>
+<li>需要细粒度锁或渐进式迁移。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["触发 resize"] --&gt; B["分配 1.5x 新表"]
+    B --&gt; C["逐 bucket 迁移"]
+    C --&gt; D{"迁移期间仍有操作？"}
+    D -- "大锁" --&gt; E["全表暂停，简单但慢"]
+    D -- "细粒度" --&gt; F["允许并发，复杂且易错"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_25_30.png" alt="并发哈希表 resize 需要协调旧表和新表" loading="lazy">
+  <p class="video-caption">📷 并发哈希表 resize 需要协调旧表和新表<br><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/?t=5130" target="_blank" rel="noopener">回到原视频 (01:25:30)</a></p>
+</div>
+
+<hr />
+<h2 id="8">8. 总结：减少同步，而不是消灭同步</h2>
+<p>这一讲从 <code>sum++</code> 的扩展性出发，建立了完整优化路线：</p>
+<ul>
+<li>完全 serializability 保证正确，但限制 scalability；</li>
+<li>Scale Up 增加单机 CPU / 线程，Scale Out 增加机器；</li>
+<li>并行问题的本质是计算图；</li>
+<li>任务划分不能过细，否则同步开销主导；</li>
+<li>HPC 利用空间局部性、网格和循环级并行；</li>
+<li>OpenMP 通过 pragma 简洁并行化独立循环；</li>
+<li>Mandelbrot 是可按照像素和块划分的 embarrassingly parallel 任务；</li>
+<li>HPC 真正的瓶颈包括网络、功耗、散热和容错；</li>
+<li>并行数据结构的目标是减少共享写；</li>
+<li>Sloppy Counter 用线程本地累计降低全局锁频率；</li>
+<li>超时可给松可见性提供延迟上限；</li>
+<li><code>thread_local</code> 为每个线程提供独立变量；</li>
+<li>TLS 通过 <code>.tdata</code>、<code>.tbss</code> 和线程基址实现；</li>
+<li>锁拆分包括 atomic、reader-writer lock、segment lock；</li>
+<li>哈希表可按 bucket 加锁；</li>
+<li>Open Addressing 需要 Tombstone；</li>
+<li>Resize 是并发哈希表最复杂的路径。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["完全串行化"] --&gt; B["识别局部性"]
+    B --&gt; C["计算图分块"]
+    C --&gt; D["线程本地状态"]
+    D --&gt; E["松可见性 / 延迟合并"]
+    E --&gt; F["细粒度锁 / 原子操作"]
+    F --&gt; G["Scale Up / Scale Out"]
+</code></pre></div>
+
+<p>性能优化的核心原则可以概括为：</p>
+<blockquote>
+<p>把绝大部分工作留在本地，只在真正必要的共享边界上同步；始终依据真实 workload 测量，而不是凭直觉承诺 scalability。</p>
+</blockquote>
+<hr />
+<h2 id="_3">附：官方参考与延伸阅读</h2>
+<p>以下链接来自官方讲义第 18 讲及课堂内容：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/sum-experiment">不同方式求和实验</a></li>
+<li><a href="https://dl.acm.org/doi/10.1145/359327.359336">Cray-1: The World's Most Expensive Love Seat</a></li>
+<li><a href="https://hpc-tutorials.llnl.gov/mpi/">MPI Tutorials</a></li>
+<li><a href="https://www.openmp.org/">OpenMP</a></li>
+<li><a href="https://hpc100.top/top100/24/">HPC China TOP100</a></li>
+<li><a href="https://cn.mathigon.org/course/fractals/mandelbrot">Mandelbrot Set Walkthrough</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/mandelbrot">Mandelbrot demo</a></li>
+<li><a href="https://github.com/karpathy/llm.c/blob/master/train_gpt2.c">Andrej Karpathy, llm.c</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/tls">Thread-local Storage demo</a></li>
+</ul>
+<p>官方课程资料：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/2026/">课程主页</a></li>
+<li><a href="https://jyywiki.cn/OS/2026/lect18.md">第 18 讲讲义：并行算法与数据结构</a></li>
+<li><a href="https://www.bilibili.com/video/BV1WqdTBiEkN/">视频：18 - 并行算法和数据结构</a></li>
+</ul>
+<blockquote>
+<p><strong>版权与署名</strong>：本讲课程材料由蒋炎岩（jyy）编写。课程讲义与幻灯片采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书保留课程出处、作者署名与许可说明。</p>
+</blockquote>
+    </article>
+
+    <!-- Mermaid 图表引擎初始化 -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            mermaid.initialize({ startOnLoad: false, theme: 'default' });
+            
+            // 兼容普通代码块以及丢失 language-mermaid 类名的情况 (CodeHilite 干扰)
+            const codeNodes = document.querySelectorAll('pre code, .highlight code');
+            codeNodes.forEach(function(node) {
+                const text = node.textContent.trim();
+                // 匹配常见的 mermaid 图表前缀
+                if (text.startsWith('graph ') || text.startsWith('flowchart ') || text.startsWith('sequenceDiagram') || text.startsWith('gantt') || text.startsWith('pie') || text.startsWith('classDiagram') || text.startsWith('stateDiagram') || text.startsWith('mindmap')) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.className = 'mermaid';
+                    tempDiv.textContent = text;
+                    
+                    // 获取需要替换的最外层父节点 (比如 div.highlight 或者 pre)
+                    const wrapper = node.closest('.highlight') || node.parentNode;
+                    wrapper.replaceWith(tempDiv); 
+                }
+            });
+            
+            // 所有节点转换完成，统一进行图表动态绘制
+            mermaid.run();
+        });
+    </script>
+    <!-- Lightbox：截图点击放大 -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const lightbox = document.createElement('div');
+            lightbox.className = 'lightbox';
+            lightbox.innerHTML = '<img alt=""><div class="lightbox-caption"></div>';
+            document.body.appendChild(lightbox);
+            const lbImg = lightbox.querySelector('img');
+            const lbCap = lightbox.querySelector('.lightbox-caption');
+            function openLightbox(src, alt) {
+                lbImg.src = src; lbImg.alt = alt || '';
+                lbCap.textContent = alt || '';
+                lightbox.classList.add('open');
+                document.body.style.overflow = 'hidden';
+            }
+            function closeLightbox() {
+                lightbox.classList.remove('open');
+                lbImg.src = '';
+                document.body.style.overflow = '';
+            }
+            document.querySelectorAll('.screenshot-card img').forEach(function(img) {
+                img.addEventListener('click', function() { openLightbox(img.src, img.alt); });
+            });
+            lightbox.addEventListener('click', closeLightbox);
+            document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
+        });
+    </script>
+</body>
+</html>
