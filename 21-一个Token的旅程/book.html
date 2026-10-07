@@ -1,0 +1,1562 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>一个 Token 的旅程：从 HTTP 请求到数据中心与 GPU</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* ── 基础重置 ── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            color-scheme: light;
+            --bg-primary: #f7f7f8;
+            --bg-secondary: #ffffff;
+            --bg-card: #eef0f3;
+            --bg-code: #f2f3f5;
+            --text-primary: #1f2328;
+            --text-secondary: #57606a;
+            --text-muted: #6e7781;
+            --accent: #2563eb;
+            --accent-glow: rgba(37, 99, 235, 0.08);
+            --border: #d9dce1;
+            --border-subtle: #e7e9ec;
+            --radius: 12px;
+            --shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Serif SC', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.8;
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── 文章容器 ── */
+        .book-content {
+            max-width: 780px;
+            margin: 0 auto;
+            padding: 60px 32px 120px;
+        }
+
+        /* ── 标题 ── */
+        h1 {
+            font-size: 2.2em;
+            font-weight: 700;
+            margin: 0 0 12px;
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+        }
+
+        h2 {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 56px 0 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h3 {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: var(--accent);
+            margin: 36px 0 12px;
+        }
+
+        /* ── 段落与文字 ── */
+        p {
+            margin: 0 0 16px;
+            color: var(--text-primary);
+        }
+
+        strong {
+            color: #0f172a;
+            font-weight: 600;
+        }
+
+        em {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.2s;
+        }
+        a:hover {
+            border-bottom-color: var(--accent);
+        }
+
+        /* ── 引用 ── */
+        blockquote {
+            margin: 24px 0;
+            padding: 16px 20px;
+            background: var(--bg-secondary);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 var(--radius) var(--radius) 0;
+            color: var(--text-secondary);
+        }
+        blockquote p { margin: 0; }
+
+        /* ── 列表 ── */
+        ul, ol {
+            margin: 12px 0 20px 24px;
+            color: var(--text-primary);
+        }
+        li {
+            margin: 6px 0;
+        }
+
+        /* ── 分割线 ── */
+        hr {
+            border: none;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border), transparent);
+            margin: 48px 0;
+        }
+
+        /* ── 表格 ── */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 24px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+        thead {
+            background: var(--bg-card);
+        }
+        th {
+            padding: 12px 16px;
+            font-weight: 600;
+            text-align: left;
+            color: var(--accent);
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        td {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border-subtle);
+        }
+        tbody tr {
+            background: var(--bg-secondary);
+            transition: background 0.15s;
+        }
+        tbody tr:hover {
+            background: var(--bg-card);
+        }
+
+        /* ── 代码 ── */
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-code);
+            padding: 2px 7px;
+            border-radius: 5px;
+            font-size: 0.88em;
+            color: #6d28d9;
+        }
+
+        pre {
+            margin: 20px 0;
+            padding: 20px 24px;
+            background: var(--bg-code);
+            border-radius: var(--radius);
+            overflow-x: auto;
+            border: 1px solid var(--border);
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9em;
+            color: var(--text-primary);
+        }
+
+        /* ── 视频嵌入卡片 ── */
+        .video-card {
+            margin: 32px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .video-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(15, 23, 42, 0.12);
+        }
+
+        .video-wrapper {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 */
+            height: 0;
+            overflow: hidden;
+        }
+        .video-wrapper iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .video-card img {
+            width: 100%;
+            display: block;
+        }
+
+        .video-caption {
+            padding: 12px 16px;
+            font-size: 0.88em;
+            color: var(--text-secondary);
+            text-align: center;
+            line-height: 1.6;
+            margin: 0;
+        }
+        .video-caption a {
+            color: var(--accent);
+        }
+
+        .video-card.fallback {
+            padding: 20px;
+            text-align: center;
+        }
+
+        /* ── Lightbox：截图点击放大 ── */
+        .screenshot-card img { cursor: zoom-in; transition: opacity 0.15s; }
+        .screenshot-card img:hover { opacity: 0.9; }
+        .lightbox {
+            position: fixed; inset: 0; z-index: 999;
+            display: none; align-items: center; justify-content: center;
+            background: rgba(5, 5, 8, 0.92); backdrop-filter: blur(4px);
+            cursor: zoom-out; padding: 24px;
+        }
+        .lightbox.open { display: flex; }
+        .lightbox img {
+            max-width: 96vw; max-height: 90vh;
+            border-radius: 8px; box-shadow: 0 12px 60px rgba(0,0,0,0.7);
+        }
+        .lightbox-caption {
+            position: absolute; bottom: 14px; left: 0; right: 0;
+            text-align: center; color: var(--text-secondary); font-size: 0.85em;
+        }
+
+        /* ── 顶部信息栏 ── */
+        .book-content > blockquote:first-of-type {
+            background: var(--accent-glow);
+            border-left-color: var(--accent);
+            border-radius: var(--radius);
+            margin-bottom: 32px;
+        }
+
+        /* ── 图表居中 ── */
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            margin: 32px 0;
+            overflow-x: auto;
+        }
+
+        /* ── 滚动条 ── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* ── 响应式 ── */
+        @media (max-width: 640px) {
+            .book-content { padding: 32px 16px 80px; }
+            h1 { font-size: 1.7em; }
+            h2 { font-size: 1.3em; }
+        }
+    </style>
+</head>
+<body>
+    <article class="book-content">
+        <h1 id="token-http-gpu">一个 Token 的旅程：从 HTTP 请求到数据中心与 GPU</h1>
+<blockquote>
+<p><strong>课程</strong>：2026 春季学期《操作系统原理》<br />
+<strong>讲师</strong>：蒋炎岩（jyy）<br />
+<strong>官方课程主页</strong>：<a href="https://jyywiki.cn/OS/2026/">https://jyywiki.cn/OS/2026/</a><br />
+<strong>官方讲义</strong>：<a href="https://jyywiki.cn/OS/2026/lect21.md">https://jyywiki.cn/OS/2026/lect21.md</a><br />
+<strong>视频来源</strong>：<a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/">Bilibili BV1zS5R6tEWZ</a><br />
+<strong>版权说明</strong>：课程讲义与幻灯片归蒋炎岩所有，采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书是对课堂讲授的书面化重构，保留出处与许可说明。</p>
+</blockquote>
+<h2 id="_1">导语：把整个计算机系统栈串起来</h2>
+<p><em>(参考时间: 00:00)</em></p>
+<p>并发部分走到最后一课，课程不再单独讨论某一个同步原语，而是追问：</p>
+<blockquote>
+<p>当用户在浏览器或命令行里向大模型发送一句话，并最终收到一个 Token，中间究竟发生了什么？</p>
+</blockquote>
+<p>这条旅程会经过：</p>
+<ul>
+<li>HTTP 请求与进程系统调用；</li>
+<li>DNS、路由、负载均衡和 API 网关；</li>
+<li>数据中心中的 CRUD、缓存、计费和审计；</li>
+<li>CAP 定理、分布式文件系统、数据库和 MapReduce；</li>
+<li>Serverless 与幂等函数；</li>
+<li>GPU 上的矩阵乘法、Attention、KV Cache 和推理集群。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["用户请求"] --&gt; B["DNS"]
+    B --&gt; C["网络转发"]
+    C --&gt; D["Load Balancer"]
+    D --&gt; E["API Gateway"]
+    E --&gt; F["业务服务"]
+    F --&gt; G["数据库 / 缓存"]
+    F --&gt; H["LLM Inference"]
+    H --&gt; I["GPU 集群"]
+    I --&gt; J["Next Token"]
+    J --&gt; K["Event Stream Response"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_00_30.png" alt="从用户请求到数据中心的完整 Token 旅程" loading="lazy">
+  <p class="video-caption">📷 从用户请求到数据中心的完整 Token 旅程<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=30" target="_blank" rel="noopener">回到原视频 (00:00:30)</a></p>
+</div>
+
+<hr />
+<h2 id="1">1. 并发知识如何进入真实系统</h2>
+<h3 id="11-spawnjoin">1.1 从 <code>spawn/join</code> 到异构任务与同构任务</h3>
+<p><em>(参考时间: 00:01)</em></p>
+<p>前面学过的并发机制可以分成几类：</p>
+<p><strong>通用计算图</strong></p>
+<ul>
+<li><code>spawn/join</code>；</li>
+<li>共享内存；</li>
+<li>mutex、条件变量、信号量。</li>
+</ul>
+<p><strong>复杂异构任务</strong></p>
+<ul>
+<li>Coroutine、goroutine；</li>
+<li>non-blocking I/O；</li>
+<li>Promise、<code>async/await</code>。</li>
+</ul>
+<p><strong>大量同构小任务</strong></p>
+<ul>
+<li>SIMD 数据并行；</li>
+<li>GPU Shader、CUDA、SIMT。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["并发任务"] --&gt; B["异构复杂任务"]
+    A --&gt; C["同构短任务"]
+    B --&gt; D["Coroutine / Goroutine"]
+    B --&gt; E["Promise / async / await"]
+    C --&gt; F["SIMD"]
+    C --&gt; G["CUDA / SIMT"]
+</code></pre></div>
+
+<h3 id="12">1.2 数据中心的性能与能效目标</h3>
+<p>现代 CPU 通过动态调度提高单线程性能，但调度本身消耗面积和能量。SIMD 与 SIMT 则通过共享译码、扩大向量寄存器等方式提高能效。</p>
+<p>到了数据中心规模，优化目标不再只是单机性能，而是：</p>
+<ul>
+<li>每瓦性能；</li>
+<li>低延迟与高吞吐；</li>
+<li>弹性扩展；</li>
+<li>容错与数据正确性。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["复杂 CPU 动态调度"] --&gt; B["单线程性能"]
+    B --&gt; C["功耗与面积代价"]
+    C --&gt; D["SIMD / SIMT"]
+    D --&gt; E["更高能效比"]
+    E --&gt; F["数据中心 GPU 算力"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_05_30.png" alt="从 CPU 并发模型过渡到数据中心和 SIMT" loading="lazy">
+  <p class="video-caption">📷 从 CPU 并发模型过渡到数据中心和 SIMT<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=330" target="_blank" rel="noopener">回到原视频 (00:05:30)</a></p>
+</div>
+
+<hr />
+<h2 id="2-llm-api">2. 用户的视角：一次 LLM API 请求</h2>
+<h3 id="21-api-http">2.1 官方 API 只是一个 HTTP 请求</h3>
+<p><em>(参考时间: 00:06)</em></p>
+<p>DeepSeek API 的典型调用形式：</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>https://api.deepseek.com/chat/completions<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">"Content-Type: application/json"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">"Authorization: Bearer </span><span class="si">${</span><span class="nv">DEEPSEEK_API_KEY</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-d<span class="w"> </span><span class="s1">'{</span>
+<span class="s1">        "model": "deepseek-v4-flash",</span>
+<span class="s1">        "messages": [</span>
+<span class="s1">          {"role": "user", "content": "Hooo."}</span>
+<span class="s1">        ],</span>
+<span class="s1">        "stream": true</span>
+<span class="s1">      }'</span>
+</code></pre></div>
+
+<p>也可以使用 Python <code>requests</code> 或课程提供的脚本。命令行友好的原因之一是环境变量会由 shell 传给子进程：</p>
+<div class="highlight"><pre><span></span><code>export DEEPSEEK_API_KEY=...
+    ↓
+python chat.py
+    ↓
+requests 读取环境变量
+    ↓
+发送 HTTPS POST
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Shell 环境变量"] --&gt; B["子进程继承 envp"]
+    B --&gt; C["Python requests"]
+    C --&gt; D["构造 JSON"]
+    D --&gt; E["HTTPS POST /chat/completions"]
+    E --&gt; F["Streaming Response"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_08_30.png" alt="通过 HTTP API 和命令行与模型对话" loading="lazy">
+  <p class="video-caption">📷 通过 HTTP API 和命令行与模型对话<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=510" target="_blank" rel="noopener">回到原视频 (00:08:30)</a></p>
+</div>
+
+<h3 id="22-strace">2.2 用 <code>strace</code> 打开网络请求</h3>
+<p><em>(参考时间: 00:10)</em></p>
+<p>从操作系统视角看，网络请求仍然是文件描述符和系统调用：</p>
+<div class="highlight"><pre><span></span><code>socket()
+connect()
+sendto()/write()
+recvfrom()/read()
+close()
+</code></pre></div>
+
+<p><code>strace</code> 可以展示：</p>
+<ul>
+<li>DNS 查询；</li>
+<li>TCP 连接建立；</li>
+<li>向远端地址和端口发送数据；</li>
+<li>从 socket 读取响应；</li>
+<li>流式响应如何逐段到达。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["程序"] --&gt; B["socket()"]
+    B --&gt; C["connect()"]
+    C --&gt; D["write HTTP Request"]
+    D --&gt; E["read HTTP Response"]
+    E --&gt; F["处理 JSON / Stream"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_10_30.png" alt="strace 展示 HTTP 请求背后的系统调用链" loading="lazy">
+  <p class="video-caption">📷 strace 展示 HTTP 请求背后的系统调用链<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=630" target="_blank" rel="noopener">回到原视频 (00:10:30)</a></p>
+</div>
+
+<h3 id="23-dns">2.3 DNS 已经开始负载均衡</h3>
+<p><em>(参考时间: 00:12)</em></p>
+<p>第一步是把域名解析为 IP：</p>
+<div class="highlight"><pre><span></span><code>dig<span class="w"> </span>api.deepseek.com<span class="w"> </span>+short
+</code></pre></div>
+
+<p>大型服务通常返回多个 IP，并且不同地区可能得到不同结果。这本身就是一种负载均衡和流量调度。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["api.deepseek.com"] --&gt; B["DNS Resolver"]
+    B --&gt; C1["IP 1 / 地区 A"]
+    B --&gt; C2["IP 2 / 地区 B"]
+    B --&gt; C3["CDN / 网关节点"]
+    C1 --&gt; D["Client"]
+    C2 --&gt; D
+    C3 --&gt; D
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_13_30.png" alt="DNS 返回多个地址并为请求做初步调度" loading="lazy">
+  <p class="video-caption">📷 DNS 返回多个地址并为请求做初步调度<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=810" target="_blank" rel="noopener">回到原视频 (00:13:30)</a></p>
+</div>
+
+<h3 id="24-ttl">2.4 TTL 与逐跳转发</h3>
+<p><em>(参考时间: 00:14)</em></p>
+<p><code>traceroute</code> 通过逐次增加 TTL，让路径上的路由器返回 ICMP Time Exceeded：</p>
+<div class="highlight"><pre><span></span><code>TTL = 1  → 第一跳超时
+TTL = 2  → 第二跳超时
+TTL = 3  → 第三跳超时
+</code></pre></div>
+
+<p>典型延迟：</p>
+<ul>
+<li>局域网：小于 1 ms；</li>
+<li>同城：几毫秒；</li>
+<li>跨国：可能约 200 ms。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["本机"] --&gt; B["默认网关"]
+    B --&gt; C["ISP"]
+    C --&gt; D["骨干网络"]
+    D --&gt; E["数据中心入口"]
+    E --&gt; F["业务服务器"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_15_30.png" alt="TTL 与 traceroute 展示数据包逐跳到达远端" loading="lazy">
+  <p class="video-caption">📷 TTL 与 traceroute 展示数据包逐跳到达远端<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=930" target="_blank" rel="noopener">回到原视频 (00:15:30)</a></p>
+</div>
+
+<h3 id="25">2.5 到达的往往先是负载均衡器</h3>
+<p><em>(参考时间: 00:16)</em></p>
+<p>请求最终到达的机器未必是业务服务器，而可能先抵达负载均衡器或 API 网关。</p>
+<p>响应头可能显示：</p>
+<div class="highlight"><pre><span></span><code><span class="kr">HTTP</span><span class="o">/</span><span class="m">2</span> <span class="m">200</span>
+<span class="na">server</span><span class="o">:</span> <span class="l">openresty</span>
+<span class="na">content-type</span><span class="o">:</span> <span class="l">text/event-stream</span>
+<span class="na">cache-control</span><span class="o">:</span> <span class="l">no-cache</span>
+<span class="na">connection</span><span class="o">:</span> <span class="l">keep-alive</span>
+</code></pre></div>
+
+<p>负载均衡器本身只做转发和路由，真正昂贵的模型推理留给后面的 worker。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["公网请求"] --&gt; B["Load Balancer"]
+    B --&gt; C1["Worker 1"]
+    B --&gt; C2["Worker 2"]
+    B --&gt; C3["Worker N"]
+    C1 --&gt; D["业务处理"]
+    C2 --&gt; D
+    C3 --&gt; D
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_17_00.png" alt="负载均衡器把请求转发到实际业务 worker" loading="lazy">
+  <p class="video-caption">📷 负载均衡器把请求转发到实际业务 worker<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=1020" target="_blank" rel="noopener">回到原视频 (00:17:00)</a></p>
+</div>
+
+<hr />
+<h2 id="3">3. 进入数据中心</h2>
+<h3 id="31">3.1 上半场：应用后端</h3>
+<p><em>(参考时间: 00:20)</em></p>
+<p>数据中心可以定义为：</p>
+<blockquote>
+<p>A network of computing and storage resources that enable the delivery of shared applications and data.</p>
+</blockquote>
+<p>第一波浪潮从 1990 年代持续至今：</p>
+<ul>
+<li>静态网页；</li>
+<li>Web 2.0；</li>
+<li>移动互联网；</li>
+<li>云端账号与个性化数据。</li>
+</ul>
+<p>云端保存了用户完整的“personality”，也意味着服务商掌握大量数据。法律限制了数据的使用方式，但技术上这些数据客观存在。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["静态 Web"] --&gt; B["Web 2.0"]
+    B --&gt; C["移动互联网"]
+    C --&gt; D["云账号 / 云存储"]
+    D --&gt; E["共享应用与数据"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_21_30.png" alt="数据中心上半场承载互联网应用后端" loading="lazy">
+  <p class="video-caption">📷 数据中心上半场承载互联网应用后端<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=1290" target="_blank" rel="noopener">回到原视频 (00:21:30)</a></p>
+</div>
+
+<h3 id="32-ai">3.2 下半场：AI 推理</h3>
+<p><em>(参考时间: 00:22)</em></p>
+<p>第二波浪潮从生成式 AI 开始。课程举例：</p>
+<ul>
+<li>DeepSeekV4 Flash：<code>284B-A13B</code>；</li>
+<li>DeepSeekV4 Pro：<code>1.6T-A49B</code>；</li>
+<li>上述数字还只描述每个 Token 的部分计算，不包含 Attention 的全部成本。</li>
+</ul>
+<p>模型规模和推理需求把数据中心从“互联网后端”推进到“AI 基础设施”。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["数据中心上半场"] --&gt; B["CRUD / 社交 / 支付 / 视频"]
+    A --&gt; C["数据中心下半场"]
+    C --&gt; D["大模型训练"]
+    C --&gt; E["大模型推理"]
+    E --&gt; F["GPU / 高速网络 / KV Cache"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_23_30.png" alt="AI 推理成为数据中心下半场的核心负载" loading="lazy">
+  <p class="video-caption">📷 AI 推理成为数据中心下半场的核心负载<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=1410" target="_blank" rel="noopener">回到原视频 (00:23:30)</a></p>
+</div>
+
+<h3 id="33">3.3 学校之外的世界模型</h3>
+<p><em>(参考时间: 00:24)</em></p>
+<p>技术本身会过时，但推导技术、理解需求来源的能力不会轻易过时。数据中心背后是完整产业链：</p>
+<ul>
+<li>土地；</li>
+<li>电力；</li>
+<li>水资源与散热；</li>
+<li>网络；</li>
+<li>硬件供应链；</li>
+<li>软件生态；</li>
+<li>运维、销售与资本市场。</li>
+</ul>
+<p>课程提醒：不要只会做题，还要理解题目从哪里来、产业结构如何运转、未来需求会如何变化。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["用户需求"] --&gt; B["应用"]
+    B --&gt; C["数据中心"]
+    C --&gt; D["土地 / 电力 / 水"]
+    C --&gt; E["服务器 / GPU"]
+    C --&gt; F["网络 / 存储"]
+    C --&gt; G["软件与运维"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_25_30.png" alt="数据中心是由技术和产业链共同驱动的系统" loading="lazy">
+  <p class="video-caption">📷 数据中心是由技术和产业链共同驱动的系统<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=1530" target="_blank" rel="noopener">回到原视频 (00:25:30)</a></p>
+</div>
+
+<hr />
+<h2 id="4">4. 数据中心中的并发编程</h2>
+<h3 id="41-crud">4.1 CRUD 仍然是主体</h3>
+<p><em>(参考时间: 00:27)</em></p>
+<p>实时请求大多属于增删改查：</p>
+<ul>
+<li>用户鉴权；</li>
+<li>订单事务；</li>
+<li>消息与聊天记录；</li>
+<li>弹幕；</li>
+<li>点赞与收藏；</li>
+<li>API 计费；</li>
+<li>内容缓存。</li>
+</ul>
+<p>大模型请求之前，也要先完成 API Key 校验、用户状态查询、限流和计费。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["HTTP Request"] --&gt; B["API Key 鉴权"]
+    B --&gt; C["查询用户 / 限流"]
+    C --&gt; D["LLM Inference"]
+    D --&gt; E["审计"]
+    E --&gt; F["计费 / Dashboard"]
+    F --&gt; G["Streaming Response"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_27_30.png" alt="LLM API 请求前后包含大量 CRUD 与业务逻辑" loading="lazy">
+  <p class="video-caption">📷 LLM API 请求前后包含大量 CRUD 与业务逻辑<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=1650" target="_blank" rel="noopener">回到原视频 (00:27:30)</a></p>
+</div>
+
+<h3 id="42">4.2 小数据、中数据和大数据</h3>
+<p><em>(参考时间: 00:29)</em></p>
+<p>数据中心处理的任务可以分成层次：</p>
+<p><strong>实时小数据</strong></p>
+<ul>
+<li>订单；</li>
+<li>鉴权；</li>
+<li>弹幕；</li>
+<li>计费。</li>
+</ul>
+<p><strong>半离线中数据</strong></p>
+<ul>
+<li>周期记账；</li>
+<li>日账单、月账单；</li>
+<li>备份；</li>
+<li>数据看板。</li>
+</ul>
+<p><strong>离线大数据</strong></p>
+<ul>
+<li>内容索引；</li>
+<li>数据挖掘；</li>
+<li>流量分析；</li>
+<li>神经网络训练。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["实时 CRUD"] --&gt; B["半离线批处理"]
+    B --&gt; C["离线大数据"]
+    C --&gt; D["模型训练 / 索引"]
+    D --&gt; A
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_29_30.png" alt="实时、半离线与离线数据处理共同构成数据中心" loading="lazy">
+  <p class="video-caption">📷 实时、半离线与离线数据处理共同构成数据中心<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=1770" target="_blank" rel="noopener">回到原视频 (00:29:30)</a></p>
+</div>
+
+<h3 id="43-c10k">4.3 C10K 与线程模型</h3>
+<p><em>(参考时间: 00:30)</em></p>
+<p>1999 年，Dan Kegel 提出 C10K 问题：能否让 Web 服务器同时处理 10,000 个客户端？</p>
+<p>如果每个请求都创建一个线程：</p>
+<div class="highlight"><pre><span></span><code><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="nb">true</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">Request</span><span class="w"> </span><span class="o">*</span><span class="n">rq</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">get_request</span><span class="p">();</span>
+<span class="w">    </span><span class="n">pthread_create</span><span class="p">(</span><span class="o">&amp;</span><span class="n">tid</span><span class="p">,</span><span class="w"> </span><span class="nb">NULL</span><span class="p">,</span><span class="w"> </span><span class="n">handle_request</span><span class="p">,</span><span class="w"> </span><span class="n">rq</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>请求规模和线程资源会迅速失控。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["10K 并发连接"] --&gt; B["每连接一个线程"]
+    B --&gt; C["线程栈与内核对象"]
+    B --&gt; D["上下文切换"]
+    C --&gt; E["资源耗尽"]
+    D --&gt; E
+    E --&gt; F["无法支撑 C10K"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_31_30.png" alt="线程-per-request 模型无法直接支撑 C10K" loading="lazy">
+  <p class="video-caption">📷 线程-per-request 模型无法直接支撑 C10K<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=1890" target="_blank" rel="noopener">回到原视频 (00:31:30)</a></p>
+</div>
+
+<h3 id="44-c10k">4.4 C10K 催生的事件驱动技术</h3>
+<p><em>(参考时间: 00:32)</em></p>
+<p>C10K 推动了一系列技术出现：</p>
+<ul>
+<li><code>select</code> / <code>poll</code>；</li>
+<li><code>epoll</code>；</li>
+<li>Nginx 等事件驱动服务器；</li>
+<li>goroutine 与异步运行时。</li>
+</ul>
+<p>从 C10K 到 C10M，单机并发模型不再足够，系统走向分布式架构。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["C10K"] --&gt; B["I/O Multiplexing"]
+    B --&gt; C["epoll / Nginx"]
+    C --&gt; D["事件驱动架构"]
+    D --&gt; E["Coroutine / Goroutine"]
+    E --&gt; F["C10M"]
+    F --&gt; G["分布式系统"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_33_30.png" alt="C10K 推动 epoll、事件驱动和异步编程模型" loading="lazy">
+  <p class="video-caption">📷 C10K 推动 epoll、事件驱动和异步编程模型<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=2010" target="_blank" rel="noopener">回到原视频 (00:33:30)</a></p>
+</div>
+
+<h3 id="45-p99">4.5 P99 延迟与服务体验</h3>
+<p><em>(参考时间: 00:34)</em></p>
+<p>数据中心关注的不只是平均延迟，还包括 P99、P999 等尾部延迟。一个全表暂停的并发哈希表 resize 就可能造成事故：</p>
+<ol>
+<li>分配几十 MB 新表；</li>
+<li>迁移全部 bucket；</li>
+<li>暂停期间所有请求等待；</li>
+<li>延迟从微秒上升到几十毫秒甚至上百毫秒。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Hash Table Resize"] --&gt; B["几十 MB 内存分配"]
+    B --&gt; C["全表迁移"]
+    C --&gt; D["其他请求等待"]
+    D --&gt; E["P99 延迟上升"]
+    E --&gt; F["用户体验下降"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_35_00.png" alt="一次全表 resize 就可能破坏尾部延迟" loading="lazy">
+  <p class="video-caption">📷 一次全表 resize 就可能破坏尾部延迟<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=2100" target="_blank" rel="noopener">回到原视频 (00:35:00)</a></p>
+</div>
+
+<h3 id="46">4.6 意外的拒绝服务</h3>
+<p><em>(参考时间: 00:36)</em></p>
+<p>海量请求同时到来，可能形成类似 DoS 的效果。课程提到小米发布会场景：</p>
+<blockquote>
+<p>发布会上的“小爱同学”唤醒词，同时触发了全国大量设备，导致服务短时间瘫痪。</p>
+</blockquote>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["发布会说出唤醒词"] --&gt; B["全国设备同时响应"]
+    B --&gt; C["海量请求涌入"]
+    C --&gt; D["后端容量不足"]
+    D --&gt; E["服务不可用"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_36_30.png" alt="同步唤醒大量设备会形成类似 DoS 的请求风暴" loading="lazy">
+  <p class="video-caption">📷 同步唤醒大量设备会形成类似 DoS 的请求风暴<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=2190" target="_blank" rel="noopener">回到原视频 (00:36:30)</a></p>
+</div>
+
+<hr />
+<h2 id="5-cap">5. CAP 定理与分布式系统难题</h2>
+<h3 id="51">5.1 三个目标不能同时满足</h3>
+<p><em>(参考时间: 00:37)</em></p>
+<p>CAP Theorem：</p>
+<ul>
+<li><strong>Consistency</strong>：所有节点看到一致的顺序与结果；</li>
+<li><strong>Availability</strong>：每个请求都能及时得到响应；</li>
+<li><strong>Partition tolerance</strong>：网络分区或机器失联时系统仍能继续运行。</li>
+</ul>
+<p>三者不可兼得。单机系统更容易获得一致性和可用性，但无法扩展为全球分布式系统。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["分布式系统"] --&gt; B["Consistency"]
+    A --&gt; C["Availability"]
+    A --&gt; D["Partition Tolerance"]
+    B --&gt; E["无法同时满足三者"]
+    C --&gt; E
+    D --&gt; E
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_37_30.png" alt="CAP 定理描述分布式系统中的不可能三角" loading="lazy">
+  <p class="video-caption">📷 CAP 定理描述分布式系统中的不可能三角<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=2250" target="_blank" rel="noopener">回到原视频 (00:37:30)</a></p>
+</div>
+
+<h3 id="52">5.2 拉黑好友与朋友圈</h3>
+<p><em>(参考时间: 00:38)</em></p>
+<p>讲师用一个生活例子解释 CAP：</p>
+<ol>
+<li>用户先拉黑某人；</li>
+<li>随后发布朋友圈；</li>
+<li>用户以为两个请求有先后顺序；</li>
+<li>但两个请求可能落在不同数据中心；</li>
+<li>拉黑状态尚未同步时，另一数据中心仍可能显示朋友圈。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant U as 用户
+    participant A as 南京数据中心
+    participant B as 杭州数据中心
+    U-&gt;&gt;A: 拉黑请求
+    A--&gt;&gt;U: 立即成功
+    A--xB: 后台同步（有延迟）
+    U-&gt;&gt;B: 发布朋友圈
+    B--&gt;&gt;U: 发布成功
+    B-&gt;&gt;B: 尚未收到拉黑状态
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_39_00.png" alt="跨数据中心同步延迟会破坏用户感知的顺序" loading="lazy">
+  <p class="video-caption">📷 跨数据中心同步延迟会破坏用户感知的顺序<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=2340" target="_blank" rel="noopener">回到原视频 (00:39:00)</a></p>
+</div>
+
+<h3 id="53-api-key-cap">5.3 API Key 也撞上 CAP</h3>
+<p><em>(参考时间: 00:43)</em></p>
+<p>API Key 需要：</p>
+<ul>
+<li>鉴权；</li>
+<li>计费；</li>
+<li>审计；</li>
+<li>限流；</li>
+<li>随时禁用。</li>
+</ul>
+<p>同一个 Key 可以被多个机器使用，因此 Key 的状态是跨机器的共享数据。禁用操作和并发请求之间同样面临 CAP 问题。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["API Key"] --&gt; B["鉴权"]
+    A --&gt; C["计费"]
+    A --&gt; D["审计"]
+    A --&gt; E["禁用 / 恢复"]
+    B --&gt; F["多个推理节点共享状态"]
+    C --&gt; F
+    D --&gt; F
+    E --&gt; F
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_43_30.png" alt="API Key 的禁用与并发请求形成分布式一致性难题" loading="lazy">
+  <p class="video-caption">📷 API Key 的禁用与并发请求形成分布式一致性难题<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=2610" target="_blank" rel="noopener">回到原视频 (00:43:30)</a></p>
+</div>
+
+<h3 id="54">5.4 机器随时会消失</h3>
+<p><em>(参考时间: 00:45)</em></p>
+<p>分布式程序把单机并发难度进一步放大：</p>
+<ul>
+<li>共享内存操作从纳秒级变成网络毫秒级；</li>
+<li>网络可能延迟、丢包或分区；</li>
+<li>机器可能随时断电或离线；</li>
+<li>程序执行到一半时进程可能消失。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["单机多线程"] --&gt; B["数据竞争 / 死锁"]
+    A --&gt; C["共享内存"]
+    D["分布式系统"] --&gt; E["网络延迟"]
+    D --&gt; F["网络分区"]
+    D --&gt; G["机器崩溃"]
+    D --&gt; H["请求可能重试"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_45_30.png" alt="分布式系统的故障模型远复杂于单机并发" loading="lazy">
+  <p class="video-caption">📷 分布式系统的故障模型远复杂于单机并发<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=2730" target="_blank" rel="noopener">回到原视频 (00:45:30)</a></p>
+</div>
+
+<hr />
+<h2 id="6">6. 用新抽象重新设计系统</h2>
+<h3 id="61">6.1 从“把数据带到计算”到“把计算带到数据”</h3>
+<p><em>(参考时间: 00:47)</em></p>
+<p>UNIX 以程序为中心，通过管道组合：</p>
+<div class="highlight"><pre><span></span><code>cat<span class="w"> </span>input.txt<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>pattern<span class="w"> </span><span class="p">|</span><span class="w"> </span>sort<span class="w"> </span><span class="p">|</span><span class="w"> </span>uniq<span class="w"> </span>-c
+</code></pre></div>
+
+<p>分布式系统则要面对程序随时消失的问题，因此转向以数据为中心：</p>
+<ul>
+<li>数据被分片；</li>
+<li>计算被调度到数据附近；</li>
+<li>失败时重新执行计算；</li>
+<li>机器和分片对程序员透明。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["UNIX: 数据带到程序"] --&gt; B["程序为核心"]
+    C["分布式: 计算带到数据"] --&gt; D["数据 / 分片为核心"]
+    D --&gt; E["失败后重算"]
+    D --&gt; F["位置透明"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_47_30.png" alt="分布式系统从程序中心转向数据中心" loading="lazy">
+  <p class="video-caption">📷 分布式系统从程序中心转向数据中心<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=2850" target="_blank" rel="noopener">回到原视频 (00:47:30)</a></p>
+</div>
+
+<h3 id="62-google-file-system">6.2 Google File System</h3>
+<p><em>(参考时间: 00:48)</em></p>
+<p>第一层抽象仍然是文件：</p>
+<div class="highlight"><pre><span></span><code>File = Byte Array
+</code></pre></div>
+
+<p>GFS 把大文件切分并复制到多台机器上，但向应用隐藏机器、分片和副本的存在。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["逻辑文件"] --&gt; B1["Chunk 1"]
+    A --&gt; B2["Chunk 2"]
+    A --&gt; B3["Chunk 3"]
+    B1 --&gt; C1["Machine A"]
+    B1 --&gt; C2["Machine B"]
+    B2 --&gt; C3["Machine C"]
+    B3 --&gt; C4["Machine D"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_49_30.png" alt="GFS 用分片和副本隐藏分布式存储复杂性" loading="lazy">
+  <p class="video-caption">📷 GFS 用分片和副本隐藏分布式存储复杂性<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=2970" target="_blank" rel="noopener">回到原视频 (00:49:30)</a></p>
+</div>
+
+<h3 id="63-bigtable-mapreduce">6.3 BigTable 与 MapReduce</h3>
+<p><em>(参考时间: 00:50)</em></p>
+<p>在文件系统之上，Google 构建了更高层抽象：</p>
+<ul>
+<li><strong>BigTable</strong>：分布式 Key-Value 数据库，解决 OLTP/CRUD；</li>
+<li><strong>MapReduce</strong>：限制计算形式，使任务可以自动 Scale Out，解决离线索引和 OLAP。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["GFS: 分布式文件"] --&gt; B["BigTable: Key-Value DB"]
+    A --&gt; C["MapReduce: 批量计算"]
+    B --&gt; D["实时 CRUD"]
+    C --&gt; E["离线索引 / 分析"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_50_30.png" alt="BigTable 与 MapReduce 把分布式复杂性封装成通用抽象" loading="lazy">
+  <p class="video-caption">📷 BigTable 与 MapReduce 把分布式复杂性封装成通用抽象<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=3030" target="_blank" rel="noopener">回到原视频 (00:50:30)</a></p>
+</div>
+
+<hr />
+<h2 id="7-serverless">7. Serverless：描述计算图，把基础设施交给平台</h2>
+<h3 id="71-function-as-a-service">7.1 Function as a Service</h3>
+<p><em>(参考时间: 00:52)</em></p>
+<p>Serverless 的核心思想：</p>
+<blockquote>
+<p>编写函数来描述事件驱动的计算图，基础设施、扩容和容错交给云平台。</p>
+</blockquote>
+<p>一个典型事件处理器：</p>
+<div class="highlight"><pre><span></span><code><span class="kd">const</span><span class="w"> </span><span class="nx">dynamo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">AWS</span><span class="p">.</span><span class="nx">DynamoDB</span><span class="p">.</span><span class="nx">DocumentClient</span><span class="p">();</span>
+
+<span class="nx">exports</span><span class="p">.</span><span class="nx">handler</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">(</span><span class="nx">event</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">apiKey</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">event</span><span class="p">.</span><span class="nx">headers</span><span class="p">[</span><span class="s1">'Authorization'</span><span class="p">]</span>
+<span class="w">        </span><span class="o">?</span><span class="p">.</span><span class="nx">replace</span><span class="p">(</span><span class="s1">'Bearer '</span><span class="p">,</span><span class="w"> </span><span class="s1">''</span><span class="p">);</span>
+
+<span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">user</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">dynamo</span><span class="p">.</span><span class="nx">send</span><span class="p">(</span><span class="ow">new</span><span class="w"> </span><span class="nx">GetCommand</span><span class="p">({</span>
+<span class="w">        </span><span class="nx">TableName</span><span class="o">:</span><span class="w"> </span><span class="s1">'APIKeys'</span><span class="p">,</span>
+<span class="w">        </span><span class="nx">Key</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">apiKey</span><span class="w"> </span><span class="p">}</span>
+<span class="w">    </span><span class="p">})).</span><span class="nx">Item</span><span class="p">;</span>
+
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="nx">user</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="nx">user</span><span class="p">.</span><span class="nx">disabled</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">statusCode</span><span class="o">:</span><span class="w"> </span><span class="mf">401</span><span class="p">,</span><span class="w"> </span><span class="nx">body</span><span class="o">:</span><span class="w"> </span><span class="s1">'Unauthorized'</span><span class="w"> </span><span class="p">};</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">statusCode</span><span class="o">:</span><span class="w"> </span><span class="mf">200</span><span class="p">,</span>
+<span class="w">        </span><span class="nx">body</span><span class="o">:</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">do_llm_inference</span><span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="nx">body</span><span class="p">)</span>
+<span class="w">    </span><span class="p">};</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["HTTP Event"] --&gt; B["Function Handler"]
+    B --&gt; C["读取 API Key"]
+    C --&gt; D["查询 Distributed DB"]
+    D --&gt; E{"合法且启用？"}
+    E -- "否" --&gt; F["401"]
+    E -- "是" --&gt; G["LLM Inference"]
+    G --&gt; H["200 / Stream"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_54_30.png" alt="Serverless 用事件函数表达数据中心业务计算图" loading="lazy">
+  <p class="video-caption">📷 Serverless 用事件函数表达数据中心业务计算图<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=3270" target="_blank" rel="noopener">回到原视频 (00:54:30)</a></p>
+</div>
+
+<h3 id="72">7.2 幂等性</h3>
+<p><em>(参考时间: 00:56)</em></p>
+<p>Serverless 函数可能执行到一半崩溃，平台随后重试。如果简单执行：</p>
+<div class="highlight"><pre><span></span><code>load sum
+sum++
+store sum
+</code></pre></div>
+
+<p>同一次请求可能被计费两次。</p>
+<p>更安全的方式是在函数入口生成唯一事件 ID，并把操作表达为集合插入：</p>
+<div class="highlight"><pre><span></span><code>id = unique_request_id()
+insert(set, id)
+sum = size(set)
+</code></pre></div>
+
+<p>重复执行只会插入同一个 ID，结果保持一致，这就是<strong>幂等性</strong>。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["函数开始"] --&gt; B["生成唯一 Request ID"]
+    B --&gt; C["向 Set 插入 ID"]
+    C --&gt; D{"ID 已存在？"}
+    D -- "是" --&gt; E["结果不变"]
+    D -- "否" --&gt; F["集合大小增加 1"]
+    E --&gt; G["安全重试"]
+    F --&gt; G
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_56_30.png" alt="唯一请求 ID 让可能重试的操作保持幂等" loading="lazy">
+  <p class="video-caption">📷 唯一请求 ID 让可能重试的操作保持幂等<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=3390" target="_blank" rel="noopener">回到原视频 (00:56:30)</a></p>
+</div>
+
+<h3 id="73">7.3 存储与计算分离</h3>
+<p><em>(参考时间: 00:58)</em></p>
+<p>云环境中的计算节点通过高速网络连接 SSD 集群。应用看似只写一份文件，底层存储系统可能：</p>
+<ul>
+<li>保存 2 到 3 个副本；</li>
+<li>自动压缩；</li>
+<li>对相同内容做去重；</li>
+<li>用引用计数共享公共文件；</li>
+<li>在压缩去重后降低实际存储成本。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["计算节点"] --&gt; B["高速网络"]
+    B --&gt; C["分布式 SSD / 存储集群"]
+    C --&gt; D1["副本 1"]
+    C --&gt; D2["副本 2"]
+    C --&gt; D3["副本 3"]
+    C --&gt; E["压缩 / 去重"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_58_30.png" alt="云存储通过副本、压缩和去重获得可靠性" loading="lazy">
+  <p class="video-caption">📷 云存储通过副本、压缩和去重获得可靠性<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=3510" target="_blank" rel="noopener">回到原视频 (00:58:30)</a></p>
+</div>
+
+<hr />
+<h2 id="8-token-tensor">8. 从 Token 到 Tensor</h2>
+<h3 id="81-llm-forward-pass">8.1 LLM Forward Pass 是一个巨大的计算图</h3>
+<p><em>(参考时间: 01:00)</em></p>
+<p><code>do_llm_inference()</code> 做的是 next-token prediction。模型本质上是一个训练得到的超大函数：</p>
+<div class="highlight"><pre><span></span><code>input tokens
+    ↓
+Transformer layers
+    ↓
+logits
+    ↓
+sample next token
+</code></pre></div>
+
+<p>GPT 类模型的核心是重复执行标准矩阵计算和 Attention。<code>gpt.c</code> 中存在一个很短的 generator，能够展开为巨大计算图。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Input Tokens"] --&gt; B["Embedding"]
+    B --&gt; C1["Transformer Layer 1"]
+    C1 --&gt; C2["Transformer Layer 2"]
+    C2 --&gt; C3["..."]
+    C3 --&gt; D["Logits"]
+    D --&gt; E["Sample Next Token"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_01_30.png" alt="LLM 前向推理展开为重复的 Transformer 层计算图" loading="lazy">
+  <p class="video-caption">📷 LLM 前向推理展开为重复的 Transformer 层计算图<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=3690" target="_blank" rel="noopener">回到原视频 (01:01:30)</a></p>
+</div>
+
+<h3 id="82-matmul-attention">8.2 Matmul 与 Attention</h3>
+<p><em>(参考时间: 01:02)</em></p>
+<p><code>matmul_forward</code> 与 <code>attention_forward</code> 是主要热点。CUDA 版本：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="nf">matmul_forward</span><span class="p">(</span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">out</span><span class="p">,</span><span class="w"> </span><span class="p">...,</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">B</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">T</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">C</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">OC</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">sqrt_block_size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">16</span><span class="p">;</span>
+<span class="w">    </span><span class="kt">dim3</span><span class="w"> </span><span class="nb">gridDim</span><span class="p">(</span>
+<span class="w">        </span><span class="n">CEIL_DIV</span><span class="p">(</span><span class="n">B</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">T</span><span class="p">,</span><span class="w"> </span><span class="mi">8</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">sqrt_block_size</span><span class="p">),</span>
+<span class="w">        </span><span class="n">CEIL_DIV</span><span class="p">(</span><span class="n">OC</span><span class="p">,</span><span class="w"> </span><span class="mi">8</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">sqrt_block_size</span><span class="p">)</span>
+<span class="w">    </span><span class="p">);</span>
+<span class="w">    </span><span class="kt">dim3</span><span class="w"> </span><span class="nb">blockDim</span><span class="p">(</span><span class="n">sqrt_block_size</span><span class="p">,</span><span class="w"> </span><span class="n">sqrt_block_size</span><span class="p">);</span>
+
+<span class="w">    </span><span class="n">matmul_forward_kernel4</span><span class="o">&lt;&lt;&lt;</span><span class="nb">gridDim</span><span class="p">,</span><span class="w"> </span><span class="nb">blockDim</span><span class="o">&gt;&gt;&gt;</span><span class="p">(</span>
+<span class="w">        </span><span class="n">out</span><span class="p">,</span><span class="w"> </span><span class="n">inp</span><span class="p">,</span><span class="w"> </span><span class="n">weight</span><span class="p">,</span><span class="w"> </span><span class="n">bias</span><span class="p">,</span><span class="w"> </span><span class="n">C</span><span class="p">,</span><span class="w"> </span><span class="n">OC</span>
+<span class="w">    </span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>结构和 Mandelbrot 这样的逐元素任务很像，只是每个 GPU 线程处理的是矩阵元素或 Attention 内积。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Batch B"] --&gt; D["Matmul / Attention"]
+    B["Sequence T"] --&gt; D
+    C["Channels C"] --&gt; D
+    D --&gt; E1["Thread (b,t,oc)"]
+    D --&gt; E2["Thread (b,t+1,oc)"]
+    D --&gt; E3["Thread ..."]
+    E1 --&gt; F["Output Tensor"]
+    E2 --&gt; F
+    E3 --&gt; F
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_03_30.png" alt="Matmul 与 Attention 都是高度规则的并行循环" loading="lazy">
+  <p class="video-caption">📷 Matmul 与 Attention 都是高度规则的并行循环<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=3810" target="_blank" rel="noopener">回到原视频 (01:03:30)</a></p>
+</div>
+
+<h3 id="83-scalarvectormatrix-tensor">8.3 Scalar、Vector、Matrix 与 Tensor</h3>
+<p><em>(参考时间: 01:04)</em></p>
+<p>深度学习中的数据结构逐级扩展：</p>
+<ul>
+<li>Scalar：一个数；</li>
+<li>Vector：一维数组；</li>
+<li>Matrix：二维数组；</li>
+<li>Tensor：更高维数组。</li>
+</ul>
+<p>彩色图像天然有 RGB channel，多个 channel 又组成高维张量；Batch 进一步增加维度。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Scalar"] --&gt; B["Vector"]
+    B --&gt; C["Matrix"]
+    C --&gt; D["Tensor"]
+    D --&gt; E["RGB Channels"]
+    E --&gt; F["Batch / Heads / Layers"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_05_30.png" alt="Tensor 是图像、通道、批次和层结构自然产生的高维数组" loading="lazy">
+  <p class="video-caption">📷 Tensor 是图像、通道、批次和层结构自然产生的高维数组<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=3930" target="_blank" rel="noopener">回到原视频 (01:05:30)</a></p>
+</div>
+
+<h3 id="84-attention">8.4 “Attention 是一本书”的类比</h3>
+<p><em>(参考时间: 01:06)</em></p>
+<p>讲师把每一层 Transformer 比作一本书：</p>
+<ul>
+<li><strong>Q（Query）</strong>：我现在要找什么，也就是需要补全的句子；</li>
+<li><strong>K（Key）</strong>：书的目录，我有什么内容；</li>
+<li><strong>V（Value）</strong>：书的正文，具体内容是什么。</li>
+</ul>
+<p>Attention 先根据 Q 和 K 找到与当前问题相关的位置，再按权重从 V 中提取信息，形成一个“短时记忆”。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    Q["Q: 我在找什么"] --&gt; S["Q × Kᵀ"]
+    K["K: 目录索引"] --&gt; S
+    S --&gt; W["Softmax 权重"]
+    V["V: 正文内容"] --&gt; A["加权求和"]
+    W --&gt; A
+    A --&gt; M["短时记忆"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_07_00.png" alt="Attention 通过 Q/K/V 从大量上下文中提取短时记忆" loading="lazy">
+  <p class="video-caption">📷 Attention 通过 Q/K/V 从大量上下文中提取短时记忆<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=4020" target="_blank" rel="noopener">回到原视频 (01:07:00)</a></p>
+</div>
+
+<h3 id="85">8.5 越接近输出，表示越抽象</h3>
+<p><em>(参考时间: 01:09)</em></p>
+<p>每经过一层 Transformer：</p>
+<ol>
+<li>模型读取先前层产生的表示；</li>
+<li>Attention 提取相关信息；</li>
+<li>全连接层重写表示；</li>
+<li>新的表示传给下一层。</li>
+</ol>
+<p>前几层还容易与 Token 对应，越往后，表示越接近“下一个 Token 的分布”，也越来越难被人类直观解释。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Token-level 表示"] --&gt; B["Attention 阅读"]
+    B --&gt; C["短时记忆"]
+    C --&gt; D["全连接重写"]
+    D --&gt; E["更高层抽象"]
+    E --&gt; F["Next-token Logits"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_09_30.png" alt="Transformer 逐层重写表示并提升信息密度" loading="lazy">
+  <p class="video-caption">📷 Transformer 逐层重写表示并提升信息密度<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=4170" target="_blank" rel="noopener">回到原视频 (01:09:30)</a></p>
+</div>
+
+<hr />
+<h2 id="9-gpu">9. 在 GPU 上压榨极致性能</h2>
+<h3 id="91-kernel">9.1 Kernel 队列也是计算图</h3>
+<p><em>(参考时间: 01:10)</em></p>
+<p>CUDA Kernel 启动后 CPU 立即返回，GPU 按提交顺序执行。多个 Kernel 形成串行计算图：</p>
+<div class="highlight"><pre><span></span><code>Kernel 1
+   ↓
+Kernel 2
+   ↓
+Kernel 3
+</code></pre></div>
+
+<p>每个 Kernel 内部可以拥有极高并行度，但 Kernel 之间往往要等待同步。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["CPU 提交 Kernel"] --&gt; B["Kernel 1"]
+    B --&gt; C["Kernel 2"]
+    C --&gt; D["Kernel 3"]
+    D --&gt; E["返回结果"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_11_30.png" alt="CPU 向 GPU 提交多个 Kernel 形成计算图" loading="lazy">
+  <p class="video-caption">📷 CPU 向 GPU 提交多个 Kernel 形成计算图<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=4290" target="_blank" rel="noopener">回到原视频 (01:11:30)</a></p>
+</div>
+
+<h3 id="92-kernel-fusion-flashattention">9.2 Kernel Fusion 与 FlashAttention</h3>
+<p><em>(参考时间: 01:12)</em></p>
+<p>如果每个 Kernel 末尾只剩少量线程，GPU 利用率会下降。于是可以把多个算子融合成一个计算图，减少中间读写和同步：</p>
+<div class="highlight"><pre><span></span><code>单独 Kernel:
+QK → Softmax → PV → Output
+
+Fusion:
+在一个 Kernel 中按块完成 Attention
+</code></pre></div>
+
+<p>这类融合优化推动了 FlashAttention 等技术。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["多个小 Kernel"] --&gt; B["频繁同步"]
+    B --&gt; C["利用率下降"]
+    C --&gt; D["Kernel Fusion"]
+    D --&gt; E["减少中间内存"]
+    D --&gt; F["减少同步"]
+    E --&gt; G["FlashAttention"]
+    F --&gt; G
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_13_30.png" alt="FlashAttention 通过融合算子减少 Kernel 边界开销" loading="lazy">
+  <p class="video-caption">📷 FlashAttention 通过融合算子减少 Kernel 边界开销<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=4410" target="_blank" rel="noopener">回到原视频 (01:13:30)</a></p>
+</div>
+
+<h3 id="93-tensor-core">9.3 Tensor Core</h3>
+<p><em>(参考时间: 01:14)</em></p>
+<p>SIMT 已经摊薄了译码成本。进一步把 SIMD 引入 PTX，就可以让一条指令直接完成小矩阵乘法累加：</p>
+<div class="highlight"><pre><span></span><code>D(m × n) += A(m × k) × B(k × n)
+</code></pre></div>
+
+<p>这就是 Tensor Core 的核心运算。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Matrix A m×k"] --&gt; C["Tensor Core FMA"]
+    B["Matrix B k×n"] --&gt; C
+    D["Accumulator D m×n"] --&gt; C
+    C --&gt; E["Updated D m×n"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_15_30.png" alt="Tensor Core 用一条矩阵 FMA 摊薄指令开销" loading="lazy">
+  <p class="video-caption">📷 Tensor Core 用一条矩阵 FMA 摊薄指令开销<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=4530" target="_blank" rel="noopener">回到原视频 (01:15:30)</a></p>
+</div>
+
+<h3 id="94">9.4 真正困难的是内存布局</h3>
+<p><em>(参考时间: 01:17)</em></p>
+<p>矩阵乘法需要一行乘一列，但内存是线性的。无论使用行优先还是列优先，总有一个访问维度不连续。</p>
+<p>解决方式是把大矩阵切成 tile：</p>
+<div class="highlight"><pre><span></span><code>大矩阵乘法
+    ↓
+切成适合缓存的小块
+    ↓
+块内高密度计算
+    ↓
+块间继续组合
+</code></pre></div>
+
+<p>这会涉及：</p>
+<ul>
+<li>多维寻址；</li>
+<li>稀疏数据搬运；</li>
+<li>跨步访问；</li>
+<li>异步同步；</li>
+<li>布局转换；</li>
+<li>压缩与解压；</li>
+<li>零开销转置。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["大矩阵"] --&gt; B["Tiling"]
+    B --&gt; C["缓存友好的小块"]
+    C --&gt; D["Tensor Core FMA"]
+    D --&gt; E["跨步访问优化"]
+    D --&gt; F["布局转换"]
+    E --&gt; G["高带宽"]
+    F --&gt; G
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_17_30.png" alt="矩阵分块与内存布局是 Tensor Core 性能的关键" loading="lazy">
+  <p class="video-caption">📷 矩阵分块与内存布局是 Tensor Core 性能的关键<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=4650" target="_blank" rel="noopener">回到原视频 (01:17:30)</a></p>
+</div>
+
+<h3 id="95-cpasyncbulktensor">9.5 <code>cp.async.bulk.tensor</code></h3>
+<p><em>(参考时间: 01:19)</em></p>
+<p>新一代 GPU 提供张量拷贝指令，支持：</p>
+<ul>
+<li>稀疏数据拷贝；</li>
+<li>解压缩；</li>
+<li>零开销转置；</li>
+<li>异步数据搬运。</li>
+</ul>
+<p>这些能力让数据以更适合计算的布局进入 Tensor Core。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Global Memory"] --&gt; B["cp.async.bulk.tensor"]
+    B --&gt; C["转置 / 解压缩"]
+    C --&gt; D["Shared Memory"]
+    D --&gt; E["Tensor Core"]
+    E --&gt; F["结果写回"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_19_30.png" alt="异步张量拷贝在搬运过程中完成布局转换" loading="lazy">
+  <p class="video-caption">📷 异步张量拷贝在搬运过程中完成布局转换<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=4770" target="_blank" rel="noopener">回到原视频 (01:19:30)</a></p>
+</div>
+
+<hr />
+<h2 id="10-ai-unix">10. AI 软件栈与 UNIX 历史的相似性</h2>
+<p><em>(参考时间: 01:20)</em></p>
+<p>AI 生态从底层到应用形成完整栈：</p>
+<p><strong>硬件与编程模型</strong></p>
+<ul>
+<li>GPU；</li>
+<li>CUDA / PTX；</li>
+<li>cuBLAS、DeepGEMM、NCCL。</li>
+</ul>
+<p><strong>编译器与框架</strong></p>
+<ul>
+<li>FlashAttention；</li>
+<li>Triton；</li>
+<li>PyTorch、TensorFlow；</li>
+<li>训练和推理框架。</li>
+</ul>
+<p><strong>模型与应用</strong></p>
+<ul>
+<li>HuggingFace；</li>
+<li>Ollama、OpenWebUI；</li>
+<li>Agent 与开发工具。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["GPU / Accelerator"] --&gt; B["CUDA / PTX"]
+    B --&gt; C["cuBLAS / DeepGEMM / NCCL"]
+    C --&gt; D["PyTorch / TensorFlow"]
+    D --&gt; E["Training / Inference Framework"]
+    E --&gt; F["Model Distribution"]
+    F --&gt; G["User Applications"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_21_30.png" alt="AI 软件栈从 CUDA 到上层应用形成完整生态" loading="lazy">
+  <p class="video-caption">📷 AI 软件栈从 CUDA 到上层应用形成完整生态<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=4890" target="_blank" rel="noopener">回到原视频 (01:21:30)</a></p>
+</div>
+
+<hr />
+<h2 id="11-tokenprefill-decode">11. 生成一个 Token：Prefill 与 Decode</h2>
+<h3 id="111">11.1 小模型与大模型的差别</h3>
+<p><em>(参考时间: 01:24)</em></p>
+<p>如果模型是 GPT2-XL <code>1.5B</code>、上下文 <code>1K</code>，推理接近一次普通业务请求。</p>
+<p>但 <code>1.6T</code> 参数、百万 Token 上下文则完全不同：</p>
+<ul>
+<li>单张 GPU 放不下全部参数；</li>
+<li>Attention 计算量随上下文长度快速增长；</li>
+<li>需要 Tensor Parallel、Pipeline Parallel、Expert Parallel；</li>
+<li>需要 KV Cache 和分布式通信。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["模型规模"] --&gt; B{"单卡可容纳？"}
+    B -- "是" --&gt; C["单节点推理"]
+    B -- "否" --&gt; D["模型并行"]
+    D --&gt; E["Tensor Parallel"]
+    D --&gt; F["Pipeline Parallel"]
+    D --&gt; G["Expert Parallel"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_24_30.png" alt="大模型推理必须把参数和计算分布到多张 GPU" loading="lazy">
+  <p class="video-caption">📷 大模型推理必须把参数和计算分布到多张 GPU<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=5070" target="_blank" rel="noopener">回到原视频 (01:24:30)</a></p>
+</div>
+
+<h3 id="112-prefill">11.2 Prefill</h3>
+<p><em>(参考时间: 01:25)</em></p>
+<p>Prefill 阶段处理输入上下文：</p>
+<ol>
+<li>计算每层 Attention 所需的 K 和 V；</li>
+<li>保存到 KV Cache；</li>
+<li>形成后续生成可复用的中间状态。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["输入上下文"] --&gt; B["逐层计算"]
+    B --&gt; C["生成 K"]
+    B --&gt; D["生成 V"]
+    C --&gt; E["KV Cache"]
+    D --&gt; E
+</code></pre></div>
+
+<h3 id="113-decode">11.3 Decode</h3>
+<p><em>(参考时间: 01:26)</em></p>
+<p>Decode 阶段生成输出 Token：</p>
+<ol>
+<li>读取完整 KV Cache；</li>
+<li>用当前 Q 计算 Attention；</li>
+<li>形成短时记忆；</li>
+<li>生成下一个 Token；</li>
+<li>更新 KV Cache；</li>
+<li>重复直到结束。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["当前 Q"] --&gt; B["读取 KV Cache"]
+    B --&gt; C["Attention"]
+    C --&gt; D["短时记忆"]
+    D --&gt; E["Next Token"]
+    E --&gt; F["更新 KV Cache"]
+    F --&gt; B
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_26_30.png" alt="Decode 逐 Token 复用 KV Cache 并重复生成" loading="lazy">
+  <p class="video-caption">📷 Decode 逐 Token 复用 KV Cache 并重复生成<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=5190" target="_blank" rel="noopener">回到原视频 (01:26:30)</a></p>
+</div>
+
+<h3 id="114-pd">11.4 PD 分离</h3>
+<p><em>(参考时间: 01:27)</em></p>
+<p>Prefill 和 Decode 的资源特征不同，现代推理服务常采用 PD 分离：</p>
+<ul>
+<li>Prefill 阶段计算密集、并行度高；</li>
+<li>Decode 阶段频繁读取 KV Cache、对带宽和延迟敏感；</li>
+<li>两类任务放在不同资源池，可以提高整体利用率。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["请求"] --&gt; B["Prefill Cluster"]
+    B --&gt; C["KV Cache / Transfer"]
+    C --&gt; D["Decode Cluster"]
+    D --&gt; E1["Token 1"]
+    D --&gt; E2["Token 2"]
+    D --&gt; E3["Token N"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_27_30.png" alt="PD 分离把 Prefill 与 Decode 放进不同资源池" loading="lazy">
+  <p class="video-caption">📷 PD 分离把 Prefill 与 Decode 放进不同资源池<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=5250" target="_blank" rel="noopener">回到原视频 (01:27:30)</a></p>
+</div>
+
+<hr />
+<h2 id="12-token">12. 旅途终点：Token 返回用户</h2>
+<p><em>(参考时间: 01:28)</em></p>
+<p>生成的 Token 最终返回后，后端还要完成：</p>
+<ul>
+<li>审计；</li>
+<li>计费；</li>
+<li>更新 Dashboard；</li>
+<li>构造 <code>text/event-stream</code> 响应；</li>
+<li>按 JSONL chunk 逐步发送。</li>
+</ul>
+<p>典型响应：</p>
+<div class="highlight"><pre><span></span><code><span class="kr">HTTP</span><span class="o">/</span><span class="m">2</span> <span class="m">200</span>
+<span class="na">content-type</span><span class="o">:</span> <span class="l">text/event-stream; charset=utf-8</span>
+
+data: {"id":"...","object":"chat.completion.chunk",
+       "model":"deepseek-v4-flash",
+       "choices":[{"delta":{"role":"assistant"}}]}
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Next Token"] --&gt; B["审计"]
+    B --&gt; C["计费"]
+    C --&gt; D["更新 Dashboard"]
+    D --&gt; E["构造 Streaming Chunk"]
+    E --&gt; F["返回客户端"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_28_30.png" alt="Token 返回后仍有审计、计费和流式响应处理" loading="lazy">
+  <p class="video-caption">📷 Token 返回后仍有审计、计费和流式响应处理<br><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/?t=5310" target="_blank" rel="noopener">回到原视频 (01:28:30)</a></p>
+</div>
+
+<hr />
+<h2 id="13">13. 总结：历史总在重复，问题从未消失</h2>
+<p>这一讲用“一个 Token 的旅程”串起了整门并发与系统课程：</p>
+<ul>
+<li>从 HTTP 和环境变量开始；</li>
+<li>DNS、路由和负载均衡把请求送达数据中心；</li>
+<li>CRUD、缓存、鉴权和计费构成业务层；</li>
+<li>C10K/C10M 推动事件驱动和分布式架构；</li>
+<li>CAP 和机器故障迫使系统重新设计抽象；</li>
+<li>GFS、BigTable、MapReduce、Serverless 逐层封装复杂性；</li>
+<li>模型推理最终落入 Tensor、Attention 和 GPU Kernel；</li>
+<li>Prefill/Decode、KV Cache、Tensor Core 和内存布局决定推理性能。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["HTTP Request"] --&gt; B["Network"]
+    B --&gt; C["Distributed CRUD"]
+    C --&gt; D["Serverless / Data"]
+    D --&gt; E["Transformer"]
+    E --&gt; F["GPU Kernel"]
+    F --&gt; G["Tensor Core"]
+    G --&gt; H["Next Token"]
+    H --&gt; I["Stream Response"]
+</code></pre></div>
+
+<p>课程最后指出，技术会不断过时，但分析系统的方法不会：</p>
+<blockquote>
+<p>从 first principles 出发，理解每一层在做什么，才能在未知的新系统中找到自己的位置。</p>
+</blockquote>
+<hr />
+<h2 id="_2">附：官方参考与延伸阅读</h2>
+<ul>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/llm-request">一个 LLM Request</a></li>
+<li><a href="https://git.nju.edu.cn/jyy/os2026/-/blob/M6/gpt/gpt.c?ref_type=heads">gpt.c</a></li>
+<li><a href="https://www.cs.utexas.edu/~eunsol/courses/data/bitter_lesson.pdf">Richard Sutton, The Bitter Lesson</a></li>
+<li><a href="https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#tensorcore-5th-generation-instructions">NVIDIA PTX Tensor Core Instructions</a></li>
+<li><a href="https://jyywiki.cn/submit.sh">提交脚本示例</a></li>
+</ul>
+<p>官方课程资料：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/2026/">课程主页</a></li>
+<li><a href="https://jyywiki.cn/OS/2026/lect21.md">第 21 讲讲义：一个 Token 的旅程</a></li>
+<li><a href="https://www.bilibili.com/video/BV1zS5R6tEWZ/">视频：21 - 一个 Token 的旅程</a></li>
+</ul>
+<blockquote>
+<p><strong>版权与署名</strong>：本讲课程材料由蒋炎岩（jyy）编写。课程讲义与幻灯片采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书保留课程出处、作者署名与许可说明。</p>
+</blockquote>
+    </article>
+
+    <!-- Mermaid 图表引擎初始化 -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            mermaid.initialize({ startOnLoad: false, theme: 'default' });
+            
+            // 兼容普通代码块以及丢失 language-mermaid 类名的情况 (CodeHilite 干扰)
+            const codeNodes = document.querySelectorAll('pre code, .highlight code');
+            codeNodes.forEach(function(node) {
+                const text = node.textContent.trim();
+                // 匹配常见的 mermaid 图表前缀
+                if (text.startsWith('graph ') || text.startsWith('flowchart ') || text.startsWith('sequenceDiagram') || text.startsWith('gantt') || text.startsWith('pie') || text.startsWith('classDiagram') || text.startsWith('stateDiagram') || text.startsWith('mindmap')) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.className = 'mermaid';
+                    tempDiv.textContent = text;
+                    
+                    // 获取需要替换的最外层父节点 (比如 div.highlight 或者 pre)
+                    const wrapper = node.closest('.highlight') || node.parentNode;
+                    wrapper.replaceWith(tempDiv); 
+                }
+            });
+            
+            // 所有节点转换完成，统一进行图表动态绘制
+            mermaid.run();
+        });
+    </script>
+    <!-- Lightbox：截图点击放大 -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const lightbox = document.createElement('div');
+            lightbox.className = 'lightbox';
+            lightbox.innerHTML = '<img alt=""><div class="lightbox-caption"></div>';
+            document.body.appendChild(lightbox);
+            const lbImg = lightbox.querySelector('img');
+            const lbCap = lightbox.querySelector('.lightbox-caption');
+            function openLightbox(src, alt) {
+                lbImg.src = src; lbImg.alt = alt || '';
+                lbCap.textContent = alt || '';
+                lightbox.classList.add('open');
+                document.body.style.overflow = 'hidden';
+            }
+            function closeLightbox() {
+                lightbox.classList.remove('open');
+                lbImg.src = '';
+                document.body.style.overflow = '';
+            }
+            document.querySelectorAll('.screenshot-card img').forEach(function(img) {
+                img.addEventListener('click', function() { openLightbox(img.src, img.alt); });
+            });
+            lightbox.addEventListener('click', closeLightbox);
+            document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
+        });
+    </script>
+</body>
+</html>
