@@ -1,0 +1,1533 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>并发 Bugs 和应对：从死锁到原子性与顺序违反</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* ── 基础重置 ── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            color-scheme: light;
+            --bg-primary: #f7f7f8;
+            --bg-secondary: #ffffff;
+            --bg-card: #eef0f3;
+            --bg-code: #f2f3f5;
+            --text-primary: #1f2328;
+            --text-secondary: #57606a;
+            --text-muted: #6e7781;
+            --accent: #2563eb;
+            --accent-glow: rgba(37, 99, 235, 0.08);
+            --border: #d9dce1;
+            --border-subtle: #e7e9ec;
+            --radius: 12px;
+            --shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Serif SC', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.8;
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── 文章容器 ── */
+        .book-content {
+            max-width: 780px;
+            margin: 0 auto;
+            padding: 60px 32px 120px;
+        }
+
+        /* ── 标题 ── */
+        h1 {
+            font-size: 2.2em;
+            font-weight: 700;
+            margin: 0 0 12px;
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+        }
+
+        h2 {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 56px 0 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h3 {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: var(--accent);
+            margin: 36px 0 12px;
+        }
+
+        /* ── 段落与文字 ── */
+        p {
+            margin: 0 0 16px;
+            color: var(--text-primary);
+        }
+
+        strong {
+            color: #0f172a;
+            font-weight: 600;
+        }
+
+        em {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.2s;
+        }
+        a:hover {
+            border-bottom-color: var(--accent);
+        }
+
+        /* ── 引用 ── */
+        blockquote {
+            margin: 24px 0;
+            padding: 16px 20px;
+            background: var(--bg-secondary);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 var(--radius) var(--radius) 0;
+            color: var(--text-secondary);
+        }
+        blockquote p { margin: 0; }
+
+        /* ── 列表 ── */
+        ul, ol {
+            margin: 12px 0 20px 24px;
+            color: var(--text-primary);
+        }
+        li {
+            margin: 6px 0;
+        }
+
+        /* ── 分割线 ── */
+        hr {
+            border: none;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border), transparent);
+            margin: 48px 0;
+        }
+
+        /* ── 表格 ── */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 24px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+        thead {
+            background: var(--bg-card);
+        }
+        th {
+            padding: 12px 16px;
+            font-weight: 600;
+            text-align: left;
+            color: var(--accent);
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        td {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border-subtle);
+        }
+        tbody tr {
+            background: var(--bg-secondary);
+            transition: background 0.15s;
+        }
+        tbody tr:hover {
+            background: var(--bg-card);
+        }
+
+        /* ── 代码 ── */
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-code);
+            padding: 2px 7px;
+            border-radius: 5px;
+            font-size: 0.88em;
+            color: #6d28d9;
+        }
+
+        pre {
+            margin: 20px 0;
+            padding: 20px 24px;
+            background: var(--bg-code);
+            border-radius: var(--radius);
+            overflow-x: auto;
+            border: 1px solid var(--border);
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9em;
+            color: var(--text-primary);
+        }
+
+        /* ── 视频嵌入卡片 ── */
+        .video-card {
+            margin: 32px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .video-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(15, 23, 42, 0.12);
+        }
+
+        .video-wrapper {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 */
+            height: 0;
+            overflow: hidden;
+        }
+        .video-wrapper iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .video-card img {
+            width: 100%;
+            display: block;
+        }
+
+        .video-caption {
+            padding: 12px 16px;
+            font-size: 0.88em;
+            color: var(--text-secondary);
+            text-align: center;
+            line-height: 1.6;
+            margin: 0;
+        }
+        .video-caption a {
+            color: var(--accent);
+        }
+
+        .video-card.fallback {
+            padding: 20px;
+            text-align: center;
+        }
+
+        /* ── Lightbox：截图点击放大 ── */
+        .screenshot-card img { cursor: zoom-in; transition: opacity 0.15s; }
+        .screenshot-card img:hover { opacity: 0.9; }
+        .lightbox {
+            position: fixed; inset: 0; z-index: 999;
+            display: none; align-items: center; justify-content: center;
+            background: rgba(5, 5, 8, 0.92); backdrop-filter: blur(4px);
+            cursor: zoom-out; padding: 24px;
+        }
+        .lightbox.open { display: flex; }
+        .lightbox img {
+            max-width: 96vw; max-height: 90vh;
+            border-radius: 8px; box-shadow: 0 12px 60px rgba(0,0,0,0.7);
+        }
+        .lightbox-caption {
+            position: absolute; bottom: 14px; left: 0; right: 0;
+            text-align: center; color: var(--text-secondary); font-size: 0.85em;
+        }
+
+        /* ── 顶部信息栏 ── */
+        .book-content > blockquote:first-of-type {
+            background: var(--accent-glow);
+            border-left-color: var(--accent);
+            border-radius: var(--radius);
+            margin-bottom: 32px;
+        }
+
+        /* ── 图表居中 ── */
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            margin: 32px 0;
+            overflow-x: auto;
+        }
+
+        /* ── 滚动条 ── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* ── 响应式 ── */
+        @media (max-width: 640px) {
+            .book-content { padding: 32px 16px 80px; }
+            h1 { font-size: 1.7em; }
+            h2 { font-size: 1.3em; }
+        }
+    </style>
+</head>
+<body>
+    <article class="book-content">
+        <h1 id="bugs">并发 Bugs 和应对：从死锁到原子性与顺序违反</h1>
+<blockquote>
+<p><strong>课程</strong>：2026 春季学期《操作系统原理》<br />
+<strong>讲师</strong>：蒋炎岩（jyy）<br />
+<strong>官方课程主页</strong>：<a href="https://jyywiki.cn/OS/2026/">https://jyywiki.cn/OS/2026/</a><br />
+<strong>官方讲义</strong>：<a href="https://jyywiki.cn/OS/2026/lect17.md">https://jyywiki.cn/OS/2026/lect17.md</a><br />
+<strong>视频来源</strong>：<a href="https://www.bilibili.com/video/BV1Jg96BjE68/">Bilibili BV1Jg96BjE68</a><br />
+<strong>版权说明</strong>：课程讲义与幻灯片归蒋炎岩所有，采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书是对课堂讲授的书面化重构，保留出处与许可说明。</p>
+</blockquote>
+<h2 id="_1">导语：人类是顺序的生物</h2>
+<p><em>(参考时间: 00:00)</em></p>
+<p>并发编程真正困难的地方，不只在于语法，而在于我们理解世界的方式：</p>
+<ul>
+<li>人生活在物理世界，只能直接观察自己的局部视角；</li>
+<li>编程语言最初教给我们的也是顺序执行；</li>
+<li>函数调用天然带有“交给它，最终会完整返回”的直觉；</li>
+<li>于是我们很容易把并发程序误当成多个顺序程序简单拼接。</li>
+</ul>
+<p>但并发执行的状态空间是指数级的。理解一个并发程序的全部行为，可能等价于枚举数量庞大的线程交错。</p>
+<p>这一讲采用“从错误中学习”的方法，系统归纳真实世界中的并发 bug：</p>
+<ul>
+<li>死锁；</li>
+<li>数据竞争；</li>
+<li>原子性违反；</li>
+<li>顺序违反；</li>
+<li>检查时刻与使用时刻不一致；</li>
+<li>并发释放后使用；</li>
+<li>投机执行引发的新型安全问题。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["顺序执行直觉"] --&gt; B["并发交错"]
+    B --&gt; C["死锁"]
+    B --&gt; D["数据竞争"]
+    B --&gt; E["原子性违反"]
+    B --&gt; F["顺序违反"]
+    F --&gt; G["真实系统灾难"]
+    C --&gt; H["工具与工程约束"]
+    D --&gt; H
+    E --&gt; H
+    G --&gt; H
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_03_00.png" alt="从线程、互斥、条件变量到信号量的并发机制回顾" loading="lazy">
+  <p class="video-caption">📷 从线程、互斥、条件变量到信号量的并发机制回顾<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=180" target="_blank" rel="noopener">回到原视频 (00:03:00)</a></p>
+</div>
+
+<hr />
+<h2 id="1">1. 死锁：互相等待</h2>
+<h3 id="11">1.1 定义</h3>
+<p><em>(参考时间: 00:03)</em></p>
+<p>死锁是：</p>
+<blockquote>
+<p>一组执行者中的每一个都在等待另一个成员采取行动，甚至可能等待自己。</p>
+</blockquote>
+<p>现实世界也可能发生：</p>
+<ul>
+<li>车辆首尾相连围成环，所有车都无法前进；</li>
+<li>两个人分别要求对方先让路；</li>
+<li>线程 A 等待线程 B，B 又等待 A。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["线程 A"] --&gt;|"等待资源 1"| B["线程 B"]
+    B --&gt;|"等待资源 2"| C["线程 C"]
+    C --&gt;|"等待资源 3"| A
+</code></pre></div>
+
+<h3 id="12-aa">1.2 AA 型死锁</h3>
+<p><em>(参考时间: 00:04)</em></p>
+<p>同一线程对不可重入 mutex 连续上锁两次：</p>
+<div class="highlight"><pre><span></span><code><span class="n">mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">A</span><span class="p">);</span>
+<span class="n">mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">A</span><span class="p">);</span><span class="w">  </span><span class="cm">/* 永久阻塞 */</span>
+<span class="n">sum</span><span class="o">++</span><span class="p">;</span>
+<span class="n">mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">A</span><span class="p">);</span>
+<span class="n">mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">A</span><span class="p">);</span>
+</code></pre></div>
+
+<p>POSIX mutex 默认不是递归锁：</p>
+<div class="highlight"><pre><span></span><code><span class="n">lock</span><span class="p">(</span><span class="n">A</span><span class="p">)</span>
+<span class="n">lock</span><span class="p">(</span><span class="n">A</span><span class="p">)</span><span class="w">   </span><span class="cm">/* 等待自己释放 A */</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant T as Thread
+    participant L as Mutex A
+    T-&gt;&gt;L: lock
+    L--&gt;&gt;T: acquired
+    T-&gt;&gt;L: lock again
+    Note over T,L: T 等待自己释放 A
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_04_30.png" alt="同一线程重复加锁形成 AA 死锁" loading="lazy">
+  <p class="video-caption">📷 同一线程重复加锁形成 AA 死锁<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=270" target="_blank" rel="noopener">回到原视频 (00:04:30)</a></p>
+</div>
+
+<h3 id="13-aa">1.3 AA 死锁为什么在真实系统里很常见</h3>
+<p><em>(参考时间: 00:05)</em></p>
+<p>看似简单的错误，在大型系统中可能通过以下方式发生：</p>
+<ul>
+<li>多层函数调用；</li>
+<li>递归；</li>
+<li>callback；</li>
+<li>信号处理；</li>
+<li>中断处理；</li>
+<li>异步事件；</li>
+<li>某个函数被复用时带上隐藏的锁假设。</li>
+</ul>
+<p>例如：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="nf">cb</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">A</span><span class="p">);</span>
+<span class="w">    </span><span class="cm">/* callback 中调用了另一个同样 lock(A) 的函数 */</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["函数 f 持有 A"] --&gt; B["调用函数 g"]
+    B --&gt; C["callback 调用函数 h"]
+    C --&gt; D["h 再次 lock(A)"]
+    D --&gt; E["AA 死锁"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_06_10.png" alt="通过引用和回调传播的重复加锁" loading="lazy">
+  <p class="video-caption">📷 通过引用和回调传播的重复加锁<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=370" target="_blank" rel="noopener">回到原视频 (00:06:10)</a></p>
+</div>
+
+<h3 id="14-abba">1.4 ABBA 死锁</h3>
+<p><em>(参考时间: 00:10)</em></p>
+<p>线程 1：</p>
+<div class="highlight"><pre><span></span><code><span class="n">lock</span><span class="p">(</span><span class="n">A</span><span class="p">);</span>
+<span class="n">lock</span><span class="p">(</span><span class="n">B</span><span class="p">);</span>
+</code></pre></div>
+
+<p>线程 2：</p>
+<div class="highlight"><pre><span></span><code><span class="n">lock</span><span class="p">(</span><span class="n">B</span><span class="p">);</span>
+<span class="n">lock</span><span class="p">(</span><span class="n">A</span><span class="p">);</span>
+</code></pre></div>
+
+<p>若两个线程各拿到第一把锁，就形成循环等待：</p>
+<div class="highlight"><pre><span></span><code>T1 持有 A，等待 B
+T2 持有 B，等待 A
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant T1
+    participant A as Lock A
+    participant B as Lock B
+    participant T2
+    T1-&gt;&gt;A: lock
+    T2-&gt;&gt;B: lock
+    T1-&gt;&gt;B: lock (wait)
+    T2-&gt;&gt;A: lock (wait)
+    Note over T1,T2: 永久循环等待
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_10_20.png" alt="ABBA 锁顺序形成循环等待" loading="lazy">
+  <p class="video-caption">📷 ABBA 锁顺序形成循环等待<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=620" target="_blank" rel="noopener">回到原视频 (00:10:20)</a></p>
+</div>
+
+<h3 id="15">1.5 死锁较容易观察</h3>
+<p><em>(参考时间: 00:11)</em></p>
+<p>死锁的症状通常很明显：</p>
+<ul>
+<li>程序原应持续输出，却突然完全静止；</li>
+<li>GDB 可以附加并查看所有阻塞线程；</li>
+<li>每个线程的调用栈都停在某个锁等待位置；</li>
+<li>不退出、不消费 CPU、也不完成工作。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["程序持续输出"] --&gt; B["突然所有日志停止"]
+    B --&gt; C["附加 GDB"]
+    C --&gt; D["查看线程调用栈"]
+    D --&gt; E["所有线程等待锁"]
+    E --&gt; F["确认死锁"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_12_30.png" alt="通过日志停止和 GDB 调用栈识别死锁" loading="lazy">
+  <p class="video-caption">📷 通过日志停止和 GDB 调用栈识别死锁<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=750" target="_blank" rel="noopener">回到原视频 (00:12:30)</a></p>
+</div>
+
+<hr />
+<h2 id="2">2. 死锁的四个必要条件</h2>
+<h3 id="21-1971">2.1 1971 年的经典分析</h3>
+<p><em>(参考时间: 00:13)</em></p>
+<p>经典论文 <a href="https://dl.acm.org/doi/10.1145/356586.356588">System Deadlocks</a> 把锁建模成桌上的钥匙。</p>
+<p>死锁的四个必要条件：</p>
+<ol>
+<li><strong>Mutual Exclusion</strong>：一把钥匙同时只能被一个执行者持有；</li>
+<li><strong>Wait-For</strong>：持钥匙的人还想要更多钥匙；</li>
+<li><strong>No Preemption</strong>：不能强行夺走别人手中的钥匙；</li>
+<li><strong>Circular Chain</strong>：形成循环等待。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Mutual Exclusion"] --&gt; D["Deadlock"]
+    B["Wait-For"] --&gt; D
+    C["No Preemption"] --&gt; D
+    E["Circular Chain"] --&gt; D
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_13_20.png" alt="死锁四必要条件：互斥、等待、不可抢占、循环等待" loading="lazy">
+  <p class="video-caption">📷 死锁四必要条件：互斥、等待、不可抢占、循环等待<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=800" target="_blank" rel="noopener">回到原视频 (00:13:20)</a></p>
+</div>
+
+<h3 id="22">2.2 打破互斥</h3>
+<p><em>(参考时间: 00:18)</em></p>
+<p>打破互斥意味着不再使用“一把钥匙只给一个线程”的锁模型。</p>
+<p>替代方案：</p>
+<ul>
+<li><code>send</code> / <code>receive</code> 消息；</li>
+<li>waiter / scheduler；</li>
+<li>actor 或 master-worker；</li>
+<li>把共享资源集中到单一管理者。</li>
+</ul>
+<p>但这需要架构级重构，因为锁语义本身就是互斥。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["共享锁模型"] --&gt; B["send / receive"]
+    B --&gt; C["集中式 waiter"]
+    C --&gt; D["不再由所有线程直接竞争锁"]
+    D --&gt; E["避免循环持锁"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_18_30.png" alt="打破互斥需要改为消息或集中式资源管理" loading="lazy">
+  <p class="video-caption">📷 打破互斥需要改为消息或集中式资源管理<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=1110" target="_blank" rel="noopener">回到原视频 (00:18:30)</a></p>
+</div>
+
+<h3 id="23-wait-for">2.3 打破 Wait-For</h3>
+<p><em>(参考时间: 00:19)</em></p>
+<p>常见方案是“一把大锁保平安”：</p>
+<ul>
+<li>线程最多只持有一把全局锁；</li>
+<li>不再持有锁后申请另一把锁；</li>
+<li>因此不会形成多锁依赖环。</li>
+</ul>
+<p>代价是并发度大幅下降。</p>
+<p>更理想的方案是硬件事务内存：</p>
+<div class="highlight"><pre><span></span><code>atomic {
+    check condition;
+    modify multiple objects;
+}
+</code></pre></div>
+
+<p>但系统调用无法轻易回滚，事务内存实现极其困难。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["一把大锁"] --&gt; B["没有多锁依赖"]
+    B --&gt; C["不会 ABBA 死锁"]
+    C --&gt; D["并发性能下降"]
+    E["Transactional Memory"] --&gt; F["原子提交或全部回滚"]
+    F --&gt; G["实现难度极高"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_21_00.png" alt="一把大锁与事务内存是两种极端方向" loading="lazy">
+  <p class="video-caption">📷 一把大锁与事务内存是两种极端方向<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=1260" target="_blank" rel="noopener">回到原视频 (00:21:00)</a></p>
+</div>
+
+<h3 id="24-no-preemption">2.4 打破 No Preemption</h3>
+<p><em>(参考时间: 00:22)</em></p>
+<p>若要抢占别人已持有的锁，必须能回滚该线程已经产生的副作用：</p>
+<ul>
+<li>已修改的内存；</li>
+<li>已写入的文件；</li>
+<li>已发送的消息；</li>
+<li>已执行的外部系统调用。</li>
+</ul>
+<p>这又回到事务内存问题，且外部副作用往往不可逆。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["从线程手中抢锁"] --&gt; B["线程已有部分执行结果"]
+    B --&gt; C{"这些副作用可回滚？"}
+    C -- "内存修改" --&gt; D["事务内存可处理"]
+    C -- "I/O / 系统调用 / 网络" --&gt; E["通常无法撤销"]
+</code></pre></div>
+
+<h3 id="25-lock-ordering">2.5 打破循环等待：Lock Ordering</h3>
+<p><em>(参考时间: 00:24)</em></p>
+<p>最实用的方案是给所有锁编号：</p>
+<blockquote>
+<p>任意线程只能按锁编号从小到大获取锁。</p>
+</blockquote>
+<p>证明思路：</p>
+<ul>
+<li>任意时刻至少有一个线程持有当前最大编号的锁；</li>
+<li>该线程之后只会申请更大编号的锁；</li>
+<li>但已经没有更大的锁被其他线程持有；</li>
+<li>因此它总能继续并最终释放锁；</li>
+<li>系统不会所有线程都相互等待。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Lock 1"] --&gt; B["Lock 2"]
+    B --&gt; C["Lock 3"]
+    C --&gt; D["Lock 4"]
+    D --&gt; E["Lock 5"]
+    F["所有线程只能从左到右"] --&gt; G["无法形成反向循环"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_24_30.png" alt="Lock Ordering 通过全序避免循环等待" loading="lazy">
+  <p class="video-caption">📷 Lock Ordering 通过全序避免循环等待<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=1470" target="_blank" rel="noopener">回到原视频 (00:24:30)</a></p>
+</div>
+
+<h3 id="26-lock-group">2.6 Lock Group</h3>
+<p><em>(参考时间: 00:26)</em></p>
+<p>如果一组锁必须一起获取，可以把整组视为更大粒度的锁：</p>
+<div class="highlight"><pre><span></span><code>group 1 → group 2 → group 3
+</code></pre></div>
+
+<p>组内可以获得多次锁，但组与组之间仍按编号顺序。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Group 1"] --&gt; B["Group 2"]
+    B --&gt; C["Group 3"]
+    D["进入 Group 2 前必须释放 Group 1"] --&gt; E["跨组全序"]
+</code></pre></div>
+
+<hr />
+<h2 id="3-lock-ordering">3. Lock Ordering 的工程现实</h2>
+<h3 id="31-linux">3.1 Linux 内核锁顺序文档</h3>
+<p><em>(参考时间: 00:27)</em></p>
+<p>Linux 内核在复杂子系统，例如内存管理中，会明确写出锁的获取顺序。</p>
+<div class="highlight"><pre><span></span><code>lock A
+  → lock B
+    → lock C
+</code></pre></div>
+
+<p>违反顺序通常意味着潜在死锁。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["子系统设计"] --&gt; B["定义锁层级"]
+    B --&gt; C["代码 review 检查顺序"]
+    C --&gt; D["运行时 lockdep 检测"]
+    D --&gt; E["发现潜在环"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_27_20.png" alt="Linux 内核源码中的锁顺序规则" loading="lazy">
+  <p class="video-caption">📷 Linux 内核源码中的锁顺序规则<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=1640" target="_blank" rel="noopener">回到原视频 (00:27:20)</a></p>
+</div>
+
+<h3 id="32">3.2 为什么“按顺序上锁”依然难</h3>
+<p><em>(参考时间: 00:28)</em></p>
+<p>内核文档指出：</p>
+<ul>
+<li>新锁很难插进已有数千个锁的层级；</li>
+<li>锁暴露给太多模块时，顺序约束非常脆弱；</li>
+<li>最好的锁应当被封装，只在自己文件内使用；</li>
+<li>持锁时不要调用不熟悉的复杂函数。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["新增一个锁"] --&gt; B["它应插在哪个层级？"]
+    B --&gt; C["调用者是否已知？"]
+    C --&gt; D["跨模块是否暴露？"]
+    D --&gt; E["持锁后是否调用外部代码？"]
+    E --&gt; F["Lock Ordering 难以全局维护"]
+</code></pre></div>
+
+<h3 id="33">3.3 文档常常与实现不一致</h3>
+<p><em>(参考时间: 00:29)</em></p>
+<p>实证研究发现，只有约 53% 有文档锁规则的变量，在所有访问点都真正遵守了规则。</p>
+<p>原因：</p>
+<ul>
+<li>程序员上下文有限；</li>
+<li>修改代码后忘记同步注释；</li>
+<li>锁规则散落在多个文件；</li>
+<li>模块间接口不断演进。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["锁规则文档"] --&gt; B["代码实现"]
+    B --&gt; C{"仍然一致？"}
+    C -- "否" --&gt; D["潜在死锁或数据竞争"]
+    C -- "是" --&gt; E["暂时满足约束"]
+    F["代码继续演进"] --&gt; B
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_29_00.png" alt="锁规则文档与实现可能长期不一致" loading="lazy">
+  <p class="video-caption">📷 锁规则文档与实现可能长期不一致<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=1740" target="_blank" rel="noopener">回到原视频 (00:29:00)</a></p>
+</div>
+
+<h3 id="34-harness-engineering">3.4 Harness Engineering</h3>
+<p><em>(参考时间: 00:30)</em></p>
+<p>软件工程应当“做最坏的假设”：</p>
+<ul>
+<li>假设程序员会忘了解锁；</li>
+<li>假设罕见路径会写错；</li>
+<li>假设旧文档已经过时；</li>
+<li>假设测试无法覆盖全部交错；</li>
+<li>假设 AI 也可能生成错误并发代码。</li>
+</ul>
+<p>对策是工程约束、运行时检查与自动化审计。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["最坏假设"] --&gt; B["RAII / 作用域锁"]
+    A --&gt; C["统一 cleanup / goto release"]
+    A --&gt; D["Lock Ordering"]
+    A --&gt; E["Lockdep / 动态检查"]
+    A --&gt; F["TSan / AddressSanitizer"]
+    B --&gt; G["Harness Engineering"]
+    C --&gt; G
+    D --&gt; G
+    E --&gt; G
+    F --&gt; G
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_30_00.png" alt="Harness Engineering：不信任程序员，自动维持约束" loading="lazy">
+  <p class="video-caption">📷 Harness Engineering：不信任程序员，自动维持约束<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=1800" target="_blank" rel="noopener">回到原视频 (00:30:00)</a></p>
+</div>
+
+<h3 id="35-raii-goto-cleanup">3.5 RAII 与 goto cleanup</h3>
+<p><em>(参考时间: 00:32)</em></p>
+<p>C++ / Rust 可以用作用域对象保证释放：</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">lock_guard</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">mutex</span><span class="o">&gt;</span><span class="w"> </span><span class="n">guard</span><span class="p">(</span><span class="n">lock</span><span class="p">);</span>
+<span class="w">    </span><span class="cm">/* leaving scope unlocks automatically */</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>C 中常见：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">int</span><span class="w"> </span><span class="nf">f</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">Resource</span><span class="w"> </span><span class="o">*</span><span class="n">r</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">acquire</span><span class="p">();</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">r</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">goto</span><span class="w"> </span><span class="n">cleanup</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">operation_failed</span><span class="p">(</span><span class="n">r</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">goto</span><span class="w"> </span><span class="n">cleanup</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="nl">cleanup</span><span class="p">:</span>
+<span class="w">    </span><span class="n">release</span><span class="p">(</span><span class="n">r</span><span class="p">);</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">result</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["进入作用域"] --&gt; B["构造锁对象 / 获取资源"]
+    B --&gt; C["执行操作"]
+    C --&gt; D{"正常还是错误返回？"}
+    D -- "都进入" --&gt; E["析构 / cleanup"]
+    E --&gt; F["释放锁与资源"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_33_30.png" alt="通过 RAII 或统一 cleanup 防止漏解锁" loading="lazy">
+  <p class="video-caption">📷 通过 RAII 或统一 cleanup 防止漏解锁<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=2010" target="_blank" rel="noopener">回到原视频 (00:33:30)</a></p>
+</div>
+
+<hr />
+<h2 id="4-lockdep">4. Lockdep：用动态依赖图发现潜在死锁</h2>
+<h3 id="41">4.1 记录锁依赖</h3>
+<p><em>(参考时间: 00:37)</em></p>
+<p>每当一个线程已持有某些锁，再申请新锁时，记录有向边：</p>
+<div class="highlight"><pre><span></span><code>X → Y
+</code></pre></div>
+
+<p>表示存在“先拿 X，再拿 Y”的路径。</p>
+<p>如果新增边让锁依赖图形成环，就报告潜在 ABBA 死锁。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["线程持有 A"] --&gt; B["申请 B"]
+    B --&gt; C["添加边 A → B"]
+    C --&gt; D{"图中形成环？"}
+    D -- "是" --&gt; E["报告潜在死锁"]
+    D -- "否" --&gt; F["继续记录"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_37_00.png" alt="Lockdep 建立锁依赖图并检查环" loading="lazy">
+  <p class="video-caption">📷 Lockdep 建立锁依赖图并检查环<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=2220" target="_blank" rel="noopener">回到原视频 (00:37:00)</a></p>
+</div>
+
+<h3 id="42-ld_preload">4.2 <code>LD_PRELOAD</code> 拦截</h3>
+<p><em>(参考时间: 00:38)</em></p>
+<p>可以通过 <code>LD_PRELOAD</code> 覆盖：</p>
+<div class="highlight"><pre><span></span><code><span class="n">pthread_mutex_lock</span>
+<span class="n">pthread_mutex_unlock</span>
+</code></pre></div>
+
+<p>记录调用并更新依赖图：</p>
+<div class="highlight"><pre><span></span><code><span class="nv">LD_PRELOAD</span><span class="o">=</span>./locktrace.so<span class="w"> </span>./a.out
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["目标程序调用 pthread_mutex_lock"] --&gt; B["LD_PRELOAD hook"]
+    B --&gt; C["记录已持有锁"]
+    C --&gt; D["添加依赖边"]
+    D --&gt; E["检查图是否成环"]
+    E --&gt; F["继续调用真实 lock"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_38_20.png" alt="通过 `LD_PRELOAD` 拦截锁 API" loading="lazy">
+  <p class="video-caption">📷 通过 `LD_PRELOAD` 拦截锁 API<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=2300" target="_blank" rel="noopener">回到原视频 (00:38:20)</a></p>
+</div>
+
+<h3 id="43">4.3 罕见路径也能被发现</h3>
+<p><em>(参考时间: 00:40)</em></p>
+<p>传统压力测试可能运行百万次仍未触发死锁，因为某条锁顺序只在极罕见路径出现。</p>
+<p>Lockdep 关注的是“锁顺序关系”，而不是必须真的发生阻塞。因此可以更早报告潜在环。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["罕见路径先 B 后 A"] --&gt; B["程序本身未必立即死锁"]
+    B --&gt; C["Lockdep 看到 BA 与已有 AB 冲突"]
+    C --&gt; D["提前报告潜在死锁"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_40_00.png" alt="Lockdep 在真正死锁前报告潜在 ABBA" loading="lazy">
+  <p class="video-caption">📷 Lockdep 在真正死锁前报告潜在 ABBA<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=2400" target="_blank" rel="noopener">回到原视频 (00:40:00)</a></p>
+</div>
+
+<hr />
+<h2 id="5">5. 数据竞争</h2>
+<h3 id="51">5.1 定义</h3>
+<p><em>(参考时间: 00:42)</em></p>
+<p>数据竞争指：</p>
+<blockquote>
+<p>两个不同线程访问同一内存位置，至少一个访问是写，而且两个访问之间没有 happens-before 关系。</p>
+</blockquote>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["两个线程"] --&gt; B["同一内存"]
+    B --&gt; C{"至少一个是写？"}
+    C -- "否" --&gt; D["只读，没有数据竞争"]
+    C -- "是" --&gt; E{"存在 happens-before？"}
+    E -- "是" --&gt; F["同步正确，无竞争"]
+    E -- "否" --&gt; G["Data Race"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_42_50.png" alt="数据竞争的定义：并发访问、同一位置、至少一个写" loading="lazy">
+  <p class="video-caption">📷 数据竞争的定义：并发访问、同一位置、至少一个写<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=2570" target="_blank" rel="noopener">回到原视频 (00:42:50)</a></p>
+</div>
+
+<h3 id="52">5.2 为什么至少需要一个写</h3>
+<p><em>(参考时间: 00:43)</em></p>
+<p>两个纯读之间：</p>
+<div class="highlight"><pre><span></span><code>T1: read X
+T2: read X
+</code></pre></div>
+
+<p>如果此前没有写，二者读到相同结果，不产生新状态。</p>
+<p>加入写以后：</p>
+<div class="highlight"><pre><span></span><code>T1: write X
+T2: read X
+</code></pre></div>
+
+<p>读取到新值还是旧值取决于线程速度，程序变得非确定。</p>
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant T1
+    participant X
+    participant T2
+    T1-&gt;&gt;X: store 1
+    T2-&gt;&gt;X: load
+    Note over T2: 可能读到 0，也可能读到 1
+</code></pre></div>
+
+<h3 id="53-cc-undefined-behavior">5.3 C/C++ 中数据竞争是 undefined behavior</h3>
+<p><em>(参考时间: 00:44)</em></p>
+<p>这不是“结果不确定”这么简单。</p>
+<p>在 C/C++ 中，发生 data race 的程序整体进入 undefined behavior：</p>
+<ul>
+<li>编译器优化不再有义务保持预期语义；</li>
+<li>内存可能损坏；</li>
+<li>控制流可能被劫持；</li>
+<li>安全边界可能被突破；</li>
+<li>理论上可产生任意后果。</li>
+</ul>
+<p>Java 等语言尝试通过内存模型给竞争行为定义最低保证。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["C/C++ Data Race"] --&gt; B["Undefined Behavior"]
+    B --&gt; C["编译器自由优化"]
+    B --&gt; D["内存损坏"]
+    B --&gt; E["控制流劫持"]
+    B --&gt; F["安全漏洞"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_45_00.png" alt="C/C++ 数据竞争属于 undefined behavior" loading="lazy">
+  <p class="video-caption">📷 C/C++ 数据竞争属于 undefined behavior<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=2700" target="_blank" rel="noopener">回到原视频 (00:45:00)</a></p>
+</div>
+
+<h3 id="54">5.4 最常见的两种错误</h3>
+<p><em>(参考时间: 00:47)</em></p>
+<p><strong>上错锁：</strong></p>
+<div class="highlight"><pre><span></span><code><span class="nl">T1</span><span class="p">:</span><span class="w"> </span><span class="n">lock</span><span class="p">(</span><span class="n">A</span><span class="p">);</span><span class="w"> </span><span class="n">sum</span><span class="o">++</span><span class="p">;</span><span class="w"> </span><span class="n">unlock</span><span class="p">(</span><span class="n">A</span><span class="p">);</span>
+<span class="nl">T2</span><span class="p">:</span><span class="w"> </span><span class="n">lock</span><span class="p">(</span><span class="n">B</span><span class="p">);</span><span class="w"> </span><span class="n">sum</span><span class="o">++</span><span class="p">;</span><span class="w"> </span><span class="n">unlock</span><span class="p">(</span><span class="n">B</span><span class="p">);</span>
+</code></pre></div>
+
+<p><strong>漏上锁：</strong></p>
+<div class="highlight"><pre><span></span><code><span class="nl">T1</span><span class="p">:</span><span class="w"> </span><span class="n">lock</span><span class="p">(</span><span class="n">A</span><span class="p">);</span><span class="w"> </span><span class="n">sum</span><span class="o">++</span><span class="p">;</span><span class="w"> </span><span class="n">unlock</span><span class="p">(</span><span class="n">A</span><span class="p">);</span>
+<span class="nl">T2</span><span class="p">:</span><span class="w">          </span><span class="n">sum</span><span class="o">++</span><span class="p">;</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["共享数据保护错误"] --&gt; B["不同锁保护同一变量"]
+    A --&gt; C["某条路径忘记加锁"]
+    B --&gt; D["无共同 happens-before"]
+    C --&gt; D
+    D --&gt; E["Data Race"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_47_30.png" alt="最常见的两种数据竞争来源" loading="lazy">
+  <p class="video-caption">📷 最常见的两种数据竞争来源<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=2850" target="_blank" rel="noopener">回到原视频 (00:47:30)</a></p>
+</div>
+
+<h3 id="55">5.5 数据竞争比看起来复杂</h3>
+<p><em>(参考时间: 00:49)</em></p>
+<p>“内存”可以是：</p>
+<ul>
+<li>全局变量；</li>
+<li>堆对象；</li>
+<li>栈；</li>
+<li>内核结构；</li>
+<li>库函数内部状态。</li>
+</ul>
+<p>“访问”可能发生在：</p>
+<ul>
+<li>自己写的 C 代码；</li>
+<li>汇编；</li>
+<li>库函数；</li>
+<li>操作系统；</li>
+<li>一条 <code>ret</code> 指令间接访问的栈。</li>
+</ul>
+<p>课程曾出现一个经典栈竞争：线程已被调度到另一个 CPU，但原 CPU 仍借用它的栈执行中断返回，导致两个 CPU 同时访问同一栈。</p>
+<p>该问题最终推动了 Read-Copy-Update（RCU）相关思路的发展。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["线程迁移到 CPU 2"] --&gt; B["线程可在 CPU 2 使用栈"]
+    C["CPU 1 仍执行中断返回"] --&gt; D["CPU 1 借用同一线程栈"]
+    B --&gt; E["同一栈发生并发访问"]
+    D --&gt; E
+    E --&gt; F["神秘重启 / 数据竞争"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_50_00.png" alt="线程栈与中断返回路径之间发生数据竞争" loading="lazy">
+  <p class="video-caption">📷 线程栈与中断返回路径之间发生数据竞争<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=3000" target="_blank" rel="noopener">回到原视频 (00:50:00)</a></p>
+</div>
+
+<hr />
+<h2 id="6-threadsanitizer-happens-before-race">6. ThreadSanitizer：寻找 happens-before race</h2>
+<h3 id="61">6.1 事件图</h3>
+<p><em>(参考时间: 00:54)</em></p>
+<p>为了检测数据竞争，需要记录：</p>
+<ul>
+<li>每个线程内部的程序顺序；</li>
+<li><code>lock</code> / <code>unlock</code>；</li>
+<li>每次读和写；</li>
+<li>锁释放与下一次获取之间的同步关系。</li>
+</ul>
+<p>如果两个访问：</p>
+<ul>
+<li>访问同一内存；</li>
+<li>属于不同线程；</li>
+<li>至少一个是写；</li>
+<li>在 happens-before 图中没有先后关系；</li>
+</ul>
+<p>那么就是数据竞争。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["线程程序顺序"] --&gt; D["Happens-before 图"]
+    B["unlock → 下一次 lock"] --&gt; D
+    C["线程创建 / join"] --&gt; D
+    D --&gt; E["比较同地址读写事件"]
+    E --&gt; F{"存在 HB 路径？"}
+    F -- "否" --&gt; G["报告 Data Race"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_54_00.png" alt="TSan 通过事件顺序与同步关系检测竞争" loading="lazy">
+  <p class="video-caption">📷 TSan 通过事件顺序与同步关系检测竞争<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=3240" target="_blank" rel="noopener">回到原视频 (00:54:00)</a></p>
+</div>
+
+<h3 id="62">6.2 只露出一条路径的竞争</h3>
+<p><em>(参考时间: 00:55)</em></p>
+<p>示例：</p>
+<div class="highlight"><pre><span></span><code><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">rand</span><span class="p">()</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">10</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">sum</span><span class="o">++</span><span class="p">;</span><span class="w">          </span><span class="cm">/* 未加锁 */</span>
+<span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="w">    </span><span class="n">sum</span><span class="o">++</span><span class="p">;</span>
+<span class="w">    </span><span class="n">unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lk</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>该错误只在十分之一概率出现，普通测试可能偶尔看到错误，也可能长期侥幸通过。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["运行 sum++ 路径"] --&gt; B{"随机走哪条？"}
+    B -- "90%" --&gt; C["正确加锁"]
+    B -- "10%" --&gt; D["忘记加锁"]
+    C --&gt; E["测试可能通过"]
+    D --&gt; F["偶发数据竞争"]
+    E --&gt; G["错误被隐藏"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_55_20.png" alt="隐蔽的数据竞争只在少数路径出现" loading="lazy">
+  <p class="video-caption">📷 隐蔽的数据竞争只在少数路径出现<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=3320" target="_blank" rel="noopener">回到原视频 (00:55:20)</a></p>
+</div>
+
+<h3 id="63-threadsanitizer">6.3 使用 ThreadSanitizer</h3>
+<p><em>(参考时间: 00:57)</em></p>
+<div class="highlight"><pre><span></span><code>cc<span class="w"> </span>-fsanitize<span class="o">=</span>thread<span class="w"> </span>-g<span class="w"> </span>race.c<span class="w"> </span>-o<span class="w"> </span>race
+./race
+</code></pre></div>
+
+<p>TSan 会报告：</p>
+<ul>
+<li>冲突的读写位置；</li>
+<li>两个线程各自的调用栈；</li>
+<li>是否存在同步边；</li>
+<li>冲突发生在哪一行源码。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["编译时插桩"] --&gt; B["记录读写与同步"]
+    B --&gt; C["运行程序"]
+    C --&gt; D["建立 happens-before 关系"]
+    D --&gt; E["发现无同步并发访问"]
+    E --&gt; F["打印竞争报告"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_57_40.png" alt="ThreadSanitizer 报告具体的数据竞争位置" loading="lazy">
+  <p class="video-caption">📷 ThreadSanitizer 报告具体的数据竞争位置<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=3460" target="_blank" rel="noopener">回到原视频 (00:57:40)</a></p>
+</div>
+
+<h3 id="64-tsan">6.4 TSan 也不是万能</h3>
+<p><em>(参考时间: 01:00)</em></p>
+<ul>
+<li>仅覆盖实际执行到的路径；</li>
+<li>某些平台或运行时支持有限；</li>
+<li>可能产生误报或漏报；</li>
+<li>报告竞争并不等于已经发生错误结果；</li>
+<li>没有报告也不代表程序正确。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["TSan 运行"] --&gt; B["覆盖本次执行路径"]
+    B --&gt; C{"触发竞争路径？"}
+    C -- "是" --&gt; D["通常可检测"]
+    C -- "否" --&gt; E["本次无报告"]
+    E --&gt; F["不代表程序没有竞争"]
+</code></pre></div>
+
+<hr />
+<h2 id="7-therac-25-bug">7. Therac-25：会致命的并发 Bug</h2>
+<h3 id="71">7.1 事故背景</h3>
+<p><em>(参考时间: 01:02)</em></p>
+<p>Therac-25 是放射治疗设备。1985–1987 年间，其事件驱动并发 Bug 导致至少 6 人死亡。</p>
+<p>设备有两种模式：</p>
+<ul>
+<li>Electron 低能量模式；</li>
+<li>X-ray 高能量模式。</li>
+</ul>
+<p>高能量模式需要 <code>beam flattener</code> 机械装置移动到指定位置，以控制辐射剂量。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Electron 低能量"] --&gt; C["治疗控制系统"]
+    B["X-ray 高能量"] --&gt; C
+    C --&gt; D["Beam Flattener"]
+    D --&gt; E["患者"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_02_40.png" alt="Therac-25 模式与 Beam Flattener 控制" loading="lazy">
+  <p class="video-caption">📷 Therac-25 模式与 Beam Flattener 控制<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=3760" target="_blank" rel="noopener">回到原视频 (01:02:40)</a></p>
+</div>
+
+<h3 id="72">7.2 并发事件交错</h3>
+<p><em>(参考时间: 01:05)</em></p>
+<p>危险顺序：</p>
+<ol>
+<li>操作员选择 X-ray 高能量模式；</li>
+<li>软件启动 beam flattener 移动，但机械动作需要数秒；</li>
+<li>操作员迅速切回 Electron 低能量模式；</li>
+<li>再快速切回 X-ray 高能量模式；</li>
+<li>软件中的模式变量已经是高能量；</li>
+<li>但机械装置仍未处在正确位置；</li>
+<li>系统产生 Malfunction 54 错误；</li>
+<li>操作员习惯性按 Continue；</li>
+<li>高能电子束在缺少过滤装置时照射患者。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant O as Operator
+    participant S as Software
+    participant M as Mechanical Flattener
+    O-&gt;&gt;S: select X-Ray High
+    S-&gt;&gt;M: start moving flattener
+    O-&gt;&gt;S: switch Electron Low
+    O-&gt;&gt;S: switch X-ray High
+    Note over M: flattener 还未到位
+    S-&gt;&gt;O: Malfunction 54
+    O-&gt;&gt;S: Continue
+    S-&gt;&gt;M: beam on
+    Note over M: 错误剂量照射
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_05_30.png" alt="Therac-25 的异步机械动作与模式事件交错" loading="lazy">
+  <p class="video-caption">📷 Therac-25 的异步机械动作与模式事件交错<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=3930" target="_blank" rel="noopener">回到原视频 (01:05:30)</a></p>
+</div>
+
+<h3 id="73">7.3 软件状态没有完整描述物理状态</h3>
+<p><em>(参考时间: 01:07)</em></p>
+<p>软件中有“模式”和“flattener 状态”变量，但没有完整描述：</p>
+<ul>
+<li>硬件当前移动到哪里；</li>
+<li>移动是否已经完成；</li>
+<li>下一步开启射线时装置是否确实到位；</li>
+<li>操作员 Continue 是否安全。</li>
+</ul>
+<p>软件是现实过程的投影，而投影是有损的。忽略物理状态和异步延迟就会产生原子性违反。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["真实物理状态"] --&gt; B["软件变量投影"]
+    B --&gt; C["模式 = X-ray"]
+    B --&gt; D["Flattener 状态 = moving"]
+    C --&gt; E{"是否强制等待动作完成？"}
+    D --&gt; E
+    E -- "否" --&gt; F["错误允许 beam on"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_07_20.png" alt="软件没有完整建模异步机械状态" loading="lazy">
+  <p class="video-caption">📷 软件没有完整建模异步机械状态<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=4040" target="_blank" rel="noopener">回到原视频 (01:07:20)</a></p>
+</div>
+
+<h3 id="74">7.4 旧产品为何安全</h3>
+<p><em>(参考时间: 01:08)</em></p>
+<p>Therac-20 用硬件互锁电路强制禁止危险组合：</p>
+<div class="highlight"><pre><span></span><code>assert not (X-ray High &amp;&amp; Flattener Off)
+</code></pre></div>
+
+<p>若危险组合出现，机器直接停机，必须人工重启。</p>
+<p>Therac-25 把安全检查移到软件中，但错误只产生警告，操作员可以 Continue，安全边界因此失效。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Therac-20 硬件互锁"] --&gt; B["危险组合直接停机"]
+    C["Therac-25 软件检查"] --&gt; D["产生错误"]
+    D --&gt; E["操作员可以 Continue"]
+    E --&gt; F["危险组合被执行"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_08_20.png" alt="硬件互锁与软件警告之间的安全差异" loading="lazy">
+  <p class="video-caption">📷 硬件互锁与软件警告之间的安全差异<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=4100" target="_blank" rel="noopener">回到原视频 (01:08:20)</a></p>
+</div>
+
+<hr />
+<h2 id="8">8. 原子性违反与顺序违反</h2>
+<h3 id="81">8.1 即使每个内存访问都加锁也不够</h3>
+<p><em>(参考时间: 01:10)</em></p>
+<p>一个更高层的逻辑块可能需要整体原子性：</p>
+<div class="highlight"><pre><span></span><code><span class="n">lock</span><span class="p">(</span><span class="n">A</span><span class="p">);</span>
+<span class="n">sum</span><span class="o">++</span><span class="p">;</span>
+<span class="n">unlock</span><span class="p">(</span><span class="n">A</span><span class="p">);</span>
+
+<span class="n">lock</span><span class="p">(</span><span class="n">A</span><span class="p">);</span>
+<span class="n">sum</span><span class="o">++</span><span class="p">;</span>
+<span class="n">unlock</span><span class="p">(</span><span class="n">A</span><span class="p">);</span>
+</code></pre></div>
+
+<p>如果别的线程希望观察到 <code>sum</code> 永远为偶数，这两个单独的锁区间仍可能被插入，形成：</p>
+<div class="highlight"><pre><span></span><code>本应原子完成的一段逻辑，被拆开执行
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant T1
+    participant S as sum
+    participant T2
+    T1-&gt;&gt;S: sum++ (0→1)
+    T2-&gt;&gt;T2: observe odd sum
+    T1-&gt;&gt;S: sum++ (1→2)
+    Note over T2: T1 期望两步原子，但被观察者插入
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_10_00.png" alt="多个正确上锁的区段仍可能违反整体原子性" loading="lazy">
+  <p class="video-caption">📷 多个正确上锁的区段仍可能违反整体原子性<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=4200" target="_blank" rel="noopener">回到原视频 (01:10:00)</a></p>
+</div>
+
+<h3 id="82-av">8.2 原子性违反（AV）</h3>
+<p><em>(参考时间: 01:11)</em></p>
+<p>模式：</p>
+<div class="highlight"><pre><span></span><code>A B A
+</code></pre></div>
+
+<p>本应连续完成的 <code>A</code> 被 <code>B</code> 插入。</p>
+<p>例子：</p>
+<ul>
+<li>check-then-act；</li>
+<li>使用指针前检查空；</li>
+<li>创建临时对象后再写回；</li>
+<li>更新多个对象但未持有同一把锁。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["逻辑操作 A"] --&gt; B["预期原子完成"]
+    C["另一线程 B"] --&gt; D["插入 A 的两部分之间"]
+    D --&gt; E["Atomicity Violation"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_11_50.png" alt="Atomicity Violation：逻辑操作被插入" loading="lazy">
+  <p class="video-caption">📷 Atomicity Violation：逻辑操作被插入<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=4310" target="_blank" rel="noopener">回到原视频 (01:11:50)</a></p>
+</div>
+
+<h3 id="83-97-bug-av-ov">8.3 实证研究：97% 非死锁 bug 属于 AV 或 OV</h3>
+<p><em>(参考时间: 01:14)</em></p>
+<p>2008 年 ASPLOS 论文
+<a href="https://dl.acm.org/doi/10.1145/1346281.1346323">Learning from Mistakes</a>
+收集了 105 个真实并发 bug：</p>
+<ul>
+<li>MySQL；</li>
+<li>Apache；</li>
+<li>Mozilla；</li>
+<li>OpenOffice。</li>
+</ul>
+<p>结论：97% 的非死锁并发 bug 可以归为：</p>
+<ul>
+<li><strong>Atomicity Violation（AV）</strong>；</li>
+<li><strong>Order Violation（OV）</strong>。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["105 个真实并发 Bug"] --&gt; B["死锁"]
+    A --&gt; C["非死锁"]
+    C --&gt; D["97% 原子性或顺序问题"]
+    D --&gt; E["Atomicity Violation"]
+    D --&gt; F["Order Violation"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_15_00.png" alt="实证研究：非死锁 bug 主要是 AV 与 OV" loading="lazy">
+  <p class="video-caption">📷 实证研究：非死锁 bug 主要是 AV 与 OV<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=4500" target="_blank" rel="noopener">回到原视频 (01:15:00)</a></p>
+</div>
+
+<h3 id="84-ov">8.4 顺序违反（OV）</h3>
+<p><em>(参考时间: 01:21)</em></p>
+<p>模式：</p>
+<div class="highlight"><pre><span></span><code>B A
+</code></pre></div>
+
+<p>但程序假设顺序应是 <code>A B</code>。</p>
+<p>例子：</p>
+<ul>
+<li>在初始化完成前使用对象；</li>
+<li><code>free</code> 发生在最后一次使用之前；</li>
+<li>条件变量信号丢失；</li>
+<li>线程创建后才建立其依赖状态；</li>
+<li>并发 use-after-free。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant U as User Thread
+    participant F as Free Thread
+    U-&gt;&gt;U: intend to access object
+    F-&gt;&gt;F: free object
+    U-&gt;&gt;F: use after free
+    Note over U,F: 顺序应为 use → free
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_21_30.png" alt="Order Violation：free 与 use 顺序颠倒" loading="lazy">
+  <p class="video-caption">📷 Order Violation：free 与 use 顺序颠倒<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=4890" target="_blank" rel="noopener">回到原视频 (01:21:30)</a></p>
+</div>
+
+<hr />
+<h2 id="9-tocttou-use-after-free">9. TOCTTOU 与并发 use-after-free</h2>
+<h3 id="91">9.1 检查时刻与使用时刻</h3>
+<p><em>(参考时间: 01:17)</em></p>
+<p>TOCTTOU = Time-of-Check to Time-of-Use。</p>
+<p>传统 <code>sendmail</code> 曾检查邮箱路径是否为符号链接，然后打开并写入：</p>
+<ol>
+<li>检查路径是普通文件；</li>
+<li>攻击者把路径替换为指向 <code>/etc/passwd</code> 的符号链接；</li>
+<li>高权限程序打开并写入目标；</li>
+<li>普通用户借高权限程序破坏系统文件。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant M as Mail Program
+    participant P as Path
+    participant A as Attacker
+    M-&gt;&gt;P: check: is regular file?
+    P--&gt;&gt;M: yes
+    A-&gt;&gt;P: replace with symlink to /etc/passwd
+    M-&gt;&gt;P: open and write mailbox
+    Note over P: 实际写入敏感文件
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_17_50.png" alt="TOCTTOU：检查与使用之间对象身份发生变化" loading="lazy">
+  <p class="video-caption">📷 TOCTTOU：检查与使用之间对象身份发生变化<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=4670" target="_blank" rel="noopener">回到原视频 (01:17:50)</a></p>
+</div>
+
+<h3 id="92-bug">9.2 为什么会成为并发 bug</h3>
+<p>这不是两个用户线程访问同一内存，而是：</p>
+<ul>
+<li>检查时资源状态安全；</li>
+<li>使用前资源状态变化；</li>
+<li>操作者仍按旧判断继续执行；</li>
+<li>系统对象发生了逻辑 ABA。</li>
+</ul>
+<p>根本问题是“检查 + 使用”没有形成一个不可分割操作。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["check 条件成立"] --&gt; B["时间窗口"]
+    B --&gt; C["资源被修改"]
+    C --&gt; D["use 仍按旧条件执行"]
+    D --&gt; E["逻辑 ABA / 安全漏洞"]
+</code></pre></div>
+
+<h3 id="93-use-after-free">9.3 并发 use-after-free</h3>
+<p><em>(参考时间: 01:21:45)</em></p>
+<p>正确释放必须等待所有可能引用对象的线程结束访问。</p>
+<div class="highlight"><pre><span></span><code><span class="nl">user_thread</span><span class="p">:</span><span class="w"> </span><span class="n">read</span><span class="w"> </span><span class="n">object</span>
+<span class="nl">free_thread</span><span class="p">:</span><span class="w"> </span><span class="n">free</span><span class="w"> </span><span class="n">object</span>
+</code></pre></div>
+
+<p>若同步顺序错误：</p>
+<div class="highlight"><pre><span></span><code>free → later use
+</code></pre></div>
+
+<p>就产生并发 use-after-free。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["对象被多个线程引用"] --&gt; B["一个线程决定 free"]
+    B --&gt; C{"所有 reader 都结束？"}
+    C -- "否" --&gt; D["其他线程 later use"]
+    D --&gt; E["Use-After-Free"]
+    C -- "是" --&gt; F["安全释放"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_22_10.png" alt="并发 use-after-free 是典型顺序违反" loading="lazy">
+  <p class="video-caption">📷 并发 use-after-free 是典型顺序违反<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=4930" target="_blank" rel="noopener">回到原视频 (01:22:10)</a></p>
+</div>
+
+<h3 id="94-ghostrace">9.4 GhostRace：投机执行中的竞争</h3>
+<p><em>(参考时间: 01:23)</em></p>
+<p>即使程序逻辑中没有实际的 use-after-free，CPU 也可能投机执行“锁尚未获得”的路径：</p>
+<ul>
+<li>分支预测错误；</li>
+<li>投机读取；</li>
+<li>留下 cache footprint；</li>
+<li>通过侧信道泄漏信息。</li>
+</ul>
+<p>这就是 GhostRace 一类问题的基础。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["自旋锁等待"] --&gt; B["分支预测选择未来路径"]
+    B --&gt; C["投机读取指针"]
+    C --&gt; D["投机访问对象"]
+    D --&gt; E["留下缓存副作用"]
+    E --&gt; F["侧信道观察"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_23_50.png" alt="投机执行使锁互斥在微架构层出现新问题" loading="lazy">
+  <p class="video-caption">📷 投机执行使锁互斥在微架构层出现新问题<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=5030" target="_blank" rel="noopener">回到原视频 (01:23:50)</a></p>
+</div>
+
+<hr />
+<h2 id="10-harness-engineering">10. Harness Engineering：用系统性工具驾驭并发复杂性</h2>
+<h3 id="101">10.1 做最坏的假设</h3>
+<p><em>(参考时间: 01:25)</em></p>
+<p>软件工程的根本策略不是相信程序员，而是假定所有人都会犯错：</p>
+<ul>
+<li>锁定资源必须成对获取和释放；</li>
+<li>所有共享访问必须满足统一锁规则；</li>
+<li>锁顺序必须全局一致；</li>
+<li>检查和使用必须由同一同步协议保护；</li>
+<li>罕见的异步路径也必须纳入分析。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["假设代码一定存在错误"] --&gt; B["静态规则"]
+    A --&gt; C["运行时拦截"]
+    A --&gt; D["动态分析"]
+    A --&gt; E["自动审计"]
+    B --&gt; F["减少并发 Bug"]
+    C --&gt; F
+    D --&gt; F
+    E --&gt; F
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_25_30.png" alt="Harness Engineering：系统性限制并检测错误" loading="lazy">
+  <p class="video-caption">📷 Harness Engineering：系统性限制并检测错误<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=5130" target="_blank" rel="noopener">回到原视频 (01:25:30)</a></p>
+</div>
+
+<h3 id="102-trace">10.2 时间轴与可审计 Trace</h3>
+<p><em>(参考时间: 01:27)</em></p>
+<p>可以把程序执行对齐到全局时间轴：</p>
+<ul>
+<li>每条指令；</li>
+<li>每次 lock / unlock；</li>
+<li>每次内存读写；</li>
+<li>每次函数调用；</li>
+<li>每个线程的阻塞与唤醒。</li>
+</ul>
+<p>如果每个函数还能报告它“做了什么”的语义，就得到更高级的 <strong>informal semantics</strong>：</p>
+<div class="highlight"><pre><span></span><code>function begin: acquire object
+function end: release object
+</code></pre></div>
+
+<p>AI 可以在此基础上检查：</p>
+<ul>
+<li>原子区间是否被插入；</li>
+<li>顺序是否错误；</li>
+<li>资源是否释放过早；</li>
+<li>TOCTTOU 窗口是否存在。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["指令与锁事件"] --&gt; B["统一时间轴"]
+    C["函数 informal semantics"] --&gt; B
+    B --&gt; D["AI 审计"]
+    D --&gt; E["发现 AV / OV / TOCTTOU"]
+    E --&gt; F["修复或拦截"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_27_30.png" alt="把并发执行对齐到时间轴并交给 AI 审计" loading="lazy">
+  <p class="video-caption">📷 把并发执行对齐到时间轴并交给 AI 审计<br><a href="https://www.bilibili.com/video/BV1Jg96BjE68/?t=5250" target="_blank" rel="noopener">回到原视频 (01:27:30)</a></p>
+</div>
+
+<hr />
+<h2 id="11-bug">11. 总结：并发 bug 是顺序直觉与真实并发的碰撞</h2>
+<p>这一讲把真实并发错误归纳为清晰的类别：</p>
+<ul>
+<li>人类是顺序生物，容易把并发程序误当作顺序程序；</li>
+<li>AA 死锁：同一线程重复持有不可重入锁；</li>
+<li>ABBA 死锁：多把锁形成循环等待；</li>
+<li>死锁四条件：Mutual Exclusion、Wait-For、No Preemption、Circular Chain；</li>
+<li>打破互斥、等待和不可抢占通常需要消息系统或事务内存；</li>
+<li>Lock Ordering 是最实用的工程方案；</li>
+<li>即使顺序规则存在，文档和实现也可能长期不一致；</li>
+<li>RAII、统一 cleanup 和 Lockdep 可以降低锁错误；</li>
+<li>数据竞争指无 happens-before 的并发访问，且至少一个为写；</li>
+<li>C/C++ 数据竞争是 undefined behavior；</li>
+<li>数据竞争可能发生在全局、堆、栈、库函数甚至返回指令；</li>
+<li>ThreadSanitizer 通过事件图和 happens-before 检测竞争；</li>
+<li>Therac-25 展示异步机械状态未被正确同步的致命后果；</li>
+<li>非死锁并发 bug 中，绝大多数是 Atomicity Violation 或 Order Violation；</li>
+<li>TOCTTOU、并发 UAF 和 GhostRace 都体现检查、使用、投机与顺序之间的不一致；</li>
+<li>Harness Engineering 要求自动工具而不是信任人；</li>
+<li>AI 时代的重要方向，是生成可审计、带 informal semantics 的程序轨迹。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["顺序执行直觉"] --&gt; B["死锁"]
+    A --&gt; C["数据竞争"]
+    A --&gt; D["原子性违反"]
+    A --&gt; E["顺序违反"]
+    B --&gt; F["Lock Ordering / Lockdep"]
+    C --&gt; G["TSan / ASan"]
+    D --&gt; H["统一同步域"]
+    E --&gt; I["条件变量 / 生命周期协议"]
+    F --&gt; J["Harness Engineering"]
+    G --&gt; J
+    H --&gt; J
+    I --&gt; J
+</code></pre></div>
+
+<p>最终的安全策略不是“相信程序员会写对”，而是：</p>
+<blockquote>
+<p>用类型系统、作用域资源、统一锁规则、动态检测和 AI 审计，把并发错误变成可以被提前发现、可以回滚、可以拦截的问题。</p>
+</blockquote>
+<hr />
+<h2 id="_2">附：官方参考与延伸阅读</h2>
+<p>以下链接来自官方讲义第 17 讲及课堂内容：</p>
+<ul>
+<li><a href="https://dl.acm.org/doi/10.1145/356586.356588">System Deadlocks, 1971</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/deadlock">死锁演示</a></li>
+<li><a href="https://elixir.bootlin.com/linux/latest/source/mm/rmap.c">Linux <code>mm/rmap.c</code> lock ordering</a></li>
+<li><a href="https://www.kernel.org/doc/html/latest/kernel-hacking/locking.html">Unreliable Guide to Locking</a></li>
+<li><a href="https://dl.acm.org/doi/10.1145/3302424.3303948">LockDoc, EuroSys 2019</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/lockdep">lockdep demo</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/tsan">ThreadSanitizer demo</a></li>
+<li><a href="https://dl.acm.org/doi/10.1145/1065010.1065042">Threads Cannot Be Implemented as a Library</a></li>
+<li><a href="https://dl.acm.org/doi/10.1145/1346281.1346323">Learning from Mistakes, ASPLOS 2008</a></li>
+<li><a href="https://www.usenix.org/legacy/events/fast05/tech/full_papers/wei/wei.pdf">TOCTTOU study</a></li>
+<li><a href="https://www.vusec.net/projects/ghostrace/">GhostRace</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/therac-25">Therac-25 simulator</a></li>
+</ul>
+<p>阅读材料：</p>
+<ul>
+<li><em>Operating Systems: Three Easy Pieces</em> 第 32 章，Concurrency Bugs。</li>
+</ul>
+<p>官方课程资料：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/2026/">课程主页</a></li>
+<li><a href="https://jyywiki.cn/OS/2026/lect17.md">第 17 讲讲义：并发 Bug 和应对</a></li>
+<li><a href="https://www.bilibili.com/video/BV1Jg96BjE68/">视频：17 - 并发 Bugs 和应对</a></li>
+</ul>
+<blockquote>
+<p><strong>版权与署名</strong>：本讲课程材料由蒋炎岩（jyy）编写。课程讲义与幻灯片采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书保留课程出处、作者署名与许可说明。</p>
+</blockquote>
+    </article>
+
+    <!-- Mermaid 图表引擎初始化 -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            mermaid.initialize({ startOnLoad: false, theme: 'default' });
+            
+            // 兼容普通代码块以及丢失 language-mermaid 类名的情况 (CodeHilite 干扰)
+            const codeNodes = document.querySelectorAll('pre code, .highlight code');
+            codeNodes.forEach(function(node) {
+                const text = node.textContent.trim();
+                // 匹配常见的 mermaid 图表前缀
+                if (text.startsWith('graph ') || text.startsWith('flowchart ') || text.startsWith('sequenceDiagram') || text.startsWith('gantt') || text.startsWith('pie') || text.startsWith('classDiagram') || text.startsWith('stateDiagram') || text.startsWith('mindmap')) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.className = 'mermaid';
+                    tempDiv.textContent = text;
+                    
+                    // 获取需要替换的最外层父节点 (比如 div.highlight 或者 pre)
+                    const wrapper = node.closest('.highlight') || node.parentNode;
+                    wrapper.replaceWith(tempDiv); 
+                }
+            });
+            
+            // 所有节点转换完成，统一进行图表动态绘制
+            mermaid.run();
+        });
+    </script>
+    <!-- Lightbox：截图点击放大 -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const lightbox = document.createElement('div');
+            lightbox.className = 'lightbox';
+            lightbox.innerHTML = '<img alt=""><div class="lightbox-caption"></div>';
+            document.body.appendChild(lightbox);
+            const lbImg = lightbox.querySelector('img');
+            const lbCap = lightbox.querySelector('.lightbox-caption');
+            function openLightbox(src, alt) {
+                lbImg.src = src; lbImg.alt = alt || '';
+                lbCap.textContent = alt || '';
+                lightbox.classList.add('open');
+                document.body.style.overflow = 'hidden';
+            }
+            function closeLightbox() {
+                lightbox.classList.remove('open');
+                lbImg.src = '';
+                document.body.style.overflow = '';
+            }
+            document.querySelectorAll('.screenshot-card img').forEach(function(img) {
+                img.addEventListener('click', function() { openLightbox(img.src, img.alt); });
+            });
+            lightbox.addEventListener('click', closeLightbox);
+            document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
+        });
+    </script>
+</body>
+</html>
