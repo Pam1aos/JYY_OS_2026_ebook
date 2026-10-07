@@ -1,0 +1,1320 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CPU、GPU 和 SIMT 编程模型：从指令级并行到海量线程</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* ── 基础重置 ── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            color-scheme: light;
+            --bg-primary: #f7f7f8;
+            --bg-secondary: #ffffff;
+            --bg-card: #eef0f3;
+            --bg-code: #f2f3f5;
+            --text-primary: #1f2328;
+            --text-secondary: #57606a;
+            --text-muted: #6e7781;
+            --accent: #2563eb;
+            --accent-glow: rgba(37, 99, 235, 0.08);
+            --border: #d9dce1;
+            --border-subtle: #e7e9ec;
+            --radius: 12px;
+            --shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Serif SC', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.8;
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── 文章容器 ── */
+        .book-content {
+            max-width: 780px;
+            margin: 0 auto;
+            padding: 60px 32px 120px;
+        }
+
+        /* ── 标题 ── */
+        h1 {
+            font-size: 2.2em;
+            font-weight: 700;
+            margin: 0 0 12px;
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+        }
+
+        h2 {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 56px 0 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h3 {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: var(--accent);
+            margin: 36px 0 12px;
+        }
+
+        /* ── 段落与文字 ── */
+        p {
+            margin: 0 0 16px;
+            color: var(--text-primary);
+        }
+
+        strong {
+            color: #0f172a;
+            font-weight: 600;
+        }
+
+        em {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.2s;
+        }
+        a:hover {
+            border-bottom-color: var(--accent);
+        }
+
+        /* ── 引用 ── */
+        blockquote {
+            margin: 24px 0;
+            padding: 16px 20px;
+            background: var(--bg-secondary);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 var(--radius) var(--radius) 0;
+            color: var(--text-secondary);
+        }
+        blockquote p { margin: 0; }
+
+        /* ── 列表 ── */
+        ul, ol {
+            margin: 12px 0 20px 24px;
+            color: var(--text-primary);
+        }
+        li {
+            margin: 6px 0;
+        }
+
+        /* ── 分割线 ── */
+        hr {
+            border: none;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border), transparent);
+            margin: 48px 0;
+        }
+
+        /* ── 表格 ── */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 24px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+        thead {
+            background: var(--bg-card);
+        }
+        th {
+            padding: 12px 16px;
+            font-weight: 600;
+            text-align: left;
+            color: var(--accent);
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        td {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border-subtle);
+        }
+        tbody tr {
+            background: var(--bg-secondary);
+            transition: background 0.15s;
+        }
+        tbody tr:hover {
+            background: var(--bg-card);
+        }
+
+        /* ── 代码 ── */
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-code);
+            padding: 2px 7px;
+            border-radius: 5px;
+            font-size: 0.88em;
+            color: #6d28d9;
+        }
+
+        pre {
+            margin: 20px 0;
+            padding: 20px 24px;
+            background: var(--bg-code);
+            border-radius: var(--radius);
+            overflow-x: auto;
+            border: 1px solid var(--border);
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9em;
+            color: var(--text-primary);
+        }
+
+        /* ── 视频嵌入卡片 ── */
+        .video-card {
+            margin: 32px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .video-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(15, 23, 42, 0.12);
+        }
+
+        .video-wrapper {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 */
+            height: 0;
+            overflow: hidden;
+        }
+        .video-wrapper iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .video-card img {
+            width: 100%;
+            display: block;
+        }
+
+        .video-caption {
+            padding: 12px 16px;
+            font-size: 0.88em;
+            color: var(--text-secondary);
+            text-align: center;
+            line-height: 1.6;
+            margin: 0;
+        }
+        .video-caption a {
+            color: var(--accent);
+        }
+
+        .video-card.fallback {
+            padding: 20px;
+            text-align: center;
+        }
+
+        /* ── Lightbox：截图点击放大 ── */
+        .screenshot-card img { cursor: zoom-in; transition: opacity 0.15s; }
+        .screenshot-card img:hover { opacity: 0.9; }
+        .lightbox {
+            position: fixed; inset: 0; z-index: 999;
+            display: none; align-items: center; justify-content: center;
+            background: rgba(5, 5, 8, 0.92); backdrop-filter: blur(4px);
+            cursor: zoom-out; padding: 24px;
+        }
+        .lightbox.open { display: flex; }
+        .lightbox img {
+            max-width: 96vw; max-height: 90vh;
+            border-radius: 8px; box-shadow: 0 12px 60px rgba(0,0,0,0.7);
+        }
+        .lightbox-caption {
+            position: absolute; bottom: 14px; left: 0; right: 0;
+            text-align: center; color: var(--text-secondary); font-size: 0.85em;
+        }
+
+        /* ── 顶部信息栏 ── */
+        .book-content > blockquote:first-of-type {
+            background: var(--accent-glow);
+            border-left-color: var(--accent);
+            border-radius: var(--radius);
+            margin-bottom: 32px;
+        }
+
+        /* ── 图表居中 ── */
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            margin: 32px 0;
+            overflow-x: auto;
+        }
+
+        /* ── 滚动条 ── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* ── 响应式 ── */
+        @media (max-width: 640px) {
+            .book-content { padding: 32px 16px 80px; }
+            h1 { font-size: 1.7em; }
+            h2 { font-size: 1.3em; }
+        }
+    </style>
+</head>
+<body>
+    <article class="book-content">
+        <h1 id="cpugpu-simt">CPU、GPU 和 SIMT 编程模型：从指令级并行到海量线程</h1>
+<blockquote>
+<p><strong>课程</strong>：2026 春季学期《操作系统原理》<br />
+<strong>讲师</strong>：蒋炎岩（jyy）<br />
+<strong>官方课程主页</strong>：<a href="https://jyywiki.cn/OS/2026/">https://jyywiki.cn/OS/2026/</a><br />
+<strong>官方讲义</strong>：<a href="https://jyywiki.cn/OS/2026/lect20.md">https://jyywiki.cn/OS/2026/lect20.md</a><br />
+<strong>视频来源</strong>：<a href="https://www.bilibili.com/video/BV1df536aEMk/">Bilibili BV1df536aEMk</a><br />
+<strong>版权说明</strong>：课程讲义与幻灯片归蒋炎岩所有，采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书是对课堂讲授的书面化重构，保留出处与许可说明。</p>
+</blockquote>
+<h2 id="cpu">导语：从 CPU 上的并发走向另一种计算模型</h2>
+<p><em>(参考时间: 00:00)</em></p>
+<p>前几讲的主题都可以由同一个核心概念统一起来：<strong>计算图</strong>。</p>
+<ul>
+<li>互斥和同步控制节点之间的依赖；</li>
+<li>协程与 goroutine 降低轻量节点的创建成本；</li>
+<li>Promise 与 <code>async/await</code> 在语言层描述动态计算图；</li>
+<li>这些机制仍然运行在 CPU 上。</li>
+</ul>
+<p>这一讲要推翻“计算只能由通用 CPU 完成”的默认假设：</p>
+<blockquote>
+<p>如果 CPU 的动态调度和指令控制已经消耗了太多能量，能否通过 SIMD 或大量更简单的执行单元，提高单位功耗的计算能力？</p>
+</blockquote>
+<p>课程沿着两条历史线展开：</p>
+<ol>
+<li>CPU 内部的指令级并行与 SIMD 扩展；</li>
+<li>从游戏机图形处理器、Shader、GPGPU 到 CUDA/SIMT。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["计算图"] --&gt; B["CPU 并发模型"]
+    B --&gt; C["指令级并行 ILP"]
+    B --&gt; D["SIMD"]
+    B --&gt; E["多核 / 异构处理器"]
+    E --&gt; F["GPU"]
+    F --&gt; G["Shader"]
+    G --&gt; H["GPGPU"]
+    H --&gt; I["CUDA / SIMT"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_00_20.png" alt="从 CPU 并发模型转向 SIMD 与 GPU" loading="lazy">
+  <p class="video-caption">📷 从 CPU 并发模型转向 SIMD 与 GPU<br><a href="https://www.bilibili.com/video/BV1df536aEMk/?t=20" target="_blank" rel="noopener">回到原视频 (00:00:20)</a></p>
+</div>
+
+<hr />
+<h2 id="1-cpu">1. CPU 的顺序执行只是精心维护的假象</h2>
+<h3 id="11">1.1 逻辑门天然并行</h3>
+<p><em>(参考时间: 00:02)</em></p>
+<p>从寄存器-指令模型看，CPU 执行 <code>rv32ima_step</code> 时像是一步一步顺序执行。但底层电路并不是串行状态机：</p>
+<ul>
+<li>信号从输入传播到输出时，不同逻辑门可以同时翻转；</li>
+<li>多条指令可以同时进入取指和译码阶段；</li>
+<li>两条指令如果没有数据依赖，理论上可以同时执行；</li>
+<li>双端口寄存器文件允许同一周期写入两个结果。</li>
+</ul>
+<p>现代 CPU 内部有一个很长的指令窗口，并持续进行依赖分析、动态调度、寄存器重命名和乱序执行：</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["取多条指令"] --&gt; Q["指令队列"]
+    Q --&gt; D["译码与重命名"]
+    D --&gt; S["数据流分析"]
+    S --&gt; R["乱序发射"]
+    R --&gt; E1["执行单元 1"]
+    R --&gt; E2["执行单元 2"]
+    R --&gt; E3["执行单元 N"]
+    E1 --&gt; C["按序提交"]
+    E2 --&gt; C
+    E3 --&gt; C
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_03_30.png" alt="逻辑门构成的电路天生可以并行传播信号" loading="lazy">
+  <p class="video-caption">📷 逻辑门构成的电路天生可以并行传播信号<br><a href="https://www.bilibili.com/video/BV1df536aEMk/?t=210" target="_blank" rel="noopener">回到原视频 (00:03:30)</a></p>
+</div>
+
+<h3 id="12-ipc-bogomips">1.2 用 IPC 和 BogoMIPS 观察指令级并行</h3>
+<p><em>(参考时间: 00:05)</em></p>
+<p>要证明一个 CPU 可以每周期执行超过一条指令，可以结合三类信息：</p>
+<ol>
+<li>从 <code>/proc/cpuinfo</code> 获取处理器型号、频率和 BogoMIPS；</li>
+<li>用汇编构造不同依赖关系的指令序列；</li>
+<li>用 <code>perf stat</code> 统计指令数与周期数，计算 IPC。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>IPC = instructions / cycles
+</code></pre></div>
+
+<p>实验比较多种序列：</p>
+<ul>
+<li>连续 <code>add</code> 到同一个寄存器，形成长依赖链；</li>
+<li>使用不同寄存器，允许并行发射；</li>
+<li>整数与浮点混合；</li>
+<li>使用 NEON / SIMD 指令；</li>
+<li>独立乘法与加法混合。</li>
+</ul>
+<p>BogoMIPS 来自校准循环，数值高于 CPU 标称频率时，往往暗示一个周期内执行了多条简单指令。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["读取 CPU 频率"] --&gt; D["估算周期数"]
+    B["汇编构造指令序列"] --&gt; E["perf 统计 instructions"]
+    C["记录运行时间"] --&gt; D
+    D --&gt; F["计算 IPC"]
+    E --&gt; F
+    F --&gt; G{"IPC 是否大于 1？"}
+    G -- "是" --&gt; H["存在指令级并行"]
+    G -- "否" --&gt; I["可能受依赖或流水线限制"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_07_40.png" alt="BogoMIPS 与指令计数工具揭示每周期多条指令" loading="lazy">
+  <p class="video-caption">📷 BogoMIPS 与指令计数工具揭示每周期多条指令<br><a href="https://www.bilibili.com/video/BV1df536aEMk/?t=460" target="_blank" rel="noopener">回到原视频 (00:07:40)</a></p>
+</div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_12_30.png" alt="依赖链与独立指令序列产生不同 IPC" loading="lazy">
+  <p class="video-caption">📷 依赖链与独立指令序列产生不同 IPC<br><a href="https://www.bilibili.com/video/BV1df536aEMk/?t=750" target="_blank" rel="noopener">回到原视频 (00:12:30)</a></p>
+</div>
+
+<h3 id="13">1.3 为“更快完成”付出的能量税</h3>
+<p><em>(参考时间: 00:13)</em></p>
+<p>动态调度非常昂贵。CPU 中必须维护：</p>
+<ul>
+<li>很长的指令队列；</li>
+<li>每条指令的数据流信息；</li>
+<li>寄存器重命名表；</li>
+<li>乱序发射和按序提交逻辑；</li>
+<li>分支预测与恢复机制。</li>
+</ul>
+<p>这些电路会占用面积，也会持续翻转逻辑门。执行一条简单加法所需的运算电路，可能远小于“决定它何时可以执行”的调度电路。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["实际计算"] --&gt; B["少量 ALU 功耗"]
+    C["指令调度"] --&gt; D["队列 / 重命名 / 依赖分析"]
+    D --&gt; E["大量额外功耗"]
+    B --&gt; F["完成一条指令"]
+    E --&gt; F
+</code></pre></div>
+
+<p>单线程性能的代价可以理解为：</p>
+<blockquote>
+<p>为了尽快完成计算，处理器浪费了部分能量；真正用于计算结果的门翻转只是其中一部分。</p>
+</blockquote>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_15_40.png" alt="动态调度电路付出了大量额外功耗" loading="lazy">
+  <p class="video-caption">📷 动态调度电路付出了大量额外功耗<br><a href="https://www.bilibili.com/video/BV1df536aEMk/?t=940" target="_blank" rel="noopener">回到原视频 (00:15:40)</a></p>
+</div>
+
+<hr />
+<h2 id="2">2. 功耗墙与两条优化路线</h2>
+<h3 id="21">2.1 热功耗公式</h3>
+<p><em>(参考时间: 00:17)</em></p>
+<p>数字电路动态功耗近似为：</p>
+<div class="highlight"><pre><span></span><code>P = C × V² × f
+</code></pre></div>
+
+<p>其中：</p>
+<ul>
+<li><code>C</code>：与制程和电路结构相关的等效电容；</li>
+<li><code>V</code>：供电电压；</li>
+<li><code>f</code>：时钟频率。</li>
+</ul>
+<p>在 1995 至 2005 年左右，制程持续进步，晶体管变小，电压降低，频率提高，单核性能快速增长。</p>
+<p>当制程红利放缓，<code>C</code> 和 <code>V²</code> 很难继续显著下降，而散热能力有限，处理器就撞上<strong>功耗墙</strong>。类似的极限还包括：</p>
+<ul>
+<li>频率墙；</li>
+<li>内存墙；</li>
+<li>I/O 墙；</li>
+<li>各种协议、抽象和存储带来的“性能税”。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["更先进制程"] --&gt; B["C 与 V 下降"]
+    B --&gt; C["频率可提升"]
+    C --&gt; D["单核性能增长"]
+    D --&gt; E["热功耗上升"]
+    E --&gt; F["散热达到上限"]
+    F --&gt; G["功耗墙"]
+    G --&gt; H["不能继续无成本扩大复杂 CPU"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_18_40.png" alt="功耗墙限制单核复杂度继续增长" loading="lazy">
+  <p class="video-caption">📷 功耗墙限制单核复杂度继续增长<br><a href="https://www.bilibili.com/video/BV1df536aEMk/?t=1120" target="_blank" rel="noopener">回到原视频 (00:18:40)</a></p>
+</div>
+
+<h3 id="22">2.2 策略一与策略二</h3>
+<p><em>(参考时间: 00:21)</em></p>
+<p>面对功耗墙，有两条主要路线：</p>
+<p><strong>策略一：让一条指令处理更多数据。</strong></p>
+<ul>
+<li>调度一条指令的固定成本被多个数据元素分摊；</li>
+<li>这就是 SIMD，Single Instruction Multiple Data。</li>
+</ul>
+<p><strong>策略二：使用更多更简单的处理器。</strong></p>
+<ul>
+<li>同等面积可以放更多小核心；</li>
+<li>单核性能下降，但总并行吞吐提高；</li>
+<li>异构处理器把大核与小核组合，如 ARM big.LITTLE、Intel P-core/E-core。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["功耗墙"] --&gt; B["减少每次计算的调度开销"]
+    A --&gt; C["增加简单执行单元数量"]
+    B --&gt; D["SIMD"]
+    C --&gt; E["多核 / 异构 CPU"]
+    E --&gt; F["继续简化"]
+    F --&gt; G["GPU / SIMT"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_22_30.png" alt="SIMD 与多简单处理器是应对功耗墙的两条路线" loading="lazy">
+  <p class="video-caption">📷 SIMD 与多简单处理器是应对功耗墙的两条路线<br><a href="https://www.bilibili.com/video/BV1df536aEMk/?t=1350" target="_blank" rel="noopener">回到原视频 (00:22:30)</a></p>
+</div>
+
+<hr />
+<h2 id="3-simd">3. SIMD：一条指令操作多个数据</h2>
+<h3 id="31-packed-register">3.1 Packed register</h3>
+<p><em>(参考时间: 00:25)</em></p>
+<p>Intel 在 1997 年推出 MMX：MultiMedia eXtension。</p>
+<p>32 位机器新增一组 64 位寄存器，一个寄存器可以看作：</p>
+<ul>
+<li>2 个 32 位整数；</li>
+<li>4 个 16 位整数；</li>
+<li>8 个 8 位整数。</li>
+</ul>
+<p>对两个 packed register 做加法，可以同时完成多个小整数的加法：</p>
+<div class="highlight"><pre><span></span><code>[a3 a2 a1 a0] + [b3 b2 b1 b0]
+    = [a3+b3, a2+b2, a1+b1, a0+b0]
+</code></pre></div>
+
+<p>这种加法和一个 64 位普通整数加法不同：</p>
+<ul>
+<li>每个 lane 独立计算；</li>
+<li>lane 之间通常不传播进位；</li>
+<li>某些指令使用饱和运算，溢出时保留最大或最小值。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["64-bit Packed Register A"] --&gt; A0["a0"]
+    A --&gt; A1["a1"]
+    A --&gt; A2["a2"]
+    A --&gt; A3["a3"]
+    B["64-bit Packed Register B"] --&gt; B0["b0"]
+    B --&gt; B1["b1"]
+    B --&gt; B2["b2"]
+    B --&gt; B3["b3"]
+    A0 --&gt; C0["a0+b0"]
+    A1 --&gt; C1["a1+b1"]
+    A2 --&gt; C2["a2+b2"]
+    A3 --&gt; C3["a3+b3"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_26_30.png" alt="MMX 使用 64 位 packed register 同时处理多个整数" loading="lazy">
+  <p class="video-caption">📷 MMX 使用 64 位 packed register 同时处理多个整数<br><a href="https://www.bilibili.com/video/BV1df536aEMk/?t=1590" target="_blank" rel="noopener">回到原视频 (00:26:30)</a></p>
+</div>
+
+<h3 id="32-simd">3.2 编程中已经在使用 SIMD 思想</h3>
+<p><em>(参考时间: 00:28)</em></p>
+<p>Bit set 用一个整数的多个 bit 表示集合：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">int</span><span class="w"> </span><span class="nf">present</span><span class="p">(</span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">set</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="p">(</span><span class="n">set</span><span class="w"> </span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>数组版本：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">int</span><span class="w"> </span><span class="nf">present</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="kt">unsigned</span><span class="w"> </span><span class="kt">char</span><span class="w"> </span><span class="o">*</span><span class="n">arr</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="p">(</span><span class="n">arr</span><span class="p">[</span><span class="n">x</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">8</span><span class="p">]</span><span class="w"> </span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">8</span><span class="p">))</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>另一个经典例子是 <code>popcount</code>：</p>
+<div class="highlight"><pre><span></span><code><span class="kr">inline</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="nf">popcount</span><span class="p">(</span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mh">0x55555555</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="p">((</span><span class="n">x</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mh">0xaaaaaaaa</span><span class="p">)</span><span class="w"> </span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span>
+<span class="w">    </span><span class="n">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mh">0x33333333</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="p">((</span><span class="n">x</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mh">0xcccccccc</span><span class="p">)</span><span class="w"> </span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="mi">2</span><span class="p">);</span>
+<span class="w">    </span><span class="n">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mh">0x0f0f0f0f</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="p">((</span><span class="n">x</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mh">0xf0f0f0f0</span><span class="p">)</span><span class="w"> </span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="mi">4</span><span class="p">);</span>
+<span class="w">    </span><span class="n">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mh">0x00ff00ff</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="p">((</span><span class="n">x</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mh">0xff00ff00</span><span class="p">)</span><span class="w"> </span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="mi">8</span><span class="p">);</span>
+<span class="w">    </span><span class="n">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mh">0x0000ffff</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="w"> </span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="mi">16</span><span class="p">);</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">x</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>它把相邻 bit 的计数逐层合并。但在现代处理器上，这种方法形成的依赖链并不一定比查表更快：</p>
+<ol>
+<li>把 32 位拆成 4 个 8 位；</li>
+<li>分别查 256 项表；</li>
+<li>四个 load 在缓存命中时可并行；</li>
+<li>最后相加。</li>
+</ol>
+<blockquote>
+<p>“聪明的位运算”不一定比直接查表更适合现代流水线。</p>
+</blockquote>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["popcount(x)"] --&gt; B["按 8 位拆成 4 段"]
+    B --&gt; C1["table[x &amp; 0xff]"]
+    B --&gt; C2["table[(x &gt;&gt; 8) &amp; 0xff]"]
+    B --&gt; C3["table[(x &gt;&gt; 16) &amp; 0xff]"]
+    B --&gt; C4["table[(x &gt;&gt; 24) &amp; 0xff]"]
+    C1 --&gt; D["sum"]
+    C2 --&gt; D
+    C3 --&gt; D
+    C4 --&gt; D
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_29_30.png" alt="Bitset 与 popcount 展示了多位并行处理思想" loading="lazy">
+  <p class="video-caption">📷 Bitset 与 popcount 展示了多位并行处理思想<br><a href="https://www.bilibili.com/video/BV1df536aEMk/?t=1770" target="_blank" rel="noopener">回到原视频 (00:29:30)</a></p>
+</div>
+
+<h3 id="33-mmx-avx-512">3.3 从 MMX 到 AVX-512</h3>
+<p><em>(参考时间: 00:33)</em></p>
+<p>寄存器宽度持续增长：</p>
+<div class="highlight"><pre><span></span><code>64-bit   %mm     MMX
+128-bit  %xmm    SSE
+256-bit  %ymm    AVX
+512-bit  %zmm    AVX-512
+</code></pre></div>
+
+<p>同时增加数据类型和运算：</p>
+<ul>
+<li>整数与浮点数；</li>
+<li>三操作数模式；</li>
+<li>shuffle：<code>c[i] = a[b[i]]</code>；</li>
+<li>FMA：<code>a * b + c</code> 一条指令完成。</li>
+</ul>
+<p>寄存器越宽，每次动态调度的固定成本就被摊得越薄。但 AVX-512 已接近热密度极限，开启宽向量单元时处理器可能被迫降频。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["MMX 64-bit"] --&gt; B["SSE 128-bit"]
+    B --&gt; C["AVX 256-bit"]
+    C --&gt; D["AVX-512 512-bit"]
+    D --&gt; E["调度成本被更多数据分摊"]
+    D --&gt; F["热密度与降频压力上升"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_34_30.png" alt="SIMD 寄存器从 MMX 扩展到 AVX-512" loading="lazy">
+  <p class="video-caption">📷 SIMD 寄存器从 MMX 扩展到 AVX-512<br><a href="https://www.bilibili.com/video/BV1df536aEMk/?t=2070" target="_blank" rel="noopener">回到原视频 (00:34:30)</a></p>
+</div>
+
+<h3 id="34-simd">3.4 SIMD 仍然没有消灭调度成本</h3>
+<p><em>(参考时间: 00:36)</em></p>
+<p>SIMD 指令依然：</p>
+<ul>
+<li>经过缓存层次；</li>
+<li>参与动态流水线；</li>
+<li>与其他指令竞争发射槽和功耗；</li>
+<li>在宽向量执行时产生更高热密度。</li>
+</ul>
+<p>真正极端的目标是：</p>
+<blockquote>
+<p>让指令调度的代价接近零。</p>
+</blockquote>
+<p>历史上有一个激进尝试：<strong>VLIW，Very Long Instruction Word</strong>。</p>
+<p>编译器把多条互不依赖的指令打包到一条很宽的超长指令中，硬件只负责执行，不再做复杂动态调度。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["普通指令流"] --&gt; B["VLIW 编译器"]
+    B --&gt; C["超长指令包"]
+    C --&gt; D["硬件简单译码"]
+    D --&gt; E["多个执行单元并行"]
+    F["复杂依赖分析"] --&gt; B
+</code></pre></div>
+
+<p>Intel 曾尝试 IA-64，但没有取得市场成功。讲师认为，在编译器和 LLM 能力增强后，VLIW 思想可能在特定加速器上重新变得有吸引力。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_38_30.png" alt="VLIW 把动态调度交给编译器" loading="lazy">
+  <p class="video-caption">📷 VLIW 把动态调度交给编译器<br><a href="https://www.bilibili.com/video/BV1df536aEMk/?t=2310" target="_blank" rel="noopener">回到原视频 (00:38:30)</a></p>
+</div>
+
+<hr />
+<h2 id="4">4. 改变人类命运的另一条时间线：图形处理器</h2>
+<h3 id="41">4.1 图形计算天然适合并行</h3>
+<p><em>(参考时间: 00:41)</em></p>
+<p>Magnavox Odyssey（1972）是早期游戏主机。到 1983 年，NES 已经能提供流畅动画和丰富场景。</p>
+<p>NES 使用 MOS 6502，主频约 1.79 MHz，IPC 约 0.43。屏幕为 <code>256 × 240</code>，共约 61K 像素，目标 60 FPS。</p>
+<p>直接为每个像素计算颜色需要极多指令：</p>
+<div class="highlight"><pre><span></span><code><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">H</span><span class="p">;</span><span class="w"> </span><span class="o">++</span><span class="n">y</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">W</span><span class="p">;</span><span class="w"> </span><span class="o">++</span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">putchar</span><span class="p">(</span><span class="n">f</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="n">y</span><span class="p">)</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="sc">'*'</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="sc">' '</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="n">putchar</span><span class="p">(</span><span class="sc">'\n'</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><code>f(x, y)</code> 对每个像素相互独立，是 embarrassingly parallel 任务。但早期 CPU 没有足够并行能力。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["场景描述"] --&gt; B["渲染硬件"]
+    B --&gt; C1["像素 (0,0)"]
+    B --&gt; C2["像素 (0,1)"]
+    B --&gt; C3["像素 (x,y)"]
+    C1 --&gt; D["帧缓冲"]
+    C2 --&gt; D
+    C3 --&gt; D
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_42_30.png" alt="早期游戏机通过专用硬件完成像素级并行渲染" loading="lazy">
+  <p class="video-caption">📷 早期游戏机通过专用硬件完成像素级并行渲染<br><a href="https://www.bilibili.com/video/BV1df536aEMk/?t=2550" target="_blank" rel="noopener">回到原视频 (00:42:30)</a></p>
+</div>
+
+<h3 id="42-nes">4.2 NES 的场景描述数据结构</h3>
+<p><em>(参考时间: 00:44)</em></p>
+<p>NES 不要求 CPU 逐像素绘制，而是让 CPU 生成一份“场景描述”：</p>
+<ul>
+<li>以 <code>8 × 8</code> tile 为基本单位；</li>
+<li>Tile ROM 保存图形模式；</li>
+<li>Tile Map / Name Table 决定背景拼接；</li>
+<li>Attribute Table 决定调色板；</li>
+<li>Sprite 表示可自由移动的前景。</li>
+</ul>
+<p>一个 tile 往往只有 4 种颜色，可以用 2 bit/像素表示，极大节省 ROM 和显存。</p>
+<p>同一套 tile 可以通过不同 palette 复用。例如马里奥和路易吉可能共享像素图案，只是换调色板后变成红色或绿色。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["CPU"] --&gt; B["场景描述"]
+    B --&gt; C["Background Tile Map"]
+    B --&gt; D["Attribute / Palette"]
+    B --&gt; E["Sprite RAM"]
+    C --&gt; F["PPU"]
+    D --&gt; F
+    E --&gt; F
+    F --&gt; G["扫描线输出"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_46_30.png" alt="NES 用 tile map、调色板和 sprite 描述场景" loading="lazy">
+  <p class="video-caption">📷 NES 用 tile map、调色板和 sprite 描述场景<br><a href="https://www.bilibili.com/video/BV1df536aEMk/?t=2790" target="_blank" rel="noopener">回到原视频 (00:46:30)</a></p>
+</div>
+
+<h3 id="43-sprite-trick">4.3 Sprite 与编程 trick</h3>
+<p><em>(参考时间: 00:48)</em></p>
+<p>每个 Sprite 可用一条紧凑记录描述：</p>
+<div class="highlight"><pre><span></span><code>(x, y, tile, attribute)
+</code></pre></div>
+
+<p>其中 attribute 包含：</p>
+<ul>
+<li>调色板编号；</li>
+<li>前后景优先级；</li>
+<li>水平翻转；</li>
+<li>垂直翻转。</li>
+</ul>
+<p>Sprite RAM 通常只能保存 64 个 Sprite。开发者利用镜像、调色板和两次动画帧制造复杂效果：</p>
+<ul>
+<li>一个 tile 通过水平和垂直翻转组合成圆；</li>
+<li>马里奥中的敌人用两只脚交换位置形成走路动画；</li>
+<li>背景滚动通过移动可显示窗口并替换新 tile 完成；</li>
+<li>全屏闪烁通过替换调色板实现，而不改动 tile 数据。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Sprite 原始 tile"] --&gt; B["水平翻转"]
+    A --&gt; C["垂直翻转"]
+    A --&gt; D["水平 + 垂直翻转"]
+    B --&gt; E["复用有限图形资源"]
+    C --&gt; E
+    D --&gt; E
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_49_30.png" alt="Sprite 属性通过翻转与调色板复用图形资源" loading="lazy">
+  <p class="video-caption">📷 Sprite 属性通过翻转与调色板复用图形资源<br><a href="https://www.bilibili.com/video/BV1df536aEMk/?t=2970" target="_blank" rel="noopener">回到原视频 (00:49:30)</a></p>
+</div>
+
+<h3 id="44">4.4 固定功能渲染管线</h3>
+<p><em>(参考时间: 00:51)</em></p>
+<p>可以把 NES 的 PPU 理解为一台小型“GPU”：</p>
+<ol>
+<li>有一个线扫描计数器；</li>
+<li>对当前扫描线上的像素读取背景 tile；</li>
+<li>查询所有 Sprite 是否覆盖该像素；</li>
+<li>按优先级选择最上层的颜色；</li>
+<li>将结果送到显示输出。</li>
+</ol>
+<p>这与今天的 z-buffer 思想相通：越靠前的图层覆盖越靠后的图层。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["扫描线 row"] --&gt; B["计算背景颜色"]
+    B --&gt; C["遍历 Sprite"]
+    C --&gt; D{"Sprite 覆盖当前像素？"}
+    D -- "否" --&gt; E["保留当前颜色"]
+    D -- "是" --&gt; F{"优先级更高？"}
+    F -- "是" --&gt; G["覆盖颜色"]
+    F -- "否" --&gt; E
+    E --&gt; H["输出像素"]
+    G --&gt; H
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_52_30.png" alt="PPU 对每个像素执行背景与 Sprite 合成" loading="lazy">
+  <p class="video-caption">📷 PPU 对每个像素执行背景与 Sprite 合成<br><a href="https://www.bilibili.com/video/BV1df536aEMk/?t=3150" target="_blank" rel="noopener">回到原视频 (00:52:30)</a></p>
+</div>
+
+<hr />
+<h2 id="5-2d-3d-shader">5. 从 2D 到 3D，再到可编程 Shader</h2>
+<h3 id="51">5.1 贴图是可变形的数据块</h3>
+<p><em>(参考时间: 00:54)</em></p>
+<p>随着硬件能力增强，场景描述不再局限于固定 tile。可以使用任意 bitmap：</p>
+<div class="highlight"><pre><span></span><code>bitmap + 四个顶点位置
+</code></pre></div>
+
+<p>把贴图四个角移动到不同位置，就相当于拉扯一张有弹性的纸，从而完成：</p>
+<ul>
+<li>放大；</li>
+<li>缩小；</li>
+<li>旋转；</li>
+<li>仿射变形；</li>
+<li>图层拼接。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Bitmap Texture"] --&gt; B["移动四个顶点"]
+    B --&gt; C["仿射变换"]
+    C --&gt; D["Pixel Shader 采样"]
+    D --&gt; E["写入画布"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_55_30.png" alt="贴图通过顶点映射实现缩放、旋转和裁剪" loading="lazy">
+  <p class="video-caption">📷 贴图通过顶点映射实现缩放、旋转和裁剪<br><a href="https://www.bilibili.com/video/BV1df536aEMk/?t=3330" target="_blank" rel="noopener">回到原视频 (00:55:30)</a></p>
+</div>
+
+<h3 id="52-2d-3d">5.2 2D 引擎模拟 3D 的失真</h3>
+<p><em>(参考时间: 00:58)</em></p>
+<p>早期掌机常用 2D 贴图模拟 3D 赛道。背景和前景根据摄像机位置缩放，就可以制造透视效果。</p>
+<p>但如果只把矩形挤压成梯形，缺少真实的深度信息，贴图会产生 affine distortion。摄像机转动幅度过大时，失真就会暴露。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["2D 贴图"] --&gt; B["挤压成梯形"]
+    B --&gt; C["看起来像透视"]
+    C --&gt; D["缺少深度插值"]
+    D --&gt; E["大角度旋转时穿帮"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_58_30.png" alt="二维贴图模拟三维透视会产生视觉失真" loading="lazy">
+  <p class="video-caption">📷 二维贴图模拟三维透视会产生视觉失真<br><a href="https://www.bilibili.com/video/BV1df536aEMk/?t=3510" target="_blank" rel="noopener">回到原视频 (00:58:30)</a></p>
+</div>
+
+<h3 id="53-3d">5.3 齐次坐标把 3D 变换统一为矩阵乘法</h3>
+<p><em>(参考时间: 01:00)</em></p>
+<p>3D 场景描述包含：</p>
+<ul>
+<li>Vertex；</li>
+<li>Face；</li>
+<li>Texture；</li>
+<li>Material；</li>
+<li>Light；</li>
+<li>Camera。</li>
+</ul>
+<p>三角形是基本图元。平移、旋转、缩放和摄像机投影都可以写成 4D 齐次坐标下的矩阵乘法：</p>
+<div class="highlight"><pre><span></span><code>[x' y' z' 1] = [x y z 1] × M
+</code></pre></div>
+
+<p>这样 GPU 只需要对每个顶点执行相同的矩阵运算。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["3D Vertex"] --&gt; B["Model Matrix"]
+    B --&gt; C["World Space"]
+    C --&gt; D["View Matrix"]
+    D --&gt; E["Camera Space"]
+    E --&gt; F["Projection"]
+    F --&gt; G["Screen Space"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_01_30.png" alt="齐次坐标把平移、旋转和投影统一为矩阵运算" loading="lazy">
+  <p class="video-caption">📷 齐次坐标把平移、旋转和投影统一为矩阵运算<br><a href="https://www.bilibili.com/video/BV1df536aEMk/?t=3690" target="_blank" rel="noopener">回到原视频 (01:01:30)</a></p>
+</div>
+
+<h3 id="54-vertex-shader">5.4 Vertex Shader</h3>
+<p><em>(参考时间: 01:03)</em></p>
+<p>既然每个顶点执行相同步骤，就可以让程序员提供一段程序：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="n">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nb">gl_Position</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">transform</span><span class="p">(</span><span class="n">position</span><span class="p">);</span>
+<span class="w">    </span><span class="kr">this</span><span class="p">.</span><span class="n">xy</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="n">wave_offset</span><span class="p">(</span><span class="kr">this</span><span class="p">.</span><span class="n">xy</span><span class="p">,</span><span class="w"> </span><span class="n">time</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>Vertex Shader 可以修改顶点坐标、颜色和法线。典型应用包括：</p>
+<ul>
+<li>水面波纹；</li>
+<li>头发和布料摆动；</li>
+<li>植被随风晃动；</li>
+<li>顶点级动画。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["顶点数据"] --&gt; B["Vertex Shader"]
+    B --&gt; C["修改坐标"]
+    B --&gt; D["修改颜色"]
+    B --&gt; E["修改法线"]
+    C --&gt; F["光栅化"]
+    D --&gt; F
+    E --&gt; F
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_04_30.png" alt="Vertex Shader 对每个顶点运行并修改几何形状" loading="lazy">
+  <p class="video-caption">📷 Vertex Shader 对每个顶点运行并修改几何形状<br><a href="https://www.bilibili.com/video/BV1df536aEMk/?t=3870" target="_blank" rel="noopener">回到原视频 (01:04:30)</a></p>
+</div>
+
+<h3 id="55-fragment-pixel-shader">5.5 Fragment / Pixel Shader</h3>
+<p><em>(参考时间: 01:07)</em></p>
+<p>光栅化后，每个像素会执行 Fragment Shader：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">vec3</span><span class="w"> </span><span class="n">shade</span><span class="p">(</span><span class="kt">vec2</span><span class="w"> </span><span class="n">uv</span><span class="p">,</span><span class="w"> </span><span class="kt">vec3</span><span class="w"> </span><span class="n">color</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">color</span><span class="w"> </span><span class="o">*=</span><span class="w"> </span><span class="mf">0.9</span><span class="p">;</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">color</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>它本质上是对每个像素做相同的数值处理，类似照片编辑：</p>
+<ul>
+<li>调整曝光；</li>
+<li>调整亮部和暗部；</li>
+<li>使用 mask 局部修改；</li>
+<li>应用滤镜。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Fragment: xy + rgb"] --&gt; B["读取贴图 / 法线"]
+    B --&gt; C["计算光照 / 颜色"]
+    C --&gt; D["输出像素颜色"]
+    E["Mask / Uniform"] --&gt; C
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_08_30.png" alt="Fragment Shader 对每个像素执行相同的颜色计算" loading="lazy">
+  <p class="video-caption">📷 Fragment Shader 对每个像素执行相同的颜色计算<br><a href="https://www.bilibili.com/video/BV1df536aEMk/?t=4110" target="_blank" rel="noopener">回到原视频 (01:08:30)</a></p>
+</div>
+
+<h3 id="56-normal-mapping">5.6 Normal mapping</h3>
+<p><em>(参考时间: 01:09)</em></p>
+<p>真实砖墙的缝隙和凸起需要大量三角面。Normal mapping 不增加几何细节，而是为每个像素保存一个法线方向。</p>
+<p>光照计算使用入射光与法线的内积：</p>
+<div class="highlight"><pre><span></span><code>shade = max(0, dot(light_direction, normal))
+</code></pre></div>
+
+<p>当法线随砖缝起伏时，光照也会变化，从远处看就像真实凹凸表面。</p>
+<p>它的限制是：</p>
+<ul>
+<li>只能欺骗光照；</li>
+<li>不能产生真实遮挡；</li>
+<li>视角非常近时会穿帮。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["平面多边形"] --&gt; B["Normal Map"]
+    B --&gt; C["每像素法线"]
+    C --&gt; D["Light · Normal"]
+    D --&gt; E["局部明暗变化"]
+    E --&gt; F["近似凹凸表面"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_10_30.png" alt="Normal map 在不增加多边形的情况下模拟凹凸光照" loading="lazy">
+  <p class="video-caption">📷 Normal map 在不增加多边形的情况下模拟凹凸光照<br><a href="https://www.bilibili.com/video/BV1df536aEMk/?t=4230" target="_blank" rel="noopener">回到原视频 (01:10:30)</a></p>
+</div>
+
+<hr />
+<h2 id="6-gpgpu">6. GPGPU：把通用计算伪装成图形</h2>
+<h3 id="61">6.1 用图形硬件做矩阵乘法</h3>
+<p><em>(参考时间: 01:11)</em></p>
+<p>2001 年的论文 <em>Fast matrix multiplies using graphics hardware</em> 提出：</p>
+<blockquote>
+<p>把科学计算问题转换成图像处理问题，再交给可编程 Shader 执行。</p>
+</blockquote>
+<p>矩阵乘法可以分解为外积之和：</p>
+<div class="highlight"><pre><span></span><code>AB = Σ A[:,k] B[k,:]
+</code></pre></div>
+
+<p>每一步外积结果都是一个矩阵，可以当作一张图像；多个外积结果再用 Fragment Shader 叠加。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["矩阵 A 的第 k 列"] --&gt; C["外积"]
+    B["矩阵 B 的第 k 行"] --&gt; C
+    C --&gt; D["生成一张矩阵图像"]
+    D --&gt; E["Pixel Shader 累加"]
+    E --&gt; F["矩阵乘法结果"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_12_30.png" alt="GPGPU 早期把矩阵乘法转换为图像叠加" loading="lazy">
+  <p class="video-caption">📷 GPGPU 早期把矩阵乘法转换为图像叠加<br><a href="https://www.bilibili.com/video/BV1df536aEMk/?t=4350" target="_blank" rel="noopener">回到原视频 (01:12:30)</a></p>
+</div>
+
+<h3 id="62-shader-program">6.2 Shader Program 就是为大量对象执行同一段代码</h3>
+<p><em>(参考时间: 01:14)</em></p>
+<p>Shader 的本质可以重新表述为：</p>
+<div class="highlight"><pre><span></span><code><span class="n">for_each</span><span class="p">(</span><span class="n">element</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">execute_same_kernel</span><span class="p">(</span><span class="n">element</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>这正是并发编程最初讲的内容：为大量节点执行相同计算。</p>
+<p>假设要为每个像素计算 Mandelbrot 颜色：</p>
+<div class="highlight"><pre><span></span><code><span class="n">__device__</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="o">*</span><span class="n">screen</span><span class="p">;</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">T_kernel</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">row</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">col</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">color</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">f</span><span class="p">(</span><span class="n">row</span><span class="p">,</span><span class="w"> </span><span class="n">col</span><span class="p">);</span>
+<span class="w">    </span><span class="n">screen</span><span class="p">[</span><span class="n">row</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">1920</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">col</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">color</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">row</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">row</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">1080</span><span class="p">;</span><span class="w"> </span><span class="o">++</span><span class="n">row</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">col</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">col</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">1920</span><span class="p">;</span><span class="w"> </span><span class="o">++</span><span class="n">col</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">spawn</span><span class="p">(</span><span class="n">T_kernel</span><span class="p">,</span><span class="w"> </span><span class="n">row</span><span class="p">,</span><span class="w"> </span><span class="n">col</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>如果 GPU 能启动约 200 万个轻量线程并让他们并行执行，就得到了通用 GPU 计算模型。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["输入元素集合"] --&gt; B["同一个 Kernel"]
+    B --&gt; C1["元素 0"]
+    B --&gt; C2["元素 1"]
+    B --&gt; C3["元素 N"]
+    C1 --&gt; D["设备内存结果"]
+    C2 --&gt; D
+    C3 --&gt; D
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_15_30.png" alt="Shader 与 CUDA Kernel 都是对大量元素执行同一段代码" loading="lazy">
+  <p class="video-caption">📷 Shader 与 CUDA Kernel 都是对大量元素执行同一段代码<br><a href="https://www.bilibili.com/video/BV1df536aEMk/?t=4530" target="_blank" rel="noopener">回到原视频 (01:15:30)</a></p>
+</div>
+
+<hr />
+<h2 id="7-cuda">7. CUDA：为海量线程设计的执行模型</h2>
+<h3 id="71-kernel">7.1 Kernel 与设备内存</h3>
+<p><em>(参考时间: 01:16)</em></p>
+<p>CUDA 给 C/C++ 增加了一些关键字：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">__device__</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="o">*</span><span class="n">screen</span><span class="p">;</span>
+
+<span class="kr">__global__</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="n">mandelbrot_kernel</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">width</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">col</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">blockIdx</span><span class="p">.</span><span class="n">x</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nb">blockDim</span><span class="p">.</span><span class="n">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nb">threadIdx</span><span class="p">.</span><span class="n">x</span><span class="p">;</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">row</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">blockIdx</span><span class="p">.</span><span class="n">y</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nb">blockDim</span><span class="p">.</span><span class="n">y</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nb">threadIdx</span><span class="p">.</span><span class="n">y</span><span class="p">;</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">col</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">width</span><span class="p">)</span>
+<span class="w">        </span><span class="n">screen</span><span class="p">[</span><span class="n">row</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">width</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">col</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">mandelbrot</span><span class="p">(</span><span class="n">row</span><span class="p">,</span><span class="w"> </span><span class="n">col</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">mandelbrot_kernel</span><span class="o">&lt;&lt;&lt;</span><span class="n">blocks</span><span class="p">,</span><span class="w"> </span><span class="n">threads</span><span class="o">&gt;&gt;&gt;</span><span class="p">(</span><span class="n">width</span><span class="p">);</span>
+</code></pre></div>
+
+<p>看似奇怪的 <code>&lt;&lt;&lt;...&gt;&gt;&gt;</code> 实际上只是描述：</p>
+<ol>
+<li>启动多少线程；</li>
+<li>如何把线程组织成 block；</li>
+<li>kernel 该如何获得自己的坐标。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["CPU 准备输入"] --&gt; B["拷贝到 Device Memory"]
+    B --&gt; C["启动 Kernel Grid"]
+    C --&gt; D["多个 Block"]
+    D --&gt; E["每个 Block 多个 Thread"]
+    E --&gt; F["Kernel 计算"]
+    F --&gt; G["结果写回 Device Memory"]
+    G --&gt; H["读取回 CPU"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_17_30.png" alt="CUDA 通过 kernel 和线程索引表达像素级并行" loading="lazy">
+  <p class="video-caption">📷 CUDA 通过 kernel 和线程索引表达像素级并行<br><a href="https://www.bilibili.com/video/BV1df536aEMk/?t=4650" target="_blank" rel="noopener">回到原视频 (01:17:30)</a></p>
+</div>
+
+<h3 id="72">7.2 为什么不能直接创建两百万个普通线程</h3>
+<p><em>(参考时间: 01:17)</em></p>
+<p>如果每个线程都占用用户栈、内核对象、寄存器和完整调度状态，创建 200 万线程不可接受。</p>
+<p>GPU 仍保留每个线程的：</p>
+<ul>
+<li>寄存器；</li>
+<li>ALU / 运算能力；</li>
+<li>必要状态。</li>
+</ul>
+<p>但可以共享：</p>
+<ul>
+<li>程序计数器；</li>
+<li>取指单元；</li>
+<li>译码单元；</li>
+<li>控制逻辑。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["每个线程必需的 ALU"] --&gt; D["多个执行单元"]
+    B["每个线程必需的寄存器"] --&gt; D
+    C["共享 PC / 取指 / 译码"] --&gt; D
+    D --&gt; E["SIMT 执行"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_19_30.png" alt="SIMT 保留寄存器与运算器，共享取指译码" loading="lazy">
+  <p class="video-caption">📷 SIMT 保留寄存器与运算器，共享取指译码<br><a href="https://www.bilibili.com/video/BV1df536aEMk/?t=4770" target="_blank" rel="noopener">回到原视频 (01:19:30)</a></p>
+</div>
+
+<hr />
+<h2 id="8-simt">8. SIMT：单指令多线程</h2>
+<h3 id="81-thread-warp">8.1 Thread warp</h3>
+<p><em>(参考时间: 01:20)</em></p>
+<p>NVIDIA GPU 把 32 个线程组成一个 <strong>warp</strong>：</p>
+<div class="highlight"><pre><span></span><code>Thread warp = 32 threads
+</code></pre></div>
+
+<p>同一个 warp 中的线程：</p>
+<ul>
+<li>执行同一条指令；</li>
+<li>共享一个 Program Counter；</li>
+<li>拥有独立寄存器；</li>
+<li>可以拥有不同的坐标与数据。</li>
+</ul>
+<p>例如线程 <code>(3,0)</code>、<code>(3,1)</code> 一直到 <code>(3,31)</code> 被分到同一个 warp：</p>
+<div class="highlight"><pre><span></span><code>screen[3 * 1920 + 0]  = color_0;
+screen[3 * 1920 + 1]  = color_1;
+...
+screen[3 * 1920 + 31] = color_31;
+</code></pre></div>
+
+<p>对硬件来说，这像是一条跨 32 个连续地址的宽 store。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    PC["单个 Program Counter"] --&gt; I["同一条指令"]
+    I --&gt; R0["Thread 0 寄存器"]
+    I --&gt; R1["Thread 1 寄存器"]
+    I --&gt; R31["Thread 31 寄存器"]
+    R0 --&gt; S["连续宽 Store"]
+    R1 --&gt; S
+    R31 --&gt; S
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_22_30.png" alt="一个 warp 共享 PC，但每个线程拥有独立寄存器" loading="lazy">
+  <p class="video-caption">📷 一个 warp 共享 PC，但每个线程拥有独立寄存器<br><a href="https://www.bilibili.com/video/BV1df536aEMk/?t=4950" target="_blank" rel="noopener">回到原视频 (01:22:30)</a></p>
+</div>
+
+<h3 id="82-memory-coalescing">8.2 Memory coalescing</h3>
+<p><em>(参考时间: 01:24)</em></p>
+<p>假设 32 个线程分别写：</p>
+<div class="highlight"><pre><span></span><code><span class="n">screen</span><span class="p">[</span><span class="n">row</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">1920</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">col</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">color</span><span class="p">;</span>
+</code></pre></div>
+
+<p>如果 <code>col</code> 连续，32 个 4 字节写可以组成一次 128 字节连续访问，内存控制器能高效完成。</p>
+<p>如果把索引改成转置形式：</p>
+<div class="highlight"><pre><span></span><code><span class="n">screen</span><span class="p">[</span><span class="n">row</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">col</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">1080</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">color</span><span class="p">;</span>
+</code></pre></div>
+
+<p>每个线程访问的地址就会跳跃，硬件不得不发出大量零散事务，性能可能大幅下降。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["32 threads"] --&gt; B{"地址是否连续？"}
+    B -- "是" --&gt; C["合并为 128-byte transaction"]
+    C --&gt; D["高带宽"]
+    B -- "否" --&gt; E["32 个分散地址"]
+    E --&gt; F["多次内存事务"]
+    F --&gt; G["性能显著下降"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_25_00.png" alt="连续索引形成 coalesced 访问，转置索引导致分散访问" loading="lazy">
+  <p class="video-caption">📷 连续索引形成 coalesced 访问，转置索引导致分散访问<br><a href="https://www.bilibili.com/video/BV1df536aEMk/?t=5100" target="_blank" rel="noopener">回到原视频 (01:25:00)</a></p>
+</div>
+
+<h3 id="83-warp">8.3 用更多 warp 隐藏延迟</h3>
+<p><em>(参考时间: 01:26)</em></p>
+<p>一个 Stream Multiprocessor 可以保存多个 warp。当某个 warp 等待全局内存时，调度器切换到另一个可运行 warp。</p>
+<p>它不是用复杂的乱序执行隐藏延迟，而是用大量线程提供并行度：</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    W1["Warp 1: load stall"] --&gt; S["Warp Scheduler"]
+    W2["Warp 2: ready"] --&gt; S
+    W3["Warp 3: ready"] --&gt; S
+    S --&gt; E["执行可运行 warp"]
+    E --&gt; W1
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_26_30.png" alt="Stream Multiprocessor 在多个 warp 之间切换隐藏内存延迟" loading="lazy">
+  <p class="video-caption">📷 Stream Multiprocessor 在多个 warp 之间切换隐藏内存延迟<br><a href="https://www.bilibili.com/video/BV1df536aEMk/?t=5190" target="_blank" rel="noopener">回到原视频 (01:26:30)</a></p>
+</div>
+
+<h3 id="84">8.4 分支分歧</h3>
+<p><em>(参考时间: 01:27)</em></p>
+<p>一个 warp 只有一个 Program Counter，那么 <code>if/else</code> 如何执行？</p>
+<p>真实硬件通常使用谓词或 lane mask：</p>
+<div class="highlight"><pre><span></span><code><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">condition</span><span class="p">)</span>
+<span class="w">    </span><span class="n">A</span><span class="p">();</span>
+<span class="k">else</span>
+<span class="w">    </span><span class="n">B</span><span class="p">();</span>
+</code></pre></div>
+
+<p>编译结果近似：</p>
+<div class="highlight"><pre><span></span><code>计算 condition
+禁用 condition == false 的 lanes
+执行 A
+禁用 condition == true 的 lanes
+执行 B
+重新启用全部 lanes
+</code></pre></div>
+
+<p>如果 warp 中线程走向不同分支，两条路径都要串行执行。这叫 <strong>branch divergence</strong>。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["warp 计算 condition"] --&gt; B["mask lane A"]
+    B --&gt; C["执行 if 分支"]
+    C --&gt; D["mask lane B"]
+    D --&gt; E["执行 else 分支"]
+    E --&gt; F["合并 lanes"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_28_30.png" alt="SIMT 通过 lane mask 串行执行分歧分支" loading="lazy">
+  <p class="video-caption">📷 SIMT 通过 lane mask 串行执行分歧分支<br><a href="https://www.bilibili.com/video/BV1df536aEMk/?t=5310" target="_blank" rel="noopener">回到原视频 (01:28:30)</a></p>
+</div>
+
+<hr />
+<h2 id="9-gpu-mandelbrot-set">9. GPU 性能案例：Mandelbrot Set</h2>
+<p><em>(参考时间: 01:29)</em></p>
+<p>课程比较了 <code>25600 × 25600</code> 的 Mandelbrot 渲染：</p>
+<ul>
+<li>Ryzen 5 9600X：约 25.1 s，65 W；</li>
+<li>RTX 4060 Ti 16 GB：约 6.1 s，42 W。</li>
+</ul>
+<p>即使 Mandelbrot 的迭代次数不固定，导致同一个 warp 中可能产生分支分歧，GPU 仍然显著领先。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["CPU: 25.1 s / 65 W"] --&gt; C["相同图像"]
+    B["GPU: 6.1 s / 42 W"] --&gt; C
+    C --&gt; D["GPU 更适合高并行数值计算"]
+    E["不固定 while 循环"] --&gt; F["branch divergence"]
+    F --&gt; B
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_29_20.png" alt="GPU 在高并行数值计算中显著领先 CPU" loading="lazy">
+  <p class="video-caption">📷 GPU 在高并行数值计算中显著领先 CPU<br><a href="https://www.bilibili.com/video/BV1df536aEMk/?t=5360" target="_blank" rel="noopener">回到原视频 (01:29:20)</a></p>
+</div>
+
+<p>CUDA 代码在原 C 版本基础上，主要只需要：</p>
+<ul>
+<li>给计算函数增加 <code>__device__</code> / <code>__global__</code>；</li>
+<li>用 <code>blockIdx</code>、<code>blockDim</code>、<code>threadIdx</code> 计算像素坐标；</li>
+<li>把循环拆成线程网格。</li>
+</ul>
+<p>这说明 CUDA 的核心并不是神秘语言，而是：</p>
+<blockquote>
+<p>另一种启动几十万到数百万轻量级线程的机制。</p>
+</blockquote>
+<hr />
+<h2 id="10">10. 总结：用架构选择换取单位功耗的算力</h2>
+<p>CPU 通过复杂的动态调度获得单线程性能，但需要付出面积和功耗。功耗墙出现后，芯片设计走向两类变化：</p>
+<ol>
+<li>让一条指令处理更多数据，即 SIMD；</li>
+<li>使用更多更简单的执行单元，最终发展为 GPU/SIMT。</li>
+</ol>
+<p>图形计算的历史推动了这一转变：</p>
+<ul>
+<li>早期游戏机使用固定场景描述和专用渲染硬件；</li>
+<li>2D 引擎逐步扩展为 texture 和 3D 变换；</li>
+<li>Shader 把渲染流程变成可编程程序；</li>
+<li>GPGPU 把通用计算映射为图像计算；</li>
+<li>CUDA 把 GPU 抽象成可启动海量线程的通用计算平台；</li>
+<li>SIMT warp 共享 PC 和译码，保留独立寄存器，取得极高能效；</li>
+<li>连续内存访问与分支行为决定 CUDA 程序性能。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["复杂 CPU"] --&gt; B["功耗墙"]
+    B --&gt; C["SIMD"]
+    B --&gt; D["更多简单核心"]
+    D --&gt; E["固定功能 GPU"]
+    E --&gt; F["可编程 Shader"]
+    F --&gt; G["GPGPU"]
+    G --&gt; H["CUDA / SIMT"]
+    H --&gt; I["海量线程与高能效并行"]
+</code></pre></div>
+
+<p>人类需求持续推动技术演进：从游戏图形到科学计算，再到人工智能。GPU 从领域加速器逐渐变得通用，而 CUDA 最终在 AI 时代获得了远超最初预期的成功。</p>
+<hr />
+<h2 id="_1">附：官方参考与延伸阅读</h2>
+<ul>
+<li><a href="https://jyywiki.cn/OS/demos/intro/mini-rv32ima">mini-rv32ima 模拟器</a></li>
+<li><a href="https://github.com/cnlohr/mini-rv32ima">mini-rv32ima 项目</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/cpu-ilp">指令级并行实验</a></li>
+<li><a href="https://jyywiki.cn/OS/manuals/mmx.pdf">MMX 手册</a></li>
+<li><a href="https://www.bilibili.com/video/BV1sKszezEDi/">MMX 游戏演示</a></li>
+<li><a href="https://dl.acm.org/doi/pdf/10.1145/582034.582089">Fast matrix multiplies using graphics hardware</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/gl-shader">OpenGL Shader 实验</a></li>
+<li><a href="https://www.nvidia.com/content/PDF/fermi_white_papers/NVIDIA_Fermi_Compute_Architecture_Whitepaper.pdf">NVIDIA Fermi 白皮书</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/mandelbrot-cu">CUDA Mandelbrot Set</a></li>
+<li><a href="https://www.bilibili.com/video/BV1bT4y1g75x/">V-Rally 3 图形技术演示</a></li>
+</ul>
+<p>官方课程资料：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/2026/">课程主页</a></li>
+<li><a href="https://jyywiki.cn/OS/2026/lect20.md">第 20 讲讲义：CPU、GPU 和 SIMT 编程模型</a></li>
+<li><a href="https://www.bilibili.com/video/BV1df536aEMk/">视频：20 - CPU、SIMD 和 GPU</a></li>
+</ul>
+<blockquote>
+<p><strong>版权与署名</strong>：本讲课程材料由蒋炎岩（jyy）编写。课程讲义与幻灯片采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书保留课程出处、作者署名与许可说明。</p>
+</blockquote>
+    </article>
+
+    <!-- Mermaid 图表引擎初始化 -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            mermaid.initialize({ startOnLoad: false, theme: 'default' });
+            
+            // 兼容普通代码块以及丢失 language-mermaid 类名的情况 (CodeHilite 干扰)
+            const codeNodes = document.querySelectorAll('pre code, .highlight code');
+            codeNodes.forEach(function(node) {
+                const text = node.textContent.trim();
+                // 匹配常见的 mermaid 图表前缀
+                if (text.startsWith('graph ') || text.startsWith('flowchart ') || text.startsWith('sequenceDiagram') || text.startsWith('gantt') || text.startsWith('pie') || text.startsWith('classDiagram') || text.startsWith('stateDiagram') || text.startsWith('mindmap')) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.className = 'mermaid';
+                    tempDiv.textContent = text;
+                    
+                    // 获取需要替换的最外层父节点 (比如 div.highlight 或者 pre)
+                    const wrapper = node.closest('.highlight') || node.parentNode;
+                    wrapper.replaceWith(tempDiv); 
+                }
+            });
+            
+            // 所有节点转换完成，统一进行图表动态绘制
+            mermaid.run();
+        });
+    </script>
+    <!-- Lightbox：截图点击放大 -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const lightbox = document.createElement('div');
+            lightbox.className = 'lightbox';
+            lightbox.innerHTML = '<img alt=""><div class="lightbox-caption"></div>';
+            document.body.appendChild(lightbox);
+            const lbImg = lightbox.querySelector('img');
+            const lbCap = lightbox.querySelector('.lightbox-caption');
+            function openLightbox(src, alt) {
+                lbImg.src = src; lbImg.alt = alt || '';
+                lbCap.textContent = alt || '';
+                lightbox.classList.add('open');
+                document.body.style.overflow = 'hidden';
+            }
+            function closeLightbox() {
+                lightbox.classList.remove('open');
+                lbImg.src = '';
+                document.body.style.overflow = '';
+            }
+            document.querySelectorAll('.screenshot-card img').forEach(function(img) {
+                img.addEventListener('click', function() { openLightbox(img.src, img.alt); });
+            });
+            lightbox.addEventListener('click', closeLightbox);
+            document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
+        });
+    </script>
+</body>
+</html>
