@@ -1,0 +1,1351 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>协程、Goroutine 与异步编程：用不同抽象描述计算图</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* ── 基础重置 ── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            color-scheme: light;
+            --bg-primary: #f7f7f8;
+            --bg-secondary: #ffffff;
+            --bg-card: #eef0f3;
+            --bg-code: #f2f3f5;
+            --text-primary: #1f2328;
+            --text-secondary: #57606a;
+            --text-muted: #6e7781;
+            --accent: #2563eb;
+            --accent-glow: rgba(37, 99, 235, 0.08);
+            --border: #d9dce1;
+            --border-subtle: #e7e9ec;
+            --radius: 12px;
+            --shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Serif SC', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.8;
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── 文章容器 ── */
+        .book-content {
+            max-width: 780px;
+            margin: 0 auto;
+            padding: 60px 32px 120px;
+        }
+
+        /* ── 标题 ── */
+        h1 {
+            font-size: 2.2em;
+            font-weight: 700;
+            margin: 0 0 12px;
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+        }
+
+        h2 {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 56px 0 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h3 {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: var(--accent);
+            margin: 36px 0 12px;
+        }
+
+        /* ── 段落与文字 ── */
+        p {
+            margin: 0 0 16px;
+            color: var(--text-primary);
+        }
+
+        strong {
+            color: #0f172a;
+            font-weight: 600;
+        }
+
+        em {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.2s;
+        }
+        a:hover {
+            border-bottom-color: var(--accent);
+        }
+
+        /* ── 引用 ── */
+        blockquote {
+            margin: 24px 0;
+            padding: 16px 20px;
+            background: var(--bg-secondary);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 var(--radius) var(--radius) 0;
+            color: var(--text-secondary);
+        }
+        blockquote p { margin: 0; }
+
+        /* ── 列表 ── */
+        ul, ol {
+            margin: 12px 0 20px 24px;
+            color: var(--text-primary);
+        }
+        li {
+            margin: 6px 0;
+        }
+
+        /* ── 分割线 ── */
+        hr {
+            border: none;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border), transparent);
+            margin: 48px 0;
+        }
+
+        /* ── 表格 ── */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 24px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+        thead {
+            background: var(--bg-card);
+        }
+        th {
+            padding: 12px 16px;
+            font-weight: 600;
+            text-align: left;
+            color: var(--accent);
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        td {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border-subtle);
+        }
+        tbody tr {
+            background: var(--bg-secondary);
+            transition: background 0.15s;
+        }
+        tbody tr:hover {
+            background: var(--bg-card);
+        }
+
+        /* ── 代码 ── */
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-code);
+            padding: 2px 7px;
+            border-radius: 5px;
+            font-size: 0.88em;
+            color: #6d28d9;
+        }
+
+        pre {
+            margin: 20px 0;
+            padding: 20px 24px;
+            background: var(--bg-code);
+            border-radius: var(--radius);
+            overflow-x: auto;
+            border: 1px solid var(--border);
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9em;
+            color: var(--text-primary);
+        }
+
+        /* ── 视频嵌入卡片 ── */
+        .video-card {
+            margin: 32px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .video-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(15, 23, 42, 0.12);
+        }
+
+        .video-wrapper {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 */
+            height: 0;
+            overflow: hidden;
+        }
+        .video-wrapper iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .video-card img {
+            width: 100%;
+            display: block;
+        }
+
+        .video-caption {
+            padding: 12px 16px;
+            font-size: 0.88em;
+            color: var(--text-secondary);
+            text-align: center;
+            line-height: 1.6;
+            margin: 0;
+        }
+        .video-caption a {
+            color: var(--accent);
+        }
+
+        .video-card.fallback {
+            padding: 20px;
+            text-align: center;
+        }
+
+        /* ── Lightbox：截图点击放大 ── */
+        .screenshot-card img { cursor: zoom-in; transition: opacity 0.15s; }
+        .screenshot-card img:hover { opacity: 0.9; }
+        .lightbox {
+            position: fixed; inset: 0; z-index: 999;
+            display: none; align-items: center; justify-content: center;
+            background: rgba(5, 5, 8, 0.92); backdrop-filter: blur(4px);
+            cursor: zoom-out; padding: 24px;
+        }
+        .lightbox.open { display: flex; }
+        .lightbox img {
+            max-width: 96vw; max-height: 90vh;
+            border-radius: 8px; box-shadow: 0 12px 60px rgba(0,0,0,0.7);
+        }
+        .lightbox-caption {
+            position: absolute; bottom: 14px; left: 0; right: 0;
+            text-align: center; color: var(--text-secondary); font-size: 0.85em;
+        }
+
+        /* ── 顶部信息栏 ── */
+        .book-content > blockquote:first-of-type {
+            background: var(--accent-glow);
+            border-left-color: var(--accent);
+            border-radius: var(--radius);
+            margin-bottom: 32px;
+        }
+
+        /* ── 图表居中 ── */
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            margin: 32px 0;
+            overflow-x: auto;
+        }
+
+        /* ── 滚动条 ── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* ── 响应式 ── */
+        @media (max-width: 640px) {
+            .book-content { padding: 32px 16px 80px; }
+            h1 { font-size: 1.7em; }
+            h2 { font-size: 1.3em; }
+        }
+    </style>
+</head>
+<body>
+    <article class="book-content">
+        <h1 id="goroutine">协程、Goroutine 与异步编程：用不同抽象描述计算图</h1>
+<blockquote>
+<p><strong>课程</strong>：2026 春季学期《操作系统原理》<br />
+<strong>讲师</strong>：蒋炎岩（jyy）<br />
+<strong>官方课程主页</strong>：<a href="https://jyywiki.cn/OS/2026/">https://jyywiki.cn/OS/2026/</a><br />
+<strong>官方讲义</strong>：<a href="https://jyywiki.cn/OS/2026/lect19.md">https://jyywiki.cn/OS/2026/lect19.md</a><br />
+<strong>视频来源</strong>：<a href="https://www.bilibili.com/video/BV1dVRdBpEze/">Bilibili BV1dVRdBpEze</a><br />
+<strong>版权说明</strong>：课程讲义与幻灯片归蒋炎岩所有，采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书是对课堂讲授的书面化重构，保留出处与许可说明。</p>
+</blockquote>
+<h2 id="_1">导语：并行编程真正要描述的是计算图</h2>
+<p><em>(参考时间: 00:00)</em></p>
+<p>前几讲逐步引入了并发程序、互斥、同步、并发 bug 和并行数据结构。贯穿这些内容的核心概念一直是<strong>计算图</strong>：</p>
+<ul>
+<li>节点表示计算；</li>
+<li>有向边表示依赖；</li>
+<li>独立节点可以并行；</li>
+<li>有依赖的节点必须满足先后顺序。</li>
+</ul>
+<p>这一讲进一步追问：</p>
+<blockquote>
+<p>能否让“创建一个计算节点”的代价接近一次函数调用，同时保留线程编程的直觉？</p>
+</blockquote>
+<p>课程从两个方向给出答案：</p>
+<ol>
+<li><strong>轻量化线程</strong>：协程与 goroutine，把创建、切换和同步成本降下来；</li>
+<li><strong>在语言中描述计算图</strong>：Promise、Future、<code>async/await</code>，让程序直接表达异步依赖。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["计算图"] --&gt; B["轻量化线程"]
+    A --&gt; C["语言级异步模型"]
+    B --&gt; D["Coroutine / Goroutine"]
+    C --&gt; E["Promise / async / await"]
+    D --&gt; F["像线程一样书写"]
+    E --&gt; G["像顺序代码一样描述依赖"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_00_20.png" alt="从并发控制过渡到协程与异步编程" loading="lazy">
+  <p class="video-caption">📷 从并发控制过渡到协程与异步编程<br><a href="https://www.bilibili.com/video/BV1dVRdBpEze/?t=20" target="_blank" rel="noopener">回到原视频 (00:00:20)</a></p>
+</div>
+
+<hr />
+<h2 id="1-workload">1. 性能优化必须从真实 workload 出发</h2>
+<h3 id="11-workload">1.1 不要做脱离 workload 的优化</h3>
+<p><em>(参考时间: 00:01)</em></p>
+<p>讲师首先回顾上节课的 <code>malloc/free</code>：</p>
+<ul>
+<li>一把大锁可以保证正确性，并轻松通过功能测试；</li>
+<li>但高并发测试会暴露扩展性问题；</li>
+<li>优化不能凭直觉，必须先理解真实请求的分布。</li>
+</ul>
+<blockquote>
+<p>Premature optimization is the root of all evil.</p>
+<p>—— D. E. Knuth</p>
+</blockquote>
+<p>算法课通常关心人为构造的最坏情况，而实际系统更关心真实 workload 下的整体表现。讲师提到，攻击者也可能故意制造最坏输入。例如，精心构造一批哈希键，让它们映射到同一个 bucket，就能让服务退化，这是复杂性攻击的一种形式。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["真实 workload"] --&gt; B["对象大小 / 生命周期分布"]
+    A --&gt; C["请求与操作频率"]
+    B --&gt; D["选择数据结构与同步策略"]
+    C --&gt; D
+    D --&gt; E["测量性能"]
+    E --&gt; F{"达到目标？"}
+    F -- "否" --&gt; A
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_03_30.png" alt="脱离真实工作负载讨论性能优化" loading="lazy">
+  <p class="video-caption">📷 脱离真实工作负载讨论性能优化<br><a href="https://www.bilibili.com/video/BV1dVRdBpEze/?t=210" target="_blank" rel="noopener">回到原视频 (00:03:30)</a></p>
+</div>
+
+<h3 id="12">1.2 大对象与小对象的行为完全不同</h3>
+<p><em>(参考时间: 00:04)</em></p>
+<p>对 <code>malloc/free</code> 的第一个观察是：</p>
+<ul>
+<li>大对象通常会被反复读写；</li>
+<li>如果申请 100 MB，却只访问几个字节就释放，这通常是 performance bug；</li>
+<li>小对象创建频繁、生命周期短；</li>
+<li>大对象数量少、生命周期长，往往服务于全局状态或长期缓冲区。</li>
+</ul>
+<p>因此，真正需要优化的是<strong>小对象分配与回收的扩展性</strong>。</p>
+<p>讲师用“桌子上的钥匙”作类比：如果某个 slab 主要由当前线程使用，那么线程拿自己桌上的钥匙几乎没有竞争；只有对象跨线程传递时，其他线程才可能来抢这把钥匙。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["对象越小"] --&gt; B["创建 / 回收越频繁"]
+    B --&gt; C["小对象分配成为主要瓶颈"]
+    C --&gt; D["尽量在线程本地完成"]
+    D --&gt; E["大对象走独立 slow path"]
+</code></pre></div>
+
+<h3 id="13-segregated-lists-slab">1.3 Segregated Lists 与 slab</h3>
+<p><em>(参考时间: 00:08)</em></p>
+<p>每个线程可以持有若干 slab。一个 slab 内部再切成大小相等的对象：</p>
+<div class="highlight"><pre><span></span><code>thread-local slab
+  16B free list:  [ ] -&gt; [ ] -&gt; [ ] -&gt; ...
+  32B free list:  [ ] -&gt; [ ] -&gt; [ ] -&gt; ...
+  64B free list:  [ ] -&gt; [ ] -&gt; [ ] -&gt; ...
+</code></pre></div>
+
+<p>分配 17 字节时，选择不小于 17 字节的桶，从对应 free list 弹出一个块；释放时再插回链表。</p>
+<ul>
+<li>Fast path：线程本地完成，近似 O(1)；</li>
+<li>Slow path：本地 slab 用完，再向全局分配器或 <code>mmap()</code> 申请新的 slab。</li>
+</ul>
+<p>这种按大小分类的空闲链表就是 <strong>segregated free lists</strong>。讲师借此提醒：现有研究远多于教科书中的几种算法，真正重要的问题往往会吸引大量工程与学术优化。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["malloc(size)"] --&gt; B{"本地对应大小有空闲块？"}
+    B -- "是" --&gt; C["free list pop"]
+    C --&gt; D["返回对象"]
+    B -- "否" --&gt; E["slow path: 申请新 slab"]
+    E --&gt; C
+    F["free(ptr)"] --&gt; G["free list push"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_08_40.png" alt="每个线程维护本地 slab 以避免全局竞争" loading="lazy">
+  <p class="video-caption">📷 每个线程维护本地 slab 以避免全局竞争<br><a href="https://www.bilibili.com/video/BV1dVRdBpEze/?t=520" target="_blank" rel="noopener">回到原视频 (00:08:40)</a></p>
+</div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_10_40.png" alt="Segregated Lists 将空闲对象按大小组织" loading="lazy">
+  <p class="video-caption">📷 Segregated Lists 将空闲对象按大小组织<br><a href="https://www.bilibili.com/video/BV1dVRdBpEze/?t=640" target="_blank" rel="noopener">回到原视频 (00:10:40)</a></p>
+</div>
+
+<hr />
+<h2 id="2">2. 线程不是免费的</h2>
+<h3 id="21">2.1 线程消耗看不见的资源</h3>
+<p><em>(参考时间: 00:13)</em></p>
+<p>线程至少需要：</p>
+<ul>
+<li>用户态线程栈；</li>
+<li>内核中的线程、调度与统计结构；</li>
+<li>线程号或其他标识资源；</li>
+<li>上下文切换时保存和恢复寄存器的成本。</li>
+</ul>
+<p>Linux 中线程默认可能有 8 MB 虚拟栈，但栈页按需分配，所以不会在创建时一次性占满 8 MB 物理内存。</p>
+<p>讲师进一步回到 <code>/proc/[pid]/</code>：</p>
+<blockquote>
+<p>这些文件不是“凭空存在”的，而是操作系统内部数据结构的投影。</p>
+</blockquote>
+<h3 id="22">2.2 实测一个线程的成本</h3>
+<p><em>(参考时间: 00:16)</em></p>
+<p>可以通过一个实验估算线程成本：</p>
+<ol>
+<li>在线程创建前记录系统资源；</li>
+<li>创建大量只做少量工作的线程；</li>
+<li>再记录资源变化；</li>
+<li>用差值除以线程数量。</li>
+</ol>
+<p>课程演示得到约 <strong>16.9 KB/线程</strong>，该数值包含内核数据结构的增长，不只是用户栈。具体数值会随内核版本和系统状态变化，但结论明确：线程有不可忽略的固定开销。</p>
+<p>线程切换也必须进入内核：</p>
+<div class="highlight"><pre><span></span><code>保存当前线程寄存器
+   ↓
+选择另一个线程
+   ↓
+恢复目标线程寄存器
+   ↓
+返回用户态继续执行
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["创建线程"] --&gt; B["用户栈"]
+    A --&gt; C["内核线程结构"]
+    A --&gt; D["PID / 标识资源"]
+    E["线程切换"] --&gt; F["进入内核"]
+    F --&gt; G["保存寄存器"]
+    G --&gt; H["恢复另一线程寄存器"]
+    H --&gt; I["继续执行"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_14_30.png" alt="线程创建实验统计系统资源变化" loading="lazy">
+  <p class="video-caption">📷 线程创建实验统计系统资源变化<br><a href="https://www.bilibili.com/video/BV1dVRdBpEze/?t=870" target="_blank" rel="noopener">回到原视频 (00:14:30)</a></p>
+</div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_18_40.png" alt="创建线程带来的内核与用户态开销" loading="lazy">
+  <p class="video-caption">📷 创建线程带来的内核与用户态开销<br><a href="https://www.bilibili.com/video/BV1dVRdBpEze/?t=1120" target="_blank" rel="noopener">回到原视频 (00:18:40)</a></p>
+</div>
+
+<h3 id="23">2.3 问题：线程创建远远贵于函数调用</h3>
+<p><em>(参考时间: 00:20)</em></p>
+<p>计算图中的每个节点本质上是一个计算，而编程语言对计算的抽象是函数。于是矛盾出现了：</p>
+<ul>
+<li>描述计算：一次函数调用；</li>
+<li>并行执行计算：创建一个线程；</li>
+<li>两者成本相差巨大。</li>
+</ul>
+<p>如果计算图有 100 万个细粒度节点，直接创建 100 万个线程并不可行。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["计算图节点"] --&gt; B["函数调用抽象"]
+    B --&gt; C["成本很小"]
+    A --&gt; D["线程抽象"]
+    D --&gt; E["创建 / 切换成本高"]
+    E --&gt; F["需要人工切分"]
+</code></pre></div>
+
+<p>讲师给出两条路线：</p>
+<ol>
+<li>让 <code>spawn/join</code> 接近函数调用：协程、goroutine；</li>
+<li>改变语言执行模型，直接描述异步计算图：Promise、Future、<code>async/await</code>。</li>
+</ol>
+<div class="highlight"><pre><span></span><code><span class="n">t1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">spawn</span><span class="p">(</span><span class="n">f</span><span class="p">);</span>
+<span class="n">t2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">spawn</span><span class="p">(</span><span class="n">g</span><span class="p">);</span>
+<span class="n">t3</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">spawn</span><span class="p">(</span><span class="n">h</span><span class="p">);</span>
+<span class="n">join</span><span class="p">(</span><span class="n">t1</span><span class="p">);</span><span class="w"> </span><span class="n">join</span><span class="p">(</span><span class="n">t2</span><span class="p">);</span><span class="w"> </span><span class="n">join</span><span class="p">(</span><span class="n">t3</span><span class="p">);</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code><span class="n">j1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">enqueue_job</span><span class="p">(</span><span class="n">f</span><span class="p">);</span>
+<span class="n">j2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">enqueue_job</span><span class="p">(</span><span class="n">g</span><span class="p">);</span>
+<span class="n">j3</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">enqueue_job</span><span class="p">(</span><span class="n">h</span><span class="p">);</span>
+<span class="n">wait_job_complete</span><span class="p">(</span><span class="n">j1</span><span class="p">);</span>
+<span class="n">wait_job_complete</span><span class="p">(</span><span class="n">j2</span><span class="p">);</span>
+<span class="n">wait_job_complete</span><span class="p">(</span><span class="n">j3</span><span class="p">);</span>
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_21_30.png" alt="线程创建与函数调用之间的成本鸿沟" loading="lazy">
+  <p class="video-caption">📷 线程创建与函数调用之间的成本鸿沟<br><a href="https://www.bilibili.com/video/BV1dVRdBpEze/?t=1290" target="_blank" rel="noopener">回到原视频 (00:21:30)</a></p>
+</div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_23_30.png" alt="轻量化线程与异步编程两条路线" loading="lazy">
+  <p class="video-caption">📷 轻量化线程与异步编程两条路线<br><a href="https://www.bilibili.com/video/BV1dVRdBpEze/?t=1410" target="_blank" rel="noopener">回到原视频 (00:23:30)</a></p>
+</div>
+
+<hr />
+<h2 id="3">3. 方案一：在用户空间实现协程</h2>
+<h3 id="31-python-generator">3.1 从 Python generator 看栈式线程</h3>
+<p><em>(参考时间: 00:25)</em></p>
+<p>Python generator 可以在不创建新的操作系统线程时维护多个执行流：</p>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">T_worker</span><span class="p">(</span><span class="n">i</span><span class="p">):</span>
+    <span class="n">j</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+        <span class="k">yield</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">)</span>
+        <span class="n">j</span> <span class="o">+=</span> <span class="mi">1</span>
+
+<span class="n">threads</span> <span class="o">=</span> <span class="p">[</span><span class="n">T_worker</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1000000</span><span class="p">)]</span>
+<span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+    <span class="n">t</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="n">threads</span><span class="p">)</span>
+    <span class="n">t</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+</code></pre></div>
+
+<p><code>yield</code> 会保存当前函数的执行状态，并把控制权返回给调度者；下一次 <code>send()</code> 再从暂停点继续。</p>
+<p>结合 SimpleC 模型：</p>
+<ul>
+<li>每个函数调用对应一个栈帧；</li>
+<li>每个栈帧保存局部变量和程序计数器；</li>
+<li>多线程程序可以看成多个独立栈；</li>
+<li><code>yield</code> 相当于主动切换当前执行栈。</li>
+</ul>
+<p>这和操作系统线程的行为相似，但切换完全发生在用户空间。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Main stack"] --&gt; B["send / yield"]
+    B --&gt; C["Generator 1 state"]
+    B --&gt; D["Generator 2 state"]
+    B --&gt; E["Generator N state"]
+    C --&gt; F["恢复局部变量与 PC"]
+    D --&gt; F
+    E --&gt; F
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_27_30.png" alt="一百万个 Python generator 模拟轻量级线程" loading="lazy">
+  <p class="video-caption">📷 一百万个 Python generator 模拟轻量级线程<br><a href="https://www.bilibili.com/video/BV1dVRdBpEze/?t=1650" target="_blank" rel="noopener">回到原视频 (00:27:30)</a></p>
+</div>
+
+<h3 id="32-c">3.2 C 中的栈切换</h3>
+<p><em>(参考时间: 00:30)</em></p>
+<p>如果在 C 中手工实现协程，可以：</p>
+<ol>
+<li>用 <code>malloc</code> 为每个协程分配独立栈；</li>
+<li>用汇编修改栈指针；</li>
+<li>用 <code>setjmp</code> 保存寄存器现场；</li>
+<li>用 <code>longjmp</code> 恢复另一个协程的现场。</li>
+</ol>
+<div class="highlight"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="nf">coroutine_create</span><span class="p">(...);</span>
+<span class="kt">void</span><span class="w"> </span><span class="nf">coroutine_entry</span><span class="p">(...);</span>
+
+<span class="c1">// local work</span>
+<span class="n">coroutine_yield</span><span class="p">();</span>
+</code></pre></div>
+
+<p>只要语言支持一级函数或能够捕获局部状态，通常就能够实现无栈协程；C++20 coroutine、Python generator 都可能采用这种思路。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Coroutine A"] --&gt;|"yield"| B["保存寄存器与栈"]
+    B --&gt; C["调度器"]
+    C --&gt; D["恢复 Coroutine B"]
+    D --&gt;|"yield"| B
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_30_30.png" alt="用独立栈在用户态切换执行流" loading="lazy">
+  <p class="video-caption">📷 用独立栈在用户态切换执行流<br><a href="https://www.bilibili.com/video/BV1dVRdBpEze/?t=1830" target="_blank" rel="noopener">回到原视频 (00:30:30)</a></p>
+</div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_31_40.png" alt="setjmp / longjmp 形式的协程切换" loading="lazy">
+  <p class="video-caption">📷 setjmp / longjmp 形式的协程切换<br><a href="https://www.bilibili.com/video/BV1dVRdBpEze/?t=1900" target="_blank" rel="noopener">回到原视频 (00:31:40)</a></p>
+</div>
+
+<h3 id="33">3.3 协程的两个致命问题</h3>
+<p><em>(参考时间: 00:35)</em></p>
+<p>用户态协程虽然轻量，但存在两个限制。</p>
+<p>第一，阻塞系统调用会阻塞整个进程：</p>
+<div class="highlight"><pre><span></span><code>协程 T1 执行 read(fd)
+    ↓
+fd 暂时没有数据
+    ↓
+操作系统让进程睡眠
+    ↓
+T2、T3…… 全部无法运行
+</code></pre></div>
+
+<p>第二，不能直接用普通 mutex 做协程间同步：</p>
+<div class="highlight"><pre><span></span><code>T1: mutex_lock(&amp;lk)
+T1: yield()
+T2: mutex_lock(&amp;lk)  // 阻塞整个 OS 线程
+    ↓
+T1 没有机会继续运行并 unlock
+    ↓
+AA 型死锁
+</code></pre></div>
+
+<p>问题的根源是：协程共享一个操作系统线程，而 mutex 是操作系统为线程设计的同步原语。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["T1 持有 mutex"] --&gt; B["T1 yield"]
+    B --&gt; C["T2 尝试 mutex_lock"]
+    C --&gt; D["T2 阻塞 OS 线程"]
+    D --&gt; E["T1 无法恢复"]
+    E --&gt; F["AA 型死锁"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_35_40.png" alt="一个协程阻塞会让所有协程一起等待" loading="lazy">
+  <p class="video-caption">📷 一个协程阻塞会让所有协程一起等待<br><a href="https://www.bilibili.com/video/BV1dVRdBpEze/?t=2140" target="_blank" rel="noopener">回到原视频 (00:35:40)</a></p>
+</div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_37_20.png" alt="mutex 与 yield 组合导致 AA 死锁" loading="lazy">
+  <p class="video-caption">📷 mutex 与 yield 组合导致 AA 死锁<br><a href="https://www.bilibili.com/video/BV1dVRdBpEze/?t=2240" target="_blank" rel="noopener">回到原视频 (00:37:20)</a></p>
+</div>
+
+<hr />
+<h2 id="4-io">4. 异步 I/O：让等待变成可调度的状态</h2>
+<h3 id="41-o_nonblock-eagain">4.1 <code>O_NONBLOCK</code> 与 <code>EAGAIN</code></h3>
+<p><em>(参考时间: 00:39)</em></p>
+<p>解决阻塞问题的关键是把 I/O 放入非阻塞模式：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">int</span><span class="w"> </span><span class="n">fd</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span><span class="w"> </span><span class="n">O_NONBLOCK</span><span class="p">);</span>
+
+<span class="kt">ssize_t</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">read</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span><span class="w"> </span><span class="n">buf</span><span class="p">,</span><span class="w"> </span><span class="n">size</span><span class="p">);</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">n</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">-1</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">errno</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">EAGAIN</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">coroutine_yield</span><span class="p">();</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>当数据尚未准备好：</p>
+<ul>
+<li>普通阻塞 <code>read</code> 会让当前线程睡眠；</li>
+<li>非阻塞 <code>read</code> 立即返回 <code>-1/EAGAIN</code>；</li>
+<li>协程可以主动让出 CPU；</li>
+<li>数据准备好后再回来重试。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["read O_NONBLOCK"] --&gt; B{"有数据？"}
+    B -- "是" --&gt; C["返回 n &gt; 0"]
+    B -- "否" --&gt; D["返回 EAGAIN"]
+    D --&gt; E["coroutine_yield()"]
+    E --&gt; F["调度其他协程"]
+    F --&gt; A
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_40_20.png" alt="非阻塞 read 返回 EAGAIN 后协程可以继续调度" loading="lazy">
+  <p class="video-caption">📷 非阻塞 read 返回 EAGAIN 后协程可以继续调度<br><a href="https://www.bilibili.com/video/BV1dVRdBpEze/?t=2420" target="_blank" rel="noopener">回到原视频 (00:40:20)</a></p>
+</div>
+
+<h3 id="42-epoll">4.2 epoll：同时监听大量文件描述符</h3>
+<p><em>(参考时间: 00:41)</em></p>
+<p><code>epoll</code> 允许一个事件循环同时等待大量文件描述符。任意一个 fd 可读、可写或出现错误，事件循环都能得到通知。</p>
+<p>这和信号量有相似之处：</p>
+<ul>
+<li>可以同时等待多个事件；</li>
+<li>任何事件就绪都能唤醒调度器；</li>
+<li>但等待对象是操作系统对象，而不是某个线程私有的 mutex。</li>
+</ul>
+<p>其他对象也可以被设计成 fd：</p>
+<ul>
+<li><code>eventfd</code>；</li>
+<li><code>timerfd</code>；</li>
+<li><code>signalfd</code>；</li>
+<li><code>io_uring</code>。</li>
+</ul>
+<p>一旦它们都能进入 <code>epoll</code>，协程调度器就能统一等待 I/O、定时器和线程间通知。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Coroutine 1"] --&gt; E["epoll"]
+    B["Coroutine 2"] --&gt; E
+    C["Coroutine 3"] --&gt; E
+    D["Timer / eventfd / socket"] --&gt; E
+    E --&gt; F["就绪事件"]
+    F --&gt; G["重新加入可运行队列"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_42_30.png" alt="epoll 统一管理大量异步 I/O 事件" loading="lazy">
+  <p class="video-caption">📷 epoll 统一管理大量异步 I/O 事件<br><a href="https://www.bilibili.com/video/BV1dVRdBpEze/?t=2550" target="_blank" rel="noopener">回到原视频 (00:42:30)</a></p>
+</div>
+
+<h3 id="43">4.3 让编译器隐藏异步复杂性</h3>
+<p><em>(参考时间: 00:43)</em></p>
+<p>程序员希望继续写：</p>
+<div class="highlight"><pre><span></span><code><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+<span class="n">read</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span><span class="w"> </span><span class="n">buf</span><span class="p">,</span><span class="w"> </span><span class="n">size</span><span class="p">);</span>
+</code></pre></div>
+
+<p>但编译器可以把它重写成：</p>
+<div class="highlight"><pre><span></span><code><span class="n">put_my_self_into_sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+<span class="n">yield</span><span class="p">();</span>
+
+<span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="n">read_async</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span><span class="w"> </span><span class="n">buf</span><span class="p">,</span><span class="w"> </span><span class="n">size</span><span class="p">)</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="o">-</span><span class="n">EAGAIN</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">yield</span><span class="p">();</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>也就是说：</p>
+<blockquote>
+<p>保留同步的书写体验，把异步调度交给编译器和运行时。</p>
+</blockquote>
+<p>这正是 goroutine 的核心思路。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["程序员写 blocking API"] --&gt; B["编译器改写"]
+    B --&gt; C["非阻塞调用"]
+    C --&gt; D{"立即完成？"}
+    D -- "否" --&gt; E["yield / 注册等待事件"]
+    E --&gt; F["调度其他 goroutine"]
+    D -- "是" --&gt; G["继续执行"]
+    F --&gt; C
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_45_20.png" alt="编译器把同步风格代码改写为异步执行" loading="lazy">
+  <p class="video-caption">📷 编译器把同步风格代码改写为异步执行<br><a href="https://www.bilibili.com/video/BV1dVRdBpEze/?t=2720" target="_blank" rel="noopener">回到原视频 (00:45:20)</a></p>
+</div>
+
+<hr />
+<h2 id="5-goroutine">5. Goroutine：像线程一样使用，像协程一样轻量</h2>
+<h3 id="51-go">5.1 Go 运行时像一个小小的操作系统</h3>
+<p><em>(参考时间: 00:46)</em></p>
+<p>一个 Go 程序可以有多个操作系统线程，每个线程运行一个 worker loop：</p>
+<ol>
+<li>从可运行队列取 goroutine；</li>
+<li>执行一段代码；</li>
+<li>遇到阻塞 I/O 或同步点时登记等待；</li>
+<li>把当前 goroutine 移出运行队列；</li>
+<li>继续执行其他 goroutine。</li>
+</ol>
+<p>标准库中的阻塞 API 会被运行时接管，转换为非阻塞操作并注册到事件循环。这样：</p>
+<ul>
+<li>goroutine 的创建和切换很轻量；</li>
+<li>多个 goroutine 可以真正分布到多个 CPU 上并行；</li>
+<li>编程模型仍然接近普通线程。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    Q["Goroutine 可运行队列"] --&gt; W1["OS Worker Thread 1"]
+    Q --&gt; W2["OS Worker Thread 2"]
+    Q --&gt; W3["OS Worker Thread N"]
+    W1 --&gt; R["Go Runtime Scheduler"]
+    W2 --&gt; R
+    W3 --&gt; R
+    R --&gt; E["epoll / I/O 事件"]
+    E --&gt; Q
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_47_30.png" alt="Go worker thread 与 goroutine 调度器" loading="lazy">
+  <p class="video-caption">📷 Go worker thread 与 goroutine 调度器<br><a href="https://www.bilibili.com/video/BV1dVRdBpEze/?t=2850" target="_blank" rel="noopener">回到原视频 (00:47:30)</a></p>
+</div>
+
+<h3 id="52-channel">5.2 通过 channel 同时完成同步与通信</h3>
+<p><em>(参考时间: 00:48)</em></p>
+<p>Effective Go 中有一句著名原则：</p>
+<blockquote>
+<p>Do not communicate by sharing memory; instead, share memory by communicating.</p>
+</blockquote>
+<p>传统互斥锁、信号量和条件变量解决了同步，但数据传递仍要依赖共享内存。生产者必须先获得 buffer，再手工保护和维护 buffer。</p>
+<p>UNIX 管道则天然表达了生产者-消费者计算图：</p>
+<div class="highlight"><pre><span></span><code><span class="o">(</span>cat<span class="w"> </span>*.txt<span class="p">;</span><span class="w"> </span>cat<span class="w"> </span>*.cpp<span class="o">)</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>wc<span class="w"> </span>-l
+</code></pre></div>
+
+<ul>
+<li>两个 <code>cat</code> 产生数据；</li>
+<li><code>wc -l</code> 消费数据；</li>
+<li>管道负责数据传递；</li>
+<li>阻塞和唤醒由内核完成。</li>
+</ul>
+<p>Go 把这种思想引入 goroutine：</p>
+<div class="highlight"><pre><span></span><code><span class="nx">ch</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nb">make</span><span class="p">(</span><span class="kt">chan</span><span class="w"> </span><span class="kt">int</span><span class="p">)</span>
+
+<span class="k">go</span><span class="w"> </span><span class="kd">func</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">ch</span><span class="w"> </span><span class="o">&lt;-</span><span class="w"> </span><span class="mi">42</span>
+<span class="p">}()</span>
+
+<span class="nx">value</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">&lt;-</span><span class="nx">ch</span>
+</code></pre></div>
+
+<p>channel 既可以传递数据，也可以表达“生产完成后消费者才能继续”的依赖边。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Producer"] --&gt;|"send"| C["Channel"]
+    C --&gt;|"receive"| B["Consumer"]
+    A --&gt; D["同步"]
+    C --&gt; D
+    B --&gt; D
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_49_40.png" alt="UNIX 管道直接表达并发计算图" loading="lazy">
+  <p class="video-caption">📷 UNIX 管道直接表达并发计算图<br><a href="https://www.bilibili.com/video/BV1dVRdBpEze/?t=2980" target="_blank" rel="noopener">回到原视频 (00:49:40)</a></p>
+</div>
+
+<h3 id="53-mandelbrot-gogoroutine-channel">5.3 Mandelbrot-Go：goroutine 与 channel 的配合</h3>
+<p><em>(参考时间: 00:51)</em></p>
+<p>课程给出一个 Go 版 Mandelbrot：</p>
+<ul>
+<li>按图像横向条带切分工作；</li>
+<li>每个 worker goroutine 计算一个区域；</li>
+<li>worker 完成后向 <code>done</code> channel 汇报；</li>
+<li>monitor goroutine 用 <code>select</code> 同时监听完成消息和定时 tick；</li>
+<li>全部完成后再写出 PNG 文件。</li>
+</ul>
+<p>示意结构：</p>
+<div class="highlight"><pre><span></span><code><span class="k">for</span><span class="w"> </span><span class="nx">i</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="nx">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="nx">stripes</span><span class="p">;</span><span class="w"> </span><span class="nx">i</span><span class="o">++</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">go</span><span class="w"> </span><span class="nx">worker</span><span class="p">(</span><span class="nx">low</span><span class="p">[</span><span class="nx">i</span><span class="p">],</span><span class="w"> </span><span class="nx">high</span><span class="p">[</span><span class="nx">i</span><span class="p">],</span><span class="w"> </span><span class="nx">done</span><span class="p">)</span>
+<span class="p">}</span>
+
+<span class="k">go</span><span class="w"> </span><span class="nx">monitor</span><span class="p">(</span><span class="nx">done</span><span class="p">,</span><span class="w"> </span><span class="nx">tick</span><span class="p">,</span><span class="w"> </span><span class="nx">finish</span><span class="p">)</span>
+</code></pre></div>
+
+<p>讲师强调，goroutine 的创建成本足够低，因此代码可以更自然地把计算图直接写成 <code>go ...</code>。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    M["Main goroutine"] --&gt; W1["Worker 1"]
+    M --&gt; W2["Worker 2"]
+    M --&gt; W3["Worker 3"]
+    W1 --&gt; D["done channel"]
+    W2 --&gt; D
+    W3 --&gt; D
+    T["tick channel"] --&gt; S["monitor select"]
+    D --&gt; S
+    S --&gt; F["finish channel"]
+    F --&gt; P["写出 Mandelbrot.png"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_52_30.png" alt="Mandelbrot-Go 使用 goroutine 分块并行计算" loading="lazy">
+  <p class="video-caption">📷 Mandelbrot-Go 使用 goroutine 分块并行计算<br><a href="https://www.bilibili.com/video/BV1dVRdBpEze/?t=3150" target="_blank" rel="noopener">回到原视频 (00:52:30)</a></p>
+</div>
+
+<hr />
+<h2 id="6-javascriptweb">6. 另一条世界线：JavaScript、Web 与异步编程</h2>
+<h3 id="61">6.1 十天诞生的语言</h3>
+<p><em>(参考时间: 00:54)</em></p>
+<p>1995 年，Brendan Eich 加入 Netscape，被要求设计一种嵌入网页的脚本语言。他在很短时间内融合了 C、Java、Scheme、Self 等语言的特征。</p>
+<p>由于他本人更关注函数式编程，JavaScript 很早就拥有了<strong>一等函数</strong>。这成为后来回调、事件处理和 Promise 的基础。</p>
+<p>早期 JavaScript 也留下了许多糟糕设计：</p>
+<ul>
+<li><code>this</code> 是动态绑定的；</li>
+<li>宽松相等规则复杂；</li>
+<li>同一个值在不同上下文中可能表现不同；</li>
+<li>容易写出“看起来正确、换一个输入就出错”的代码。</li>
+</ul>
+<p>但动态类型、函数作为参数等特性，也使它能够快速适应 Web 的交互需求。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["C / Java"] --&gt; D["JavaScript"]
+    B["Scheme / Self"] --&gt; D
+    D --&gt; E["一等函数"]
+    D --&gt; F["动态类型"]
+    E --&gt; G["回调 / Promise"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_56_30.png" alt="JavaScript 融合多种语言设计并保留一等函数" loading="lazy">
+  <p class="video-caption">📷 JavaScript 融合多种语言设计并保留一等函数<br><a href="https://www.bilibili.com/video/BV1dVRdBpEze/?t=3390" target="_blank" rel="noopener">回到原视频 (00:56:30)</a></p>
+</div>
+
+<h3 id="62-web-10">6.2 Web 1.0：简单到可以直接手写请求</h3>
+<p><em>(参考时间: 00:57)</em></p>
+<p>早期 HTTP 很朴素：</p>
+<div class="highlight"><pre><span></span><code><span class="nf">GET</span> <span class="nn">/index.html</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.0</span>
+<span class="na">Host</span><span class="o">:</span> <span class="l">example.com</span>
+</code></pre></div>
+
+<p>服务器的主要工作就是找到文件并返回文本。网页通常由 HTML、<code>&lt;table&gt;</code> 和图片拼出来，布局经常依赖切图工程师精确计算像素位置。</p>
+<p>讲师用一个“土味页面”复刻了那个时代：</p>
+<ul>
+<li>没有现代 CSS 布局；</li>
+<li>浮动窗口和表格承担界面组织；</li>
+<li>页面刷新意味着重新加载完整文档。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["浏览器发送 HTTP 文本请求"] --&gt; B["Web Server"]
+    B --&gt; C["读取 HTML 文件"]
+    C --&gt; D["返回 HTML 文本"]
+    D --&gt; E["浏览器渲染页面"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_59_00.png" alt="早期 Web 1.0 页面由表格、图片与切图布局构成" loading="lazy">
+  <p class="video-caption">📷 早期 Web 1.0 页面由表格、图片与切图布局构成<br><a href="https://www.bilibili.com/video/BV1dVRdBpEze/?t=3540" target="_blank" rel="noopener">回到原视频 (00:59:00)</a></p>
+</div>
+
+<h3 id="63-xmlhttprequest">6.3 XMLHttpRequest 与后台刷新</h3>
+<p><em>(参考时间: 00:59)</em></p>
+<p>1999 年前后，<code>XMLHttpRequest</code> 出现。JavaScript 可以在页面不重新加载的情况下，请求服务器并把新数据写回 DOM。</p>
+<p>这项技术后来被称为 AJAX：Asynchronous JavaScript and XML。当时后端 Java 生态大量使用 XML，所以名字中出现了 XML，而不是今天的 JSON。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["用户触发事件"] --&gt; B["XMLHttpRequest"]
+    B --&gt; C["请求后端"]
+    C --&gt; D["返回 XML / 数据"]
+    D --&gt; E["回调函数"]
+    E --&gt; F["更新 DOM Tree"]
+    F --&gt; G["页面局部刷新"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_00_20.png" alt="XMLHttpRequest 让网页实现后台刷新" loading="lazy">
+  <p class="video-caption">📷 XMLHttpRequest 让网页实现后台刷新<br><a href="https://www.bilibili.com/video/BV1dVRdBpEze/?t=3620" target="_blank" rel="noopener">回到原视频 (01:00:20)</a></p>
+</div>
+
+<h3 id="64-jquery-dom">6.4 jQuery 与 DOM 查询抽象</h3>
+<p><em>(参考时间: 01:01)</em></p>
+<p>jQuery 提供了简洁的 DOM 查询与修改接口：</p>
+<div class="highlight"><pre><span></span><code><span class="nx">$</span><span class="p">(</span><span class="nb">document</span><span class="p">).</span><span class="nx">ready</span><span class="p">(</span><span class="kd">function</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">$</span><span class="p">(</span><span class="s2">"#myElement"</span><span class="p">)</span>
+<span class="w">        </span><span class="p">.</span><span class="nx">text</span><span class="p">(</span><span class="s2">"新内容"</span><span class="p">)</span>
+<span class="w">        </span><span class="p">.</span><span class="nx">css</span><span class="p">(</span><span class="s2">"color"</span><span class="p">,</span><span class="w"> </span><span class="s2">"red"</span><span class="p">);</span>
+<span class="p">});</span>
+</code></pre></div>
+
+<p>现代浏览器中，<code>$</code> 的能力通常可以由 <code>document.querySelector</code> 完成。DOM 是一棵树，CSS selector 可以在其中查询节点，再修改文本、样式或插入新的 HTML。</p>
+<p>课程演示把一个 1990 年代风格的页面注入新样式：</p>
+<div class="highlight"><pre><span></span><code>页面内容不变
+    ↓
+注入现代 CSS 与少量 JavaScript
+    ↓
+圆角、输入框、按钮动画全部出现
+</code></pre></div>
+
+<p>讲师形容为“天亮了”：内容是原来的，但交互和视觉已经现代化。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["DOM Tree"] --&gt; B["querySelector"]
+    B --&gt; C["选中节点"]
+    C --&gt; D["修改文本"]
+    C --&gt; E["修改样式"]
+    C --&gt; F["插入 / 删除节点"]
+    D --&gt; G["浏览器重绘"]
+    E --&gt; G
+    F --&gt; G
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_03_30.png" alt="通过选择器和 DOM 修改把旧网页现代化" loading="lazy">
+  <p class="video-caption">📷 通过选择器和 DOM 修改把旧网页现代化<br><a href="https://www.bilibili.com/video/BV1dVRdBpEze/?t=3810" target="_blank" rel="noopener">回到原视频 (01:03:30)</a></p>
+</div>
+
+<hr />
+<h2 id="7-javascript">7. JavaScript 的事件并发模型</h2>
+<h3 id="71-run-to-completion">7.1 Run to Completion</h3>
+<p><em>(参考时间: 01:05)</em></p>
+<p>JavaScript 面向大量普通 Web 开发者，所以不能要求大家掌握 data race、原子性和复杂同步。它选择了一套更简单的并发模型：</p>
+<ul>
+<li>不允许多个 JavaScript 计算节点真正并行执行；</li>
+<li>没有 blocking I/O；</li>
+<li>所有事件处理器按顺序进入队列；</li>
+<li>一个事件一旦开始，就必须运行到完成。</li>
+</ul>
+<p>事件来源包括：</p>
+<ul>
+<li>页面加载；</li>
+<li>鼠标点击；</li>
+<li>键盘输入；</li>
+<li>网络请求完成；</li>
+<li>定时器触发。</li>
+</ul>
+<p>这使每个事件处理器近似原子执行，避免了多线程共享内存中的数据竞争。但如果事件处理器死循环或计算过久，整个页面都会失去响应。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["事件进入队列"] --&gt; B["取出一个事件"]
+    B --&gt; C["执行整个 handler"]
+    C --&gt; D{"handler 结束？"}
+    D -- "否" --&gt; C
+    D -- "是" --&gt; E["取出下一个事件"]
+    E --&gt; B
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_07_40.png" alt="事件循环按 Run to Completion 执行处理器" loading="lazy">
+  <p class="video-caption">📷 事件循环按 Run to Completion 执行处理器<br><a href="https://www.bilibili.com/video/BV1dVRdBpEze/?t=4060" target="_blank" rel="noopener">回到原视频 (01:07:40)</a></p>
+</div>
+
+<h3 id="72">7.2 回调创建动态计算图</h3>
+<p><em>(参考时间: 01:08)</em></p>
+<p>异步请求完成后，浏览器创建一个新事件，调用 <code>success</code> 或 <code>error</code> 回调：</p>
+<div class="highlight"><pre><span></span><code><span class="nx">$</span><span class="p">.</span><span class="nx">ajax</span><span class="p">({</span>
+<span class="w">    </span><span class="nx">url</span><span class="o">:</span><span class="w"> </span><span class="s2">"/api/user"</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">success</span><span class="o">:</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="p">(</span><span class="nx">user</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">$</span><span class="p">.</span><span class="nx">ajax</span><span class="p">({</span>
+<span class="w">            </span><span class="nx">url</span><span class="o">:</span><span class="w"> </span><span class="sb">`/api/user/</span><span class="si">${</span><span class="nx">user</span><span class="p">.</span><span class="nx">id</span><span class="si">}</span><span class="sb">/friends`</span><span class="p">,</span>
+<span class="w">            </span><span class="nx">success</span><span class="o">:</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="p">(</span><span class="nx">friends</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="nx">$</span><span class="p">.</span><span class="nx">ajax</span><span class="p">({</span>
+<span class="w">                    </span><span class="nx">url</span><span class="o">:</span><span class="w"> </span><span class="sb">`/api/friend/</span><span class="si">${</span><span class="nx">friends</span><span class="p">[</span><span class="mf">0</span><span class="p">].</span><span class="nx">id</span><span class="si">}</span><span class="sb">`</span><span class="p">,</span>
+<span class="w">                    </span><span class="nx">success</span><span class="o">:</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="p">(</span><span class="nx">feed</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                        </span><span class="nx">render</span><span class="p">(</span><span class="nx">feed</span><span class="p">);</span>
+<span class="w">                    </span><span class="p">}</span>
+<span class="w">                </span><span class="p">});</span>
+<span class="w">            </span><span class="p">}</span>
+<span class="w">        </span><span class="p">});</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">});</span>
+</code></pre></div>
+
+<p>回调相当于在运行时动态创建计算图节点：</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["请求 user"] --&gt; B["success(user)"]
+    B --&gt; C["请求 friends"]
+    C --&gt; D["success(friends)"]
+    D --&gt; E["请求 feed"]
+    E --&gt; F["success(feed)"]
+    B --&gt; G["error"]
+    D --&gt; H["error"]
+    F --&gt; I["error"]
+</code></pre></div>
+
+<h3 id="73">7.3 回调地狱</h3>
+<p><em>(参考时间: 01:10)</em></p>
+<p>问题不在于回调本身，而在于它破坏了顺序控制结构：</p>
+<div class="highlight"><pre><span></span><code>先请求 A
+等 A 成功
+再请求 B
+等 B 成功
+再请求 C
+</code></pre></div>
+
+<p>明明是一个顺序流程，却被拆成多层嵌套函数：</p>
+<div class="highlight"><pre><span></span><code><span class="nx">requestA</span><span class="p">(</span><span class="kd">function</span><span class="w"> </span><span class="p">(</span><span class="nx">a</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">requestB</span><span class="p">(</span><span class="nx">a</span><span class="p">,</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="p">(</span><span class="nx">b</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">requestC</span><span class="p">(</span><span class="nx">b</span><span class="p">,</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="p">(</span><span class="nx">c</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="c1">//...</span>
+<span class="w">        </span><span class="p">});</span>
+<span class="w">    </span><span class="p">});</span>
+<span class="p">});</span>
+</code></pre></div>
+
+<p>每增加一步，缩进就加深一层。错误处理和局部变量也越来越难追踪。</p>
+<blockquote>
+<p>一个顺序的计算图，被硬生生拆成了多层回调。</p>
+</blockquote>
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_10_40.png" alt="多层回调导致回调地狱与维护困难" loading="lazy">
+  <p class="video-caption">📷 多层回调导致回调地狱与维护困难<br><a href="https://www.bilibili.com/video/BV1dVRdBpEze/?t=4240" target="_blank" rel="noopener">回到原视频 (01:10:40)</a></p>
+</div>
+
+<hr />
+<h2 id="8-promise">8. Promise：在语言中直接描述计算图</h2>
+<h3 id="81">8.1 立即返回的未来结果</h3>
+<p><em>(参考时间: 01:12)</em></p>
+<p><code>fetch</code> 不会阻塞等待网络：</p>
+<div class="highlight"><pre><span></span><code><span class="kd">const</span><span class="w"> </span><span class="nx">promise</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">fetch</span><span class="p">(</span><span class="nx">url</span><span class="p">);</span>
+</code></pre></div>
+
+<p>它立即返回一个 Promise，表示“未来完成的结果”。状态会经历：</p>
+<div class="highlight"><pre><span></span><code>stateDiagram-v2
+    [*] --&gt; Pending
+    Pending --&gt; Fulfilled: 成功
+    Pending --&gt; Rejected: 失败
+    Fulfilled --&gt; [*]
+    Rejected --&gt; [*]
+</code></pre></div>
+
+<p>Promise 可以继续组合：</p>
+<div class="highlight"><pre><span></span><code><span class="nx">fetch</span><span class="p">(</span><span class="nx">url</span><span class="p">)</span>
+<span class="w">    </span><span class="p">.</span><span class="nx">then</span><span class="p">(</span><span class="nx">response</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">response</span><span class="p">.</span><span class="nx">json</span><span class="p">())</span>
+<span class="w">    </span><span class="p">.</span><span class="nx">then</span><span class="p">(</span><span class="nx">data</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">render</span><span class="p">(</span><span class="nx">data</span><span class="p">))</span>
+<span class="w">    </span><span class="p">.</span><span class="k">catch</span><span class="p">(</span><span class="nx">error</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">showError</span><span class="p">(</span><span class="nx">error</span><span class="p">));</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["fetch(url)"] --&gt; B["Promise pending"]
+    B --&gt; C["response"]
+    C --&gt; D["json()"]
+    D --&gt; E["data"]
+    E --&gt; F["render(data)"]
+    B --&gt; G["catch(error)"]
+    C --&gt; G
+    D --&gt; G
+    E --&gt; G
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_13_30.png" alt="fetch 返回处于 pending 状态的 Promise" loading="lazy">
+  <p class="video-caption">📷 fetch 返回处于 pending 状态的 Promise<br><a href="https://www.bilibili.com/video/BV1dVRdBpEze/?t=4410" target="_blank" rel="noopener">回到原视频 (01:13:30)</a></p>
+</div>
+
+<h3 id="82-promiseall-join">8.2 <code>Promise.all</code>：语言级 join</h3>
+<p><em>(参考时间: 01:14)</em></p>
+<p>Promise 可以组合成计算图：</p>
+<div class="highlight"><pre><span></span><code><span class="nb">Promise</span><span class="p">.</span><span class="nx">all</span><span class="p">([</span>
+<span class="w">    </span><span class="nx">fetch</span><span class="p">(</span><span class="s2">"/api/a"</span><span class="p">).</span><span class="nx">then</span><span class="p">(</span><span class="nx">r</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nx">json</span><span class="p">()),</span>
+<span class="w">    </span><span class="nx">fetch</span><span class="p">(</span><span class="s2">"/api/b"</span><span class="p">).</span><span class="nx">then</span><span class="p">(</span><span class="nx">r</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nx">json</span><span class="p">()),</span>
+<span class="w">    </span><span class="nx">fetch</span><span class="p">(</span><span class="s2">"/api/c"</span><span class="p">).</span><span class="nx">then</span><span class="p">(</span><span class="nx">r</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nx">json</span><span class="p">())</span>
+<span class="p">])</span>
+<span class="p">.</span><span class="nx">then</span><span class="p">(</span><span class="nx">results</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">renderAll</span><span class="p">(</span><span class="nx">results</span><span class="p">))</span>
+<span class="p">.</span><span class="k">catch</span><span class="p">(</span><span class="nx">error</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">showError</span><span class="p">(</span><span class="nx">error</span><span class="p">));</span>
+</code></pre></div>
+
+<p><code>Promise.all()</code> 会：</p>
+<ol>
+<li>立即返回一个新的 Promise；</li>
+<li>同时启动多个异步任务；</li>
+<li>等待全部成功，或在任一失败时进入错误路径。</li>
+</ol>
+<p>这和线程中的 <code>join</code> 非常相似：</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Promise.all"] --&gt; B1["fetch A"]
+    A --&gt; B2["fetch B"]
+    A --&gt; B3["fetch C"]
+    B1 --&gt; C["全部完成"]
+    B2 --&gt; C
+    B3 --&gt; C
+    C --&gt; D["then(results)"]
+    B1 --&gt; E["catch(error)"]
+    B2 --&gt; E
+    B3 --&gt; E
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_15_00.png" alt="Promise.all 把多个并发节点汇合为一个 join" loading="lazy">
+  <p class="video-caption">📷 Promise.all 把多个并发节点汇合为一个 join<br><a href="https://www.bilibili.com/video/BV1dVRdBpEze/?t=4500" target="_blank" rel="noopener">回到原视频 (01:15:00)</a></p>
+</div>
+
+<hr />
+<h2 id="9-asyncawait">9. Async/Await：保留顺序直觉</h2>
+<h3 id="91">9.1 让程序员继续写同步风格</h3>
+<p><em>(参考时间: 01:15)</em></p>
+<p>Promise 仍然要求把顺序逻辑拆成 <code>.then()</code> 链。更自然的方式是：</p>
+<div class="highlight"><pre><span></span><code><span class="k">async</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="nx">fetchData</span><span class="p">(</span><span class="nx">token</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">response</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">fetch</span><span class="p">(</span>
+<span class="w">        </span><span class="sb">`/api/submissions/?token=</span><span class="si">${</span><span class="nx">token</span><span class="si">}</span><span class="sb">`</span>
+<span class="w">    </span><span class="p">);</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nx">response</span><span class="p">.</span><span class="nx">json</span><span class="p">();</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>调用多个异步任务：</p>
+<div class="highlight"><pre><span></span><code><span class="k">await</span><span class="w"> </span><span class="nb">Promise</span><span class="p">.</span><span class="nx">all</span><span class="p">([</span>
+<span class="w">    </span><span class="nx">fetchData</span><span class="p">(</span><span class="s2">"1234"</span><span class="p">),</span>
+<span class="w">    </span><span class="nx">fetchData</span><span class="p">(</span><span class="s2">"5678"</span><span class="p">)</span>
+<span class="p">]);</span>
+</code></pre></div>
+
+<p>关键语义：</p>
+<ul>
+<li><code>async function f()</code> 相当于返回一个 Promise；</li>
+<li><code>await promise</code> 等待 Promise 完成并取出值；</li>
+<li><code>await 1</code> 会得到 <code>1</code>，非 Promise 值会被包装后再解析；</li>
+<li>编译器把顺序逻辑改写成 Promise 链。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["async function"] --&gt; B["返回 Promise"]
+    C["await value"] --&gt; D{"value 是 Promise？"}
+    D -- "是" --&gt; E["等待 settlement"]
+    D -- "否" --&gt; F["Promise.resolve(value)"]
+    E --&gt; G["继续顺序代码"]
+    F --&gt; G
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_17_30.png" alt="async 函数由编译器包装为 Promise" loading="lazy">
+  <p class="video-caption">📷 async 函数由编译器包装为 Promise<br><a href="https://www.bilibili.com/video/BV1dVRdBpEze/?t=4650" target="_blank" rel="noopener">回到原视频 (01:17:30)</a></p>
+</div>
+
+<h3 id="92-await">9.2 编译器把 await 翻译成动态回调链</h3>
+<p><em>(参考时间: 01:17)</em></p>
+<p>源代码：</p>
+<div class="highlight"><pre><span></span><code><span class="kd">let</span><span class="w"> </span><span class="nx">a</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">f</span><span class="p">();</span>
+<span class="kd">let</span><span class="w"> </span><span class="nx">b</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">g</span><span class="p">(</span><span class="nx">a</span><span class="p">);</span>
+<span class="kd">let</span><span class="w"> </span><span class="nx">c</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">h</span><span class="p">(</span><span class="nx">b</span><span class="p">);</span>
+</code></pre></div>
+
+<p>概念上可以改写为：</p>
+<div class="highlight"><pre><span></span><code><span class="nb">Promise</span><span class="p">.</span><span class="nx">resolve</span><span class="p">(</span><span class="nx">f</span><span class="p">())</span>
+<span class="w">    </span><span class="p">.</span><span class="nx">then</span><span class="p">(</span><span class="nx">a</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nb">Promise</span><span class="p">.</span><span class="nx">resolve</span><span class="p">(</span><span class="nx">g</span><span class="p">(</span><span class="nx">a</span><span class="p">)))</span>
+<span class="w">    </span><span class="p">.</span><span class="nx">then</span><span class="p">(</span><span class="nx">b</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nb">Promise</span><span class="p">.</span><span class="nx">resolve</span><span class="p">(</span><span class="nx">h</span><span class="p">(</span><span class="nx">b</span><span class="p">)))</span>
+<span class="w">    </span><span class="p">.</span><span class="nx">then</span><span class="p">(</span><span class="nx">c</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">finish</span><span class="p">(</span><span class="nx">c</span><span class="p">));</span>
+</code></pre></div>
+
+<p>编译器生成的代码可能仍然是复杂的回调链，但程序员看到的始终是顺序结构：</p>
+<div class="highlight"><pre><span></span><code>写下：A -&gt; await B -&gt; await C
+生成：A.then(B).then(C)
+</code></pre></div>
+
+<blockquote>
+<p>同步的写法表达异步流程，剩下的让编译器处理。</p>
+</blockquote>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["let a = await f()"] --&gt; B["f().then(a =&gt; ...)"]
+    B --&gt; C["let b = await g(a)"]
+    C --&gt; D["g(a).then(b =&gt; ...)"]
+    D --&gt; E["let c = await h(b)"]
+    E --&gt; F["h(b).then(c =&gt; ...)"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_18_40.png" alt="await 等待多个动态创建的计算节点完成" loading="lazy">
+  <p class="video-caption">📷 await 等待多个动态创建的计算节点完成<br><a href="https://www.bilibili.com/video/BV1dVRdBpEze/?t=4720" target="_blank" rel="noopener">回到原视频 (01:18:40)</a></p>
+</div>
+
+<hr />
+<h2 id="10">10. 从浏览器到完整应用生态</h2>
+<p><em>(参考时间: 01:19)</em></p>
+<p>JavaScript 逐渐从“十天设计的网页脚本”成长为完整应用平台：</p>
+<ul>
+<li>ES6 / ECMAScript 2015 统一了大量库和语法；</li>
+<li>Angular、React、Vue 形成现代前端框架；</li>
+<li>Express、Next、Nest 扩展到服务端；</li>
+<li>Electron 把网页封装成桌面应用，Visual Studio Code 是典型例子；</li>
+<li>Ink 允许用 React 风格构建终端界面；</li>
+<li>WebAssembly 把高性能代码带入浏览器；</li>
+<li>Mermaid、TensorFlow.js、Three.js 扩展了可视化、AI 与 3D 能力。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["HTML / CSS / DOM"] --&gt; B["JavaScript"]
+    B --&gt; C["浏览器应用"]
+    B --&gt; D["Electron 桌面应用"]
+    B --&gt; E["Node.js 服务端"]
+    B --&gt; F["WebAssembly"]
+    C --&gt; G["React / Vue / Angular"]
+    D --&gt; H["VS Code"]
+    E --&gt; I["Express / Next / Nest"]
+    F --&gt; J["C / C++ 高性能模块"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_21_20.png" alt="JavaScript 从网页脚本成长为完整应用生态" loading="lazy">
+  <p class="video-caption">📷 JavaScript 从网页脚本成长为完整应用生态<br><a href="https://www.bilibili.com/video/BV1dVRdBpEze/?t=4880" target="_blank" rel="noopener">回到原视频 (01:21:20)</a></p>
+</div>
+
+<hr />
+<h2 id="11">11. 总结：两条路线，同一个计算图</h2>
+<p>这一讲从线程成本出发，比较了两条描述计算图的路线。</p>
+<p><strong>路线一：轻量化线程</strong></p>
+<ul>
+<li>用户态协程避免每次创建都进入内核；</li>
+<li><code>yield</code> 主动切换执行流；</li>
+<li>阻塞 I/O 必须改造成非阻塞 + 事件等待；</li>
+<li><code>epoll</code>、<code>eventfd</code>、<code>timerfd</code> 统一异步事件；</li>
+<li>goroutine 把用户态协程调度到多个 OS worker thread；</li>
+<li>channel 同时完成同步与通信。</li>
+</ul>
+<p><strong>路线二：在语言中描述计算图</strong></p>
+<ul>
+<li>回调把异步结果变成动态计算图节点；</li>
+<li>嵌套回调导致 callback hell；</li>
+<li>Promise 让程序直接组合未来值；</li>
+<li><code>Promise.all</code> 相当于 join；</li>
+<li><code>async/await</code> 保留顺序结构，由编译器生成 Promise 链。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["线程创建成本高"] --&gt; B{"选择路线"}
+    B --&gt; C["轻量化线程"]
+    C --&gt; D["Coroutine"]
+    D --&gt; E["非阻塞 I/O + epoll"]
+    E --&gt; F["Goroutine + Channel"]
+    B --&gt; G["语言级异步"]
+    G --&gt; H["Callback"]
+    H --&gt; I["Promise"]
+    I --&gt; J["Async / Await"]
+    F --&gt; K["计算图"]
+    J --&gt; K
+</code></pre></div>
+
+<p>两条路线的目标一致：</p>
+<blockquote>
+<p>让程序员用接近函数调用和顺序代码的方式描述计算图，同时把昂贵的调度、等待与资源管理隐藏在运行时和语言实现中。</p>
+</blockquote>
+<hr />
+<h2 id="_2">附：官方参考与延伸阅读</h2>
+<ul>
+<li><a href="http://jyywiki.cn/OS/manuals/malloc-survey.pdf">malloc survey</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/thread-cost">线程成本实验</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/coroutine">用户态协程实现</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/mandelbrot-go">Mandelbrot-Go</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/web">Web 和事件编程</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Evolution_of_HTTP">HTTP 的演化</a></li>
+<li><a href="https://webassembly.org/docs/faq/">WebAssembly FAQ</a></li>
+<li><a href="https://github.com/vadimdemedes/ink">Ink</a></li>
+</ul>
+<p>官方课程资料：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/2026/">课程主页</a></li>
+<li><a href="https://jyywiki.cn/OS/2026/lect19.md">第 19 讲讲义：异步编程模型</a></li>
+<li><a href="https://www.bilibili.com/video/BV1dVRdBpEze/">视频：19 - 协程、Goroutine、异步编程</a></li>
+</ul>
+<blockquote>
+<p><strong>版权与署名</strong>：本讲课程材料由蒋炎岩（jyy）编写。课程讲义与幻灯片采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书保留课程出处、作者署名与许可说明。</p>
+</blockquote>
+    </article>
+
+    <!-- Mermaid 图表引擎初始化 -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            mermaid.initialize({ startOnLoad: false, theme: 'default' });
+            
+            // 兼容普通代码块以及丢失 language-mermaid 类名的情况 (CodeHilite 干扰)
+            const codeNodes = document.querySelectorAll('pre code, .highlight code');
+            codeNodes.forEach(function(node) {
+                const text = node.textContent.trim();
+                // 匹配常见的 mermaid 图表前缀
+                if (text.startsWith('graph ') || text.startsWith('flowchart ') || text.startsWith('sequenceDiagram') || text.startsWith('gantt') || text.startsWith('pie') || text.startsWith('classDiagram') || text.startsWith('stateDiagram') || text.startsWith('mindmap')) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.className = 'mermaid';
+                    tempDiv.textContent = text;
+                    
+                    // 获取需要替换的最外层父节点 (比如 div.highlight 或者 pre)
+                    const wrapper = node.closest('.highlight') || node.parentNode;
+                    wrapper.replaceWith(tempDiv); 
+                }
+            });
+            
+            // 所有节点转换完成，统一进行图表动态绘制
+            mermaid.run();
+        });
+    </script>
+    <!-- Lightbox：截图点击放大 -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const lightbox = document.createElement('div');
+            lightbox.className = 'lightbox';
+            lightbox.innerHTML = '<img alt=""><div class="lightbox-caption"></div>';
+            document.body.appendChild(lightbox);
+            const lbImg = lightbox.querySelector('img');
+            const lbCap = lightbox.querySelector('.lightbox-caption');
+            function openLightbox(src, alt) {
+                lbImg.src = src; lbImg.alt = alt || '';
+                lbCap.textContent = alt || '';
+                lightbox.classList.add('open');
+                document.body.style.overflow = 'hidden';
+            }
+            function closeLightbox() {
+                lightbox.classList.remove('open');
+                lbImg.src = '';
+                document.body.style.overflow = '';
+            }
+            document.querySelectorAll('.screenshot-card img').forEach(function(img) {
+                img.addEventListener('click', function() { openLightbox(img.src, img.alt); });
+            });
+            lightbox.addEventListener('click', closeLightbox);
+            document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
+        });
+    </script>
+</body>
+</html>
