@@ -1,0 +1,1324 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>输入输出设备和驱动：从一根 GPIO 线到 file_operations</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* ── 基础重置 ── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            color-scheme: light;
+            --bg-primary: #f7f7f8;
+            --bg-secondary: #ffffff;
+            --bg-card: #eef0f3;
+            --bg-code: #f2f3f5;
+            --text-primary: #1f2328;
+            --text-secondary: #57606a;
+            --text-muted: #6e7781;
+            --accent: #2563eb;
+            --accent-glow: rgba(37, 99, 235, 0.08);
+            --border: #d9dce1;
+            --border-subtle: #e7e9ec;
+            --radius: 12px;
+            --shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Serif SC', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.8;
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── 文章容器 ── */
+        .book-content {
+            max-width: 780px;
+            margin: 0 auto;
+            padding: 60px 32px 120px;
+        }
+
+        /* ── 标题 ── */
+        h1 {
+            font-size: 2.2em;
+            font-weight: 700;
+            margin: 0 0 12px;
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+        }
+
+        h2 {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 56px 0 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h3 {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: var(--accent);
+            margin: 36px 0 12px;
+        }
+
+        /* ── 段落与文字 ── */
+        p {
+            margin: 0 0 16px;
+            color: var(--text-primary);
+        }
+
+        strong {
+            color: #0f172a;
+            font-weight: 600;
+        }
+
+        em {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.2s;
+        }
+        a:hover {
+            border-bottom-color: var(--accent);
+        }
+
+        /* ── 引用 ── */
+        blockquote {
+            margin: 24px 0;
+            padding: 16px 20px;
+            background: var(--bg-secondary);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 var(--radius) var(--radius) 0;
+            color: var(--text-secondary);
+        }
+        blockquote p { margin: 0; }
+
+        /* ── 列表 ── */
+        ul, ol {
+            margin: 12px 0 20px 24px;
+            color: var(--text-primary);
+        }
+        li {
+            margin: 6px 0;
+        }
+
+        /* ── 分割线 ── */
+        hr {
+            border: none;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border), transparent);
+            margin: 48px 0;
+        }
+
+        /* ── 表格 ── */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 24px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+        thead {
+            background: var(--bg-card);
+        }
+        th {
+            padding: 12px 16px;
+            font-weight: 600;
+            text-align: left;
+            color: var(--accent);
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        td {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border-subtle);
+        }
+        tbody tr {
+            background: var(--bg-secondary);
+            transition: background 0.15s;
+        }
+        tbody tr:hover {
+            background: var(--bg-card);
+        }
+
+        /* ── 代码 ── */
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-code);
+            padding: 2px 7px;
+            border-radius: 5px;
+            font-size: 0.88em;
+            color: #6d28d9;
+        }
+
+        pre {
+            margin: 20px 0;
+            padding: 20px 24px;
+            background: var(--bg-code);
+            border-radius: var(--radius);
+            overflow-x: auto;
+            border: 1px solid var(--border);
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9em;
+            color: var(--text-primary);
+        }
+
+        /* ── 视频嵌入卡片 ── */
+        .video-card {
+            margin: 32px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .video-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(15, 23, 42, 0.12);
+        }
+
+        .video-wrapper {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 */
+            height: 0;
+            overflow: hidden;
+        }
+        .video-wrapper iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .video-card img {
+            width: 100%;
+            display: block;
+        }
+
+        .video-caption {
+            padding: 12px 16px;
+            font-size: 0.88em;
+            color: var(--text-secondary);
+            text-align: center;
+            line-height: 1.6;
+            margin: 0;
+        }
+        .video-caption a {
+            color: var(--accent);
+        }
+
+        .video-card.fallback {
+            padding: 20px;
+            text-align: center;
+        }
+
+        /* ── Lightbox：截图点击放大 ── */
+        .screenshot-card img { cursor: zoom-in; transition: opacity 0.15s; }
+        .screenshot-card img:hover { opacity: 0.9; }
+        .lightbox {
+            position: fixed; inset: 0; z-index: 999;
+            display: none; align-items: center; justify-content: center;
+            background: rgba(5, 5, 8, 0.92); backdrop-filter: blur(4px);
+            cursor: zoom-out; padding: 24px;
+        }
+        .lightbox.open { display: flex; }
+        .lightbox img {
+            max-width: 96vw; max-height: 90vh;
+            border-radius: 8px; box-shadow: 0 12px 60px rgba(0,0,0,0.7);
+        }
+        .lightbox-caption {
+            position: absolute; bottom: 14px; left: 0; right: 0;
+            text-align: center; color: var(--text-secondary); font-size: 0.85em;
+        }
+
+        /* ── 顶部信息栏 ── */
+        .book-content > blockquote:first-of-type {
+            background: var(--accent-glow);
+            border-left-color: var(--accent);
+            border-radius: var(--radius);
+            margin-bottom: 32px;
+        }
+
+        /* ── 图表居中 ── */
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            margin: 32px 0;
+            overflow-x: auto;
+        }
+
+        /* ── 滚动条 ── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* ── 响应式 ── */
+        @media (max-width: 640px) {
+            .book-content { padding: 32px 16px 80px; }
+            h1 { font-size: 1.7em; }
+            h2 { font-size: 1.3em; }
+        }
+    </style>
+</head>
+<body>
+    <article class="book-content">
+        <h1 id="gpio-file_operations">输入输出设备和驱动：从一根 GPIO 线到 file_operations</h1>
+<blockquote>
+<p><strong>课程</strong>：2026 春季学期《操作系统原理》<br />
+<strong>讲师</strong>：蒋炎岩（jyy）<br />
+<strong>官方课程主页</strong>：<a href="https://jyywiki.cn/OS/2026/">https://jyywiki.cn/OS/2026/</a><br />
+<strong>官方讲义</strong>：<a href="https://jyywiki.cn/OS/2026/lect22.md">https://jyywiki.cn/OS/2026/lect22.md</a><br />
+<strong>视频来源</strong>：<a href="https://www.bilibili.com/video/BV1dYLq6gE8W/">Bilibili BV1dYLq6gE8W</a><br />
+<strong>版权说明</strong>：课程讲义与幻灯片归蒋炎岩所有，采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书是对课堂讲授的书面化重构，保留出处与许可说明。</p>
+</blockquote>
+<h2 id="_1">导语：计算机真正“看得见”的部分</h2>
+<p><em>(参考时间: 00:00)</em></p>
+<p>操作系统课程前几部分主要在讲 CPU、地址空间、进程和并发。这些内容都是用户平时“看不见”的：</p>
+<ul>
+<li>进程如何被虚拟化；</li>
+<li>线程如何同步；</li>
+<li>GPU 如何执行海量线程。</li>
+</ul>
+<p>而用户实际接触到的计算机，是键盘、鼠标、屏幕、摄像头、打印机、磁盘和网络：</p>
+<blockquote>
+<p>输入输出设备是计算世界与物理世界之间的桥梁。</p>
+</blockquote>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["CPU / 内存"] --&gt; B["I/O 控制器"]
+    B --&gt; C1["键盘 / 鼠标"]
+    B --&gt; C2["屏幕 / 打印机"]
+    B --&gt; C3["磁盘 / 网卡"]
+    B --&gt; C4["摄像头 / 传感器"]
+    C1 --&gt; D["物理世界"]
+    C2 --&gt; D
+    C3 --&gt; D
+    C4 --&gt; D
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_02_30.png" alt="用户直接接触到的计算机几乎全是 I/O 设备" loading="lazy">
+  <p class="video-caption">📷 用户直接接触到的计算机几乎全是 I/O 设备<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=150" target="_blank" rel="noopener">回到原视频 (00:02:30)</a></p>
+</div>
+
+<hr />
+<h2 id="1-io">1. I/O 设备的最小模型</h2>
+<h3 id="11-canonical-device-model">1.1 Canonical Device Model</h3>
+<p><em>(参考时间: 00:04)</em></p>
+<p>一个设备在 CPU 看来可以简化成“几组约定好功能的寄存器”：</p>
+<ul>
+<li><strong>Status</strong>：设备是否 ready，是否有数据，是否出错；</li>
+<li><strong>Command</strong>：要求设备执行什么操作；</li>
+<li><strong>Data</strong>：读写实际数据。</li>
+</ul>
+<p>设备内部可能非常复杂，但 CPU 只需和这几类寄存器交互。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    CPU["CPU"] --&gt; S["Status Register"]
+    CPU --&gt; C["Command Register"]
+    CPU --&gt; D["Data Register"]
+    S --&gt; DEV["Device Controller"]
+    C --&gt; DEV
+    D --&gt; DEV
+    DEV --&gt; PHYS["Physical Device"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_05_30.png" alt="Status、Command、Data 构成最简设备接口" loading="lazy">
+  <p class="video-caption">📷 Status、Command、Data 构成最简设备接口<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=330" target="_blank" rel="noopener">回到原视频 (00:05:30)</a></p>
+</div>
+
+<h3 id="12-port-iommio">1.2 Port I/O、MMIO 与中断</h3>
+<p><em>(参考时间: 00:06)</em></p>
+<p>寄存器可以通过两种方式映射给 CPU：</p>
+<ol>
+<li><strong>Port I/O</strong>：需要单独的 I/O 地址空间，如 x86 的 <code>in/out</code>；</li>
+<li><strong>Memory-mapped I/O</strong>：寄存器被映射到物理地址，直接使用 load/store 访问。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>x86:
+  inb / outb        → I/O 地址空间
+
+ARM / RISC-V:
+  load / store      → MMIO 地址
+</code></pre></div>
+
+<p>设备还能通过中断通知 CPU。操作系统可以把它理解成一个等待事件的线程：</p>
+<div class="highlight"><pre><span></span><code>device thread:
+    P(semaphore)
+
+interrupt handler:
+    V(semaphore)
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["设备产生数据"] --&gt; B["拉高中断线"]
+    B --&gt; C["CPU 跳转中断处理程序"]
+    C --&gt; D["V(semaphore)"]
+    D --&gt; E["唤醒设备线程"]
+    E --&gt; F["读取设备数据"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_07_30.png" alt="MMIO、Port I/O 与中断共同连接 CPU 和设备" loading="lazy">
+  <p class="video-caption">📷 MMIO、Port I/O 与中断共同连接 CPU 和设备<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=450" target="_blank" rel="noopener">回到原视频 (00:07:30)</a></p>
+</div>
+
+<hr />
+<h2 id="2">2. 从最简单的设备开始</h2>
+<h3 id="21-gpio-led">2.1 GPIO LED</h3>
+<p><em>(参考时间: 00:09)</em></p>
+<p>GPIO（General Purpose Input/Output）可以直接读取或写入电平：</p>
+<div class="highlight"><pre><span></span><code>0 = 低电平
+1 = 高电平（通常 3.3V）
+</code></pre></div>
+
+<p>在树莓派上，程序可以写出一个寄存器值来控制 LED。用户态程序则可以通过类似文件接口操作：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">int</span><span class="w"> </span><span class="n">fd</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">open</span><span class="p">(</span><span class="s">"/sys/class/leds/power/brightness"</span><span class="p">,</span><span class="w"> </span><span class="n">O_WRONLY</span><span class="p">);</span>
+<span class="n">write</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span><span class="w"> </span><span class="s">"1"</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span>
+</code></pre></div>
+
+<p>讲师指出：</p>
+<blockquote>
+<p>既然可以驱动 LED，就可以驱动继电器、马达或其他物理执行器。</p>
+</blockquote>
+<p>理论上，从控制一个灯到控制更复杂的外部设备，接口本质没有区别。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["用户程序"] --&gt; B["write 文件"]
+    B --&gt; C["设备驱动"]
+    C --&gt; D["GPIO 寄存器"]
+    D --&gt; E["LED / 继电器"]
+    E --&gt; F["物理动作"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_10_30.png" alt="GPIO 寄存器可以直接控制 LED 电平" loading="lazy">
+  <p class="video-caption">📷 GPIO 寄存器可以直接控制 LED 电平<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=630" target="_blank" rel="noopener">回到原视频 (00:10:30)</a></p>
+</div>
+
+<h3 id="22-uart">2.2 串口 UART</h3>
+<p><em>(参考时间: 00:13)</em></p>
+<p>UART 是 Universal Asynchronous Receiver/Transmitter。x86 上的 COM1 常见基址为 <code>0x3F8</code>：</p>
+<div class="highlight"><pre><span></span><code><span class="cp">#define COM1 0x3f8</span>
+
+<span class="k">static</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="nf">uart_init</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">outb</span><span class="p">(</span><span class="n">COM1</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">);</span>
+<span class="w">    </span><span class="n">outb</span><span class="p">(</span><span class="n">COM1</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="mh">0x80</span><span class="p">);</span>
+<span class="w">    </span><span class="n">outb</span><span class="p">(</span><span class="n">COM1</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">115200</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">9600</span><span class="p">);</span>
+<span class="w">    </span><span class="c1">// ...</span>
+<span class="p">}</span>
+
+<span class="k">static</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">uart_tx</span><span class="p">(</span><span class="n">AM_UART_TX_T</span><span class="w"> </span><span class="o">*</span><span class="n">send</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">outb</span><span class="p">(</span><span class="n">COM1</span><span class="p">,</span><span class="w"> </span><span class="n">send</span><span class="o">-&gt;</span><span class="n">data</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">static</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">uart_rx</span><span class="p">(</span><span class="n">AM_UART_RX_T</span><span class="w"> </span><span class="o">*</span><span class="n">recv</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">recv</span><span class="o">-&gt;</span><span class="n">data</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">inb</span><span class="p">(</span><span class="n">COM1</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">5</span><span class="p">)</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mh">0x1</span><span class="p">)</span>
+<span class="w">        </span><span class="o">?</span><span class="w"> </span><span class="n">inb</span><span class="p">(</span><span class="n">COM1</span><span class="p">)</span>
+<span class="w">        </span><span class="o">:</span><span class="w"> </span><span class="mi">-1</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>Linux 中 <code>/dev/ttyS0</code> 可能就对应一个 UART。寄存器足够简单，但组合起来就能实现终端通信。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["程序写 COM1 data"] --&gt; B["UART 发送器"]
+    B --&gt; C["串行电平变化"]
+    C --&gt; D["接收端 UART"]
+    D --&gt; E["接收寄存器"]
+    E --&gt; F["程序读取字符"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_14_30.png" alt="UART 通过少量寄存器实现字符收发" loading="lazy">
+  <p class="video-caption">📷 UART 通过少量寄存器实现字符收发<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=870" target="_blank" rel="noopener">回到原视频 (00:14:30)</a></p>
+</div>
+
+<h3 id="23-ps2">2.3 PS/2 键盘控制器</h3>
+<p><em>(参考时间: 00:16)</em></p>
+<p>IBM PC/AT 8042 键盘控制器使用少量线：</p>
+<ul>
+<li>Data；</li>
+<li>Clock；</li>
+<li>VCC；</li>
+<li>GND。</li>
+</ul>
+<p>常见端口：</p>
+<div class="highlight"><pre><span></span><code>0x60 = data
+0x64 = status / command
+</code></pre></div>
+
+<p>通过命令字节可以：</p>
+<ul>
+<li>控制 Caps Lock 灯；</li>
+<li>设置重复速度；</li>
+<li>设置重复延迟。</li>
+</ul>
+<p>早期键盘可以在控制器内部自动重复按键，以减少 CPU 负担。后来更多重复逻辑转移到软件。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["键盘矩阵"] --&gt; B["8042 Controller"]
+    B --&gt; C["Port 0x60 Data"]
+    B --&gt; D["Port 0x64 Status"]
+    D --&gt; E["CPU / Driver"]
+    E --&gt; F["LED / Repeat Rate"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_17_30.png" alt="PS/2 控制器用端口寄存器管理键盘状态" loading="lazy">
+  <p class="video-caption">📷 PS/2 控制器用端口寄存器管理键盘状态<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=1050" target="_blank" rel="noopener">回到原视频 (00:17:30)</a></p>
+</div>
+
+<h3 id="24-ata">2.4 ATA 磁盘</h3>
+<p><em>(参考时间: 00:18)</em></p>
+<p>ATA / IDE 磁盘同样暴露寄存器：</p>
+<div class="highlight"><pre><span></span><code>primary:   0x1f0 - 0x1f7
+secondary: 0x170 - 0x177
+</code></pre></div>
+
+<p>读取一个扇区：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="nf">readsect</span><span class="p">(</span><span class="kt">void</span><span class="w"> </span><span class="o">*</span><span class="n">dst</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">sect</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">waitdisk</span><span class="p">();</span>
+<span class="w">    </span><span class="n">out_byte</span><span class="p">(</span><span class="mh">0x1f2</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span><span class="w">                   </span><span class="c1">// sector count</span>
+<span class="w">    </span><span class="n">out_byte</span><span class="p">(</span><span class="mh">0x1f3</span><span class="p">,</span><span class="w"> </span><span class="n">sect</span><span class="p">);</span><span class="w">                </span><span class="c1">// LBA low</span>
+<span class="w">    </span><span class="n">out_byte</span><span class="p">(</span><span class="mh">0x1f4</span><span class="p">,</span><span class="w"> </span><span class="n">sect</span><span class="w"> </span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="mi">8</span><span class="p">);</span><span class="w">           </span><span class="c1">// LBA mid</span>
+<span class="w">    </span><span class="n">out_byte</span><span class="p">(</span><span class="mh">0x1f5</span><span class="p">,</span><span class="w"> </span><span class="n">sect</span><span class="w"> </span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="mi">16</span><span class="p">);</span><span class="w">          </span><span class="c1">// LBA high</span>
+<span class="w">    </span><span class="n">out_byte</span><span class="p">(</span><span class="mh">0x1f6</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="n">sect</span><span class="w"> </span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="mi">24</span><span class="p">)</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="mh">0xe0</span><span class="p">);</span><span class="w"> </span><span class="c1">// drive</span>
+<span class="w">    </span><span class="n">out_byte</span><span class="p">(</span><span class="mh">0x1f7</span><span class="p">,</span><span class="w"> </span><span class="mh">0x20</span><span class="p">);</span><span class="w">                </span><span class="c1">// read command</span>
+<span class="w">    </span><span class="n">waitdisk</span><span class="p">();</span>
+
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">SECTSIZE</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">4</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="o">++</span><span class="p">)</span>
+<span class="w">        </span><span class="p">((</span><span class="kt">uint32_t</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="n">dst</span><span class="p">)[</span><span class="n">i</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">in_long</span><span class="p">(</span><span class="mh">0x1f0</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["等待磁盘 Ready"] --&gt; B["写扇区数量"]
+    B --&gt; C["写 LBA 地址"]
+    C --&gt; D["写 READ Command"]
+    D --&gt; E["等待数据 Ready"]
+    E --&gt; F["从 Data 端口读取"]
+    F --&gt; G["写入内存"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_19_30.png" alt="ATA 磁盘通过端口寄存器和 PIO 搬运扇区" loading="lazy">
+  <p class="video-caption">📷 ATA 磁盘通过端口寄存器和 PIO 搬运扇区<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=1170" target="_blank" rel="noopener">回到原视频 (00:19:30)</a></p>
+</div>
+
+<hr />
+<h2 id="3">3. 打印机：设备也是一台程序解释器</h2>
+<h3 id="31">3.1 绘图仪模型</h3>
+<p><em>(参考时间: 00:21)</em></p>
+<p>早期打印机其实可以看成绘图仪：</p>
+<ul>
+<li>X 轴移动；</li>
+<li>Y 轴移动；</li>
+<li>抬笔、落笔。</li>
+</ul>
+<p>只要有直线移动和抬落笔，就能画出任意图形。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Pen Up / Down"] --&gt; D["Draw"]
+    B["X Movement"] --&gt; D
+    C["Y Movement"] --&gt; D
+    D --&gt; E["Arbitrary Lines"]
+    E --&gt; F["Arbitrary Graphics"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_22_30.png" alt="绘图仪通过 X/Y 移动和抬笔落笔绘制图形" loading="lazy">
+  <p class="video-caption">📷 绘图仪通过 X/Y 移动和抬笔落笔绘制图形<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=1350" target="_blank" rel="noopener">回到原视频 (00:22:30)</a></p>
+</div>
+
+<h3 id="32">3.2 从低级命令到页面描述语言</h3>
+<p><em>(参考时间: 00:24)</em></p>
+<p>打印机本身可以理解为一台解释器：</p>
+<div class="highlight"><pre><span></span><code>高级页面描述
+    ↓ 编译器
+打印机控制指令
+    ↓ Data Register
+打印机解释器
+    ↓
+机械动作
+</code></pre></div>
+
+<p>当打印内容越来越复杂，就需要更高层的页面描述语言：</p>
+<ul>
+<li>PCL；</li>
+<li>PostScript；</li>
+<li>PDF；</li>
+<li>IPP / AirPrint。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["LaTeX / Markdown"] --&gt; B["PostScript / PDF"]
+    B --&gt; C["Printer Command Stream"]
+    C --&gt; D["Printer Interpreter"]
+    D --&gt; E["Raster / Vector Operations"]
+    E --&gt; F["Printed Page"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_25_30.png" alt="设备可以解释程序，而不仅仅接收原始字节" loading="lazy">
+  <p class="video-caption">📷 设备可以解释程序，而不仅仅接收原始字节<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=1530" target="_blank" rel="noopener">回到原视频 (00:25:30)</a></p>
+</div>
+
+<h3 id="33-pcl">3.3 PCL 命令流</h3>
+<p><em>(参考时间: 00:26)</em></p>
+<p>PCL 使用 ESC 前缀和命令字符：</p>
+<div class="highlight"><pre><span></span><code>&lt;ESC&gt;*t300R          设置 300 DPI
+&lt;ESC&gt;*r1A            开始光栅图形
+&lt;ESC&gt;*b100W          设置光栅宽度
+&lt;ESC&gt;*b0M            设置无压缩模式
+&lt;ESC&gt;*b100V          发送 100 字节数据
+&lt;binary raster data&gt;
+&lt;ESC&gt;*rB             结束光栅图形
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["PCL Escape Sequence"] --&gt; B["设置分辨率"]
+    B --&gt; C["开始 Raster"]
+    C --&gt; D["发送图像数据"]
+    D --&gt; E["结束 Raster"]
+    E --&gt; F["打印"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_27_30.png" alt="PCL 用转义命令流描述打印和图像数据" loading="lazy">
+  <p class="video-caption">📷 PCL 用转义命令流描述打印和图像数据<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=1650" target="_blank" rel="noopener">回到原视频 (00:27:30)</a></p>
+</div>
+
+<h3 id="34-postscript-pdf">3.4 PostScript 与 PDF</h3>
+<p><em>(参考时间: 00:28)</em></p>
+<p>PostScript 是图灵完备的页面描述语言：</p>
+<ul>
+<li>构造路径；</li>
+<li>填充路径；</li>
+<li>绘制曲线；</li>
+<li>设置字体；</li>
+<li>渲染文本；</li>
+<li>引用外部对象。</li>
+</ul>
+<p>PDF 保留了页面描述能力，但去掉了 PostScript 的通用执行能力，成为更安全的容器格式。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["PostScript Program"] --&gt; B["Path Construction"]
+    B --&gt; C["Stroke / Fill"]
+    C --&gt; D["Text / Font"]
+    D --&gt; E["Page Output"]
+    F["PDF"] --&gt; B
+    F --&gt; G["Safer Container"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_30_30.png" alt="PostScript 用图形状态机描述高质量页面" loading="lazy">
+  <p class="video-caption">📷 PostScript 用图形状态机描述高质量页面<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=1830" target="_blank" rel="noopener">回到原视频 (00:30:30)</a></p>
+</div>
+
+<hr />
+<h2 id="4-uvc">4. UVC 摄像头：标准化带来的即插即用</h2>
+<p><em>(参考时间: 00:32)</em></p>
+<p>如今大量 USB 摄像头都是“免驱”的，原因是它们遵循 UVC（USB Video Class）。</p>
+<p>UVC 协议流程包括：</p>
+<ol>
+<li>枚举设备；</li>
+<li>查询能力；</li>
+<li>协商格式、分辨率、帧率；</li>
+<li>分配缓冲区；</li>
+<li>开始视频流；</li>
+<li>逐帧读取 MJPEG / H.264。</li>
+</ol>
+<p>虽然是 USB 设备，本质上仍然是交换字节流。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["USB 插入"] --&gt; B["枚举 UVC 设备"]
+    B --&gt; C["Query Capability"]
+    C --&gt; D["协商 Format / Resolution / FPS"]
+    D --&gt; E["分配 Buffer"]
+    E --&gt; F["Stream On"]
+    F --&gt; G["逐帧读取"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_32_30.png" alt="UVC 标准让摄像头可以被通用类驱动直接管理" loading="lazy">
+  <p class="video-caption">📷 UVC 标准让摄像头可以被通用类驱动直接管理<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=1950" target="_blank" rel="noopener">回到原视频 (00:32:30)</a></p>
+</div>
+
+<hr />
+<h2 id="5-dma">5. 协处理器与 DMA</h2>
+<h3 id="51-dma-memcpy-cpu">5.1 DMA 是一台只会 memcpy 的小 CPU</h3>
+<p><em>(参考时间: 00:35)</em></p>
+<p>DMA（Direct Memory Access）可以被理解为一台极简处理器：</p>
+<ul>
+<li>与 CPU 共享内存；</li>
+<li>可以访问部分 I/O 端口；</li>
+<li>只执行固定形式的搬运；</li>
+<li>不需要取指、译码和通用指令。</li>
+</ul>
+<p>Intel 8237 有四个通道：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="nf">T_i8237</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">4</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="k">struct</span><span class="w"> </span><span class="nc">channel_t</span><span class="w"> </span><span class="o">*</span><span class="n">ch</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">&amp;</span><span class="n">channels</span><span class="p">[</span><span class="n">i</span><span class="p">];</span>
+<span class="w">            </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ch</span><span class="o">-&gt;</span><span class="n">count</span><span class="o">--</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ch</span><span class="o">-&gt;</span><span class="n">mode</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">READ</span><span class="p">)</span>
+<span class="w">                    </span><span class="n">ch</span><span class="o">-&gt;</span><span class="n">io</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ch</span><span class="o">-&gt;</span><span class="n">mem</span><span class="p">[</span><span class="n">ch</span><span class="o">-&gt;</span><span class="n">addr</span><span class="o">++</span><span class="p">];</span>
+<span class="w">                </span><span class="k">else</span>
+<span class="w">                    </span><span class="n">ch</span><span class="o">-&gt;</span><span class="n">mem</span><span class="p">[</span><span class="n">ch</span><span class="o">-&gt;</span><span class="n">addr</span><span class="o">++</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ch</span><span class="o">-&gt;</span><span class="n">io</span><span class="p">;</span>
+<span class="w">                </span><span class="k">break</span><span class="p">;</span>
+<span class="w">            </span><span class="p">}</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart LR
+    CPU["CPU 配置 DMA"] --&gt; DMA["DMA Controller"]
+    MEM["Memory"] &lt;--&gt; DMA
+    DMA &lt;--&gt; IO["I/O Port"]
+    DMA --&gt; IRQ["完成后中断 CPU"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_35_30.png" alt="DMA 把大批量搬运从 CPU 指令流中卸载出去" loading="lazy">
+  <p class="video-caption">📷 DMA 把大批量搬运从 CPU 指令流中卸载出去<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=2130" target="_blank" rel="noopener">回到原视频 (00:35:30)</a></p>
+</div>
+
+<h3 id="52-gpu-npu">5.2 GPU 与 NPU 也是协处理器</h3>
+<p><em>(参考时间: 00:38)</em></p>
+<p>GPU 看起来像一台完整计算机：</p>
+<ul>
+<li>CPU 配置设备寄存器；</li>
+<li>kernel 和数据通过 DMA 送到显存；</li>
+<li>CPU 发出启动命令；</li>
+<li>GPU 调度大量线程执行。</li>
+</ul>
+<p>NPU 可能共享系统内存，但控制方式仍然类似：</p>
+<div class="highlight"><pre><span></span><code>准备输入
+    ↓
+配置设备
+    ↓
+启动 kernel / inference
+    ↓
+等待完成
+    ↓
+读取输出
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["CPU"] --&gt; B["配置控制寄存器"]
+    B --&gt; C["DMA 拷贝代码和数据"]
+    C --&gt; D["通知加速器启动"]
+    D --&gt; E["GPU / NPU 执行"]
+    E --&gt; F["DMA 写回结果"]
+    F --&gt; G["中断 CPU"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_38_30.png" alt="GPU/NPU 是带独立执行能力的异构协处理器" loading="lazy">
+  <p class="video-caption">📷 GPU/NPU 是带独立执行能力的异构协处理器<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=2310" target="_blank" rel="noopener">回到原视频 (00:38:30)</a></p>
+</div>
+
+<hr />
+<h2 id="6">6. 总线：连接万千设备</h2>
+<h3 id="61-io">6.1 总线也是特殊的 I/O 设备</h3>
+<p><em>(参考时间: 00:40)</em></p>
+<p>总线负责：</p>
+<ul>
+<li>设备注册；</li>
+<li>地址和数据转发；</li>
+<li>设备发现；</li>
+<li>中断发送；</li>
+<li>DMA 配置。</li>
+</ul>
+<p>CPU 只需要和总线协议交互，就能动态发现设备。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    CPU["CPU"] --&gt; BUS["Bus Controller"]
+    BUS --&gt; D1["Device 1"]
+    BUS --&gt; D2["Device 2"]
+    BUS --&gt; D3["Device 3"]
+    D1 --&gt; MEM["Memory"]
+    D2 --&gt; MEM
+    BUS --&gt; IRQ["Interrupts"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_41_30.png" alt="总线把设备注册、地址转发、中断和 DMA 统一起来" loading="lazy">
+  <p class="video-caption">📷 总线把设备注册、地址转发、中断和 DMA 统一起来<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=2490" target="_blank" rel="noopener">回到原视频 (00:41:30)</a></p>
+</div>
+
+<h3 id="62-pcieusb">6.2 PCIe、USB 与设备发现</h3>
+<p><em>(参考时间: 00:43)</em></p>
+<p>PCIe 设备可以插入 CPU 直连 lane：</p>
+<div class="highlight"><pre><span></span><code>lspci
+lsusb<span class="w"> </span>-t
+</code></pre></div>
+
+<p>操作系统在发现新设备后匹配驱动。设备 ID 可以用于识别厂商和型号。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["插入设备"] --&gt; B["总线发送中断"]
+    B --&gt; C["OS 扫描总线"]
+    C --&gt; D["读取 Device / Vendor ID"]
+    D --&gt; E["匹配驱动"]
+    E --&gt; F["初始化设备"]
+    F --&gt; G["创建 /dev 节点"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_44_30.png" alt="设备发现后由操作系统匹配并加载驱动" loading="lazy">
+  <p class="video-caption">📷 设备发现后由操作系统匹配并加载驱动<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=2670" target="_blank" rel="noopener">回到原视频 (00:44:30)</a></p>
+</div>
+
+<h3 id="63-bug">6.3 驱动 bug 会直接影响内核稳定性</h3>
+<p><em>(参考时间: 00:46)</em></p>
+<p>早期热插拔经常出现蓝屏或卡死，因为驱动运行在内核中。Windows 后来重构了驱动子系统。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["热插拔"] --&gt; B["自动加载 Driver"]
+    B --&gt; C{"驱动正确？"}
+    C -- "是" --&gt; D["设备可用"]
+    C -- "否" --&gt; E["内核崩溃 / 系统卡死"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_46_30.png" alt="设备驱动错误可能直接破坏整个内核" loading="lazy">
+  <p class="video-caption">📷 设备驱动错误可能直接破坏整个内核<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=2790" target="_blank" rel="noopener">回到原视频 (00:46:30)</a></p>
+</div>
+
+<h3 id="64-pcie">6.4 PCIe 的带宽、供电与一致性</h3>
+<p><em>(参考时间: 00:47)</em></p>
+<p>现代高速设备大多连接 PCIe：</p>
+<ul>
+<li>GPU；</li>
+<li>FPGA；</li>
+<li>网卡；</li>
+<li>NVMe SSD；</li>
+<li>USB Bridge。</li>
+</ul>
+<p>PCIe 特性包括：</p>
+<ul>
+<li>点对点高带宽；</li>
+<li>自带 DMA；</li>
+<li>Message-signaled Interrupts；</li>
+<li>插槽基础供电约 75 W；</li>
+<li>高功耗显卡需要额外 6-pin / 8-pin 供电。</li>
+</ul>
+<p>课程提到 PCIe 6.0 x16 可达约 <code>128 GB/s</code>。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["PCIe x16"] --&gt; B["GPU"]
+    A --&gt; C["NVMe SSD"]
+    A --&gt; D["800 Gbps NIC"]
+    A --&gt; E["FPGA"]
+    A --&gt; F["USB Bridge"]
+    A --&gt; G["DMA + Interrupt + Power"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_48_30.png" alt="PCIe 为高速设备提供带宽、DMA、中断和供电" loading="lazy">
+  <p class="video-caption">📷 PCIe 为高速设备提供带宽、DMA、中断和供电<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=2910" target="_blank" rel="noopener">回到原视频 (00:48:30)</a></p>
+</div>
+
+<h3 id="65-cxl">6.5 CXL 与远端内存</h3>
+<p><em>(参考时间: 00:50)</em></p>
+<p>CXL（Compute Express Link）建立于 PCIe 物理层之上，提供：</p>
+<ul>
+<li>CXL.io；</li>
+<li>CXL.cache；</li>
+<li>CXL.memory。</li>
+</ul>
+<p>它允许设备甚至另一台机器共享内存，让数据中心走向内存解耦和远端内存池。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Local CPU"] --&gt; B["Local Memory"]
+    A --&gt; C["CXL Link"]
+    C --&gt; D["Remote Memory Pool"]
+    C --&gt; E["Accelerator Memory"]
+    D --&gt; F["Disaggregated Datacenter"]
+    E --&gt; F
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_51_30.png" alt="CXL 让远端内存像本地地址空间一样被访问" loading="lazy">
+  <p class="video-caption">📷 CXL 让远端内存像本地地址空间一样被访问<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=3090" target="_blank" rel="noopener">回到原视频 (00:51:30)</a></p>
+</div>
+
+<hr />
+<h2 id="7">7. 应用程序如何访问设备</h2>
+<h3 id="71">7.1 为什么不能让程序直接访问寄存器</h3>
+<p><em>(参考时间: 00:53)</em></p>
+<p>如果多个进程直接操作设备：</p>
+<ul>
+<li>设备被共享；</li>
+<li>访问需要同步；</li>
+<li>同步遗漏会造成 data race；</li>
+<li>打印机作业、GPU 命令可能互相覆盖；</li>
+<li>低层设备接口会泄漏给所有应用。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["多个应用"] --&gt; B["同一设备寄存器"]
+    B --&gt; C["并发访问"]
+    C --&gt; D{"正确同步？"}
+    D -- "否" --&gt; E["Data Race / 输出损坏"]
+    D -- "是" --&gt; F["可安全共享"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_54_30.png" alt="共享设备需要操作系统统一虚拟化和同步" loading="lazy">
+  <p class="video-caption">📷 共享设备需要操作系统统一虚拟化和同步<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=3270" target="_blank" rel="noopener">回到原视频 (00:54:30)</a></p>
+</div>
+
+<h3 id="72-everything-is-a-file">7.2 Everything is a File</h3>
+<p><em>(参考时间: 00:55)</em></p>
+<p>操作系统把设备抽象为文件：</p>
+<div class="highlight"><pre><span></span><code><span class="k">struct</span><span class="w"> </span><span class="nc">file_operations</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">module</span><span class="w"> </span><span class="o">*</span><span class="n">owner</span><span class="p">;</span>
+<span class="w">    </span><span class="n">loff_t</span><span class="w"> </span><span class="p">(</span><span class="o">*</span><span class="n">llseek</span><span class="p">)(</span><span class="k">struct</span><span class="w"> </span><span class="nc">file</span><span class="w"> </span><span class="o">*</span><span class="p">,</span><span class="w"> </span><span class="n">loff_t</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="p">);</span>
+<span class="w">    </span><span class="kt">ssize_t</span><span class="w"> </span><span class="p">(</span><span class="o">*</span><span class="n">read</span><span class="p">)(</span><span class="k">struct</span><span class="w"> </span><span class="nc">file</span><span class="w"> </span><span class="o">*</span><span class="p">,</span><span class="w"> </span><span class="kt">char</span><span class="w"> </span><span class="n">__user</span><span class="w"> </span><span class="o">*</span><span class="p">,</span><span class="w"> </span><span class="kt">size_t</span><span class="p">,</span><span class="w"> </span><span class="n">loff_t</span><span class="w"> </span><span class="o">*</span><span class="p">);</span>
+<span class="w">    </span><span class="kt">ssize_t</span><span class="w"> </span><span class="p">(</span><span class="o">*</span><span class="n">write</span><span class="p">)(</span><span class="k">struct</span><span class="w"> </span><span class="nc">file</span><span class="w"> </span><span class="o">*</span><span class="p">,</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="kt">char</span><span class="w"> </span><span class="n">__user</span><span class="w"> </span><span class="o">*</span><span class="p">,</span><span class="w"> </span><span class="kt">size_t</span><span class="p">,</span><span class="w"> </span><span class="n">loff_t</span><span class="w"> </span><span class="o">*</span><span class="p">);</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="p">(</span><span class="o">*</span><span class="n">mmap</span><span class="p">)(</span><span class="k">struct</span><span class="w"> </span><span class="nc">file</span><span class="w"> </span><span class="o">*</span><span class="p">,</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="nc">vm_area_struct</span><span class="w"> </span><span class="o">*</span><span class="p">);</span>
+<span class="w">    </span><span class="kt">long</span><span class="w"> </span><span class="p">(</span><span class="o">*</span><span class="n">unlocked_ioctl</span><span class="p">)(</span><span class="k">struct</span><span class="w"> </span><span class="nc">file</span><span class="w"> </span><span class="o">*</span><span class="p">,</span><span class="w"> </span><span class="kt">unsigned</span><span class="w"> </span><span class="kt">int</span><span class="p">,</span><span class="w"> </span><span class="kt">unsigned</span><span class="w"> </span><span class="kt">long</span><span class="p">);</span>
+<span class="w">    </span><span class="c1">// ...</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<p>应用程序继续使用：</p>
+<div class="highlight"><pre><span></span><code><span class="n">open</span><span class="p">();</span>
+<span class="n">read</span><span class="p">();</span>
+<span class="n">write</span><span class="p">();</span>
+<span class="n">mmap</span><span class="p">();</span>
+<span class="n">ioctl</span><span class="p">();</span>
+<span class="n">close</span><span class="p">();</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Application"] --&gt; B["open/read/write"]
+    B --&gt; C["VFS"]
+    C --&gt; D["file_operations"]
+    D --&gt; E["Device Driver"]
+    E --&gt; F["Hardware Registers"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_56_30.png" alt="设备驱动通过 file_operations 接入文件系统接口" loading="lazy">
+  <p class="video-caption">📷 设备驱动通过 file_operations 接入文件系统接口<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=3390" target="_blank" rel="noopener">回到原视频 (00:56:30)</a></p>
+</div>
+
+<h3 id="73">7.3 驱动是系统调用到设备语言的翻译器</h3>
+<p><em>(参考时间: 00:58)</em></p>
+<p>设备驱动负责：</p>
+<ul>
+<li>等待设备 ready；</li>
+<li>轮询状态或等待中断；</li>
+<li>把数据写入设备寄存器；</li>
+<li>从设备寄存器读取数据；</li>
+<li>分配和回收缓冲区；</li>
+<li>处理错误与并发访问。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["read(fd, buf, n)"] --&gt; B["VFS"]
+    B --&gt; C["Driver read"]
+    C --&gt; D{"Device Ready？"}
+    D -- "否" --&gt; E["轮询 / 等待中断"]
+    E --&gt; D
+    D -- "是" --&gt; F["读取寄存器"]
+    F --&gt; G["复制到用户缓冲区"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_58_30.png" alt="设备驱动把统一文件接口翻译为具体硬件操作" loading="lazy">
+  <p class="video-caption">📷 设备驱动把统一文件接口翻译为具体硬件操作<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=3510" target="_blank" rel="noopener">回到原视频 (00:58:30)</a></p>
+</div>
+
+<hr />
+<h2 id="8">8. 实现一个设备驱动</h2>
+<h3 id="81-devnull">8.1 <code>/dev/null</code></h3>
+<p><em>(参考时间: 00:59)</em></p>
+<p><code>/dev/null</code> 是最简单的伪设备：</p>
+<ul>
+<li><code>read</code> 总是返回 0；</li>
+<li><code>write</code> 接收所有数据，但直接丢弃；</li>
+<li>返回写入字节数，假装写入成功。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>read(/dev/null)  → EOF
+write(/dev/null) → count, data discarded
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["read(/dev/null)"] --&gt; B["return 0"]
+    C["write(/dev/null, n)"] --&gt; D["discard data"]
+    D --&gt; E["return n"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_00_30.png" alt="/dev/null 通过极简驱动实现数据黑洞" loading="lazy">
+  <p class="video-caption">📷 /dev/null 通过极简驱动实现数据黑洞<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=3630" target="_blank" rel="noopener">回到原视频 (01:00:30)</a></p>
+</div>
+
+<h3 id="82-launcher">8.2 Launcher 设备</h3>
+<p><em>(参考时间: 01:01)</em></p>
+<p>课程实现了一个名为 <code>launcher</code> 的字符设备：</p>
+<div class="highlight"><pre><span></span><code>read(launcher)  → "this is dangerous"
+write(launcher, password) → check password
+</code></pre></div>
+
+<p>密码正确时，驱动在 kernel log 中输出发射信息；密码错误时记录拒绝信息。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["read(launcher)"] --&gt; B["返回 this is dangerous"]
+    C["write(launcher, secret)"] --&gt; D{"密码正确？"}
+    D -- "否" --&gt; E["记录 Incorrect secret"]
+    D -- "是" --&gt; F["执行 launch 操作"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_03_30.png" alt="Launcher 驱动把用户写操作转换为受保护设备命令" loading="lazy">
+  <p class="video-caption">📷 Launcher 驱动把用户写操作转换为受保护设备命令<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=3810" target="_blank" rel="noopener">回到原视频 (01:03:30)</a></p>
+</div>
+
+<h3 id="83">8.3 注册设备并加载模块</h3>
+<p><em>(参考时间: 01:03)</em></p>
+<p>驱动初始化时：</p>
+<ol>
+<li>注册字符设备；</li>
+<li>创建设备节点；</li>
+<li>实现 <code>read</code>、<code>write</code>；</li>
+<li>模块退出时清理。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>insmod<span class="w"> </span>launcher.ko
+cat<span class="w"> </span>/dev/nuke0
+<span class="nb">echo</span><span class="w"> </span>wrong-secret<span class="w"> </span>&gt;<span class="w"> </span>/dev/nuke0
+<span class="nb">echo</span><span class="w"> </span>correct-secret<span class="w"> </span>&gt;<span class="w"> </span>/dev/nuke0
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["insmod launcher.ko"] --&gt; B["register device"]
+    B --&gt; C["/dev/nuke0"]
+    C --&gt; D["read / write"]
+    D --&gt; E["driver callbacks"]
+    E --&gt; F["hardware side effect"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_05_30.png" alt="加载模块后设备节点出现，用户态通过文件接口访问" loading="lazy">
+  <p class="video-caption">📷 加载模块后设备节点出现，用户态通过文件接口访问<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=3930" target="_blank" rel="noopener">回到原视频 (01:05:30)</a></p>
+</div>
+
+<hr />
+<h2 id="9-ioctl">9. ioctl：控制接口的复杂性</h2>
+<h3 id="91">9.1 数据之外还有控制</h3>
+<p><em>(参考时间: 01:06)</em></p>
+<p><code>read/write</code> 适合数据流，但设备还有大量控制功能：</p>
+<ul>
+<li>打印机卡纸、清洁、装订；</li>
+<li>键盘跑马灯、宏、重复速度；</li>
+<li>终端窗口大小和行模式；</li>
+<li>磁盘健康、缓存策略；</li>
+<li>GPU 命令提交。</li>
+</ul>
+<p>这些功能通常由 <code>ioctl</code> 提供：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">int</span><span class="w"> </span><span class="nf">ioctl</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">fd</span><span class="p">,</span><span class="w"> </span><span class="kt">unsigned</span><span class="w"> </span><span class="kt">long</span><span class="w"> </span><span class="n">request</span><span class="p">,</span><span class="w"> </span><span class="p">...);</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Device"] --&gt; B["Data Path"]
+    A --&gt; C["Control Path"]
+    B --&gt; D["read / write / mmap"]
+    C --&gt; E["ioctl"]
+    E --&gt; F["Device-specific request"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_08_30.png" alt="设备数据与设备控制由不同接口承担" loading="lazy">
+  <p class="video-caption">📷 设备数据与设备控制由不同接口承担<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=4110" target="_blank" rel="noopener">回到原视频 (01:08:30)</a></p>
+</div>
+
+<h3 id="92-ioctl">9.2 ioctl 参数和设备相关语义</h3>
+<p><em>(参考时间: 01:09)</em></p>
+<p><code>ioctl</code> 的 request 和参数含义完全由设备驱动定义：</p>
+<div class="highlight"><pre><span></span><code>ioctl(fd, DEVICE_GET_STATUS, &amp;status)
+ioctl(fd, DEVICE_SET_MODE, mode)
+ioctl(fd, DEVICE_SUBMIT_COMMAND, &amp;cmd)
+</code></pre></div>
+
+<p>内核无法理解每个字段，只负责把请求转交驱动。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Application"] --&gt; B["ioctl(fd, request, arg)"]
+    B --&gt; C["VFS"]
+    C --&gt; D["Driver unlocked_ioctl"]
+    D --&gt; E["解释 request / arg"]
+    E --&gt; F["配置设备"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_11_30.png" alt="ioctl 把设备特定语义原样交给驱动解释" loading="lazy">
+  <p class="video-caption">📷 ioctl 把设备特定语义原样交给驱动解释<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=4290" target="_blank" rel="noopener">回到原视频 (01:11:30)</a></p>
+</div>
+
+<h3 id="93-gpu-ioctl">9.3 GPU 通过 ioctl 提交命令</h3>
+<p><em>(参考时间: 01:13)</em></p>
+<p>GPU 是有独立内存的协处理器：</p>
+<ol>
+<li>用户通过 <code>mmap</code> 准备命令与数据；</li>
+<li>通过 <code>ioctl</code> 提交 buffer 地址；</li>
+<li>驱动启动 DMA；</li>
+<li>通过门铃寄存器通知 GPU 执行；</li>
+<li>完成后通过中断或同步对象通知。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["用户准备 Command Buffer"] --&gt; B["mmap"]
+    B --&gt; C["ioctl 提交地址"]
+    C --&gt; D["Driver 启动 DMA"]
+    D --&gt; E["写 Doorbell Register"]
+    E --&gt; F["GPU 执行"]
+    F --&gt; G["中断 / 同步"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_14_30.png" alt="GPU 驱动通过 mmap 和 ioctl 提交渲染或计算命令" loading="lazy">
+  <p class="video-caption">📷 GPU 驱动通过 mmap 和 ioctl 提交渲染或计算命令<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=4470" target="_blank" rel="noopener">回到原视频 (01:14:30)</a></p>
+</div>
+
+<h3 id="94-kvm">9.4 KVM：整个虚拟化子系统由一个设备接口控制</h3>
+<p><em>(参考时间: 01:15)</em></p>
+<p>Linux 的 <code>/dev/kvm</code> 通过 <code>ioctl</code> 暴露硬件虚拟化：</p>
+<ul>
+<li>创建 VM；</li>
+<li>设置 Guest 内存区域；</li>
+<li>创建 VCPU；</li>
+<li>设置/读取寄存器；</li>
+<li>执行 <code>KVM_RUN</code>；</li>
+<li>接收 VM Exit 原因。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["open(/dev/kvm)"] --&gt; B["ioctl KVM_CREATE_VM"]
+    B --&gt; C["ioctl SET_USER_MEMORY_REGION"]
+    C --&gt; D["ioctl KVM_CREATE_VCPU"]
+    D --&gt; E["ioctl KVM_RUN"]
+    E --&gt; F{"VM Exit？"}
+    F -- "是" --&gt; G["处理 Exit Reason"]
+    G --&gt; E
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_17_30.png" alt="KVM 用 ioctl 完成 VM、内存、VCPU 和运行控制" loading="lazy">
+  <p class="video-caption">📷 KVM 用 ioctl 完成 VM、内存、VCPU 和运行控制<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=4650" target="_blank" rel="noopener">回到原视频 (01:17:30)</a></p>
+</div>
+
+<hr />
+<h2 id="10-v4l2">10. 完整例子：用 V4L2 读取摄像头</h2>
+<h3 id="101-video-for-linux-2">10.1 Video for Linux 2</h3>
+<p><em>(参考时间: 01:20)</em></p>
+<p>Linux 把 UVC 摄像头抽象成 <code>/dev/videoX</code>，由 V4L2 子系统提供统一 <code>ioctl</code>。</p>
+<p>典型流程：</p>
+<div class="highlight"><pre><span></span><code><span class="n">fd</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">open</span><span class="p">(</span><span class="s">"/dev/video0"</span><span class="p">,</span><span class="w"> </span><span class="n">O_RDWR</span><span class="p">);</span>
+
+<span class="n">ioctl</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span><span class="w"> </span><span class="n">VIDIOC_QUERYCAP</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">cap</span><span class="p">);</span>
+<span class="n">ioctl</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span><span class="w"> </span><span class="n">VIDIOC_ENUM_FMT</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">fmt</span><span class="p">);</span>
+<span class="n">ioctl</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span><span class="w"> </span><span class="n">VIDIOC_S_FMT</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">format</span><span class="p">);</span>
+<span class="n">ioctl</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span><span class="w"> </span><span class="n">VIDIOC_REQBUFS</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">req</span><span class="p">);</span>
+<span class="n">ioctl</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span><span class="w"> </span><span class="n">VIDIOC_QUERYBUF</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">buf</span><span class="p">);</span>
+
+<span class="n">mmap</span><span class="p">(</span><span class="cm">/* buffer */</span><span class="p">);</span>
+
+<span class="n">ioctl</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span><span class="w"> </span><span class="n">VIDIOC_QBUF</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">buf</span><span class="p">);</span>
+<span class="n">ioctl</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span><span class="w"> </span><span class="n">VIDIOC_STREAMON</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">type</span><span class="p">);</span>
+<span class="n">ioctl</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span><span class="w"> </span><span class="n">VIDIOC_DQBUF</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">buf</span><span class="p">);</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["open /dev/video0"] --&gt; B["QUERYCAP"]
+    B --&gt; C["ENUM_FMT / S_FMT"]
+    C --&gt; D["REQBUFS"]
+    D --&gt; E["QUERYBUF / mmap"]
+    E --&gt; F["QBUF"]
+    F --&gt; G["STREAMON"]
+    G --&gt; H["DQBUF"]
+    H --&gt; I["处理一帧图像"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_20_30.png" alt="V4L2 用 ioctl 和 mmap 完成摄像头配置与取帧" loading="lazy">
+  <p class="video-caption">📷 V4L2 用 ioctl 和 mmap 完成摄像头配置与取帧<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=4830" target="_blank" rel="noopener">回到原视频 (01:20:30)</a></p>
+</div>
+
+<h3 id="102-">10.2 多缓冲区生产者-消费者</h3>
+<p><em>(参考时间: 01:22)</em></p>
+<p>摄像头和应用程序的生产/消费速度不同，因此使用多个 buffer：</p>
+<div class="highlight"><pre><span></span><code>Driver 填充 buffer
+    ↓
+Application 取走 buffer
+    ↓
+Application 处理完毕
+    ↓
+重新 QBUF 入队
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart LR
+    C["Camera"] --&gt; Q["Buffer Queue"]
+    Q --&gt; A["Application"]
+    A --&gt; P["Process Frame"]
+    P --&gt; R["Re-queue Buffer"]
+    R --&gt; Q
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_22_30.png" alt="多缓冲区队列吸收摄像头与用户程序的速度差异" loading="lazy">
+  <p class="video-caption">📷 多缓冲区队列吸收摄像头与用户程序的速度差异<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=4950" target="_blank" rel="noopener">回到原视频 (01:22:30)</a></p>
+</div>
+
+<hr />
+<h2 id="11-gpu">11. GPU 软件栈：驱动之上还有库和运行时</h2>
+<p><em>(参考时间: 01:24)</em></p>
+<p>GPU 访问通常形成多层抽象：</p>
+<div class="highlight"><pre><span></span><code>Application
+    ↓
+Mesa / Vulkan / OpenGL
+    ↓
+libdrm
+    ↓
+ioctl
+    ↓
+DRM Kernel Driver
+    ↓
+GPU
+</code></pre></div>
+
+<p>这和用户态系统调用、libc、应用框架的层次非常相似。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Application"] --&gt; B["OpenGL / Vulkan"]
+    B --&gt; C["Mesa"]
+    C --&gt; D["libdrm"]
+    D --&gt; E["ioctl"]
+    E --&gt; F["DRM Driver"]
+    F --&gt; G["GPU Commands"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_24_30.png" alt="GPU 用户态库最终通过 ioctl 和驱动提交命令" loading="lazy">
+  <p class="video-caption">📷 GPU 用户态库最终通过 ioctl 和驱动提交命令<br><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/?t=5070" target="_blank" rel="noopener">回到原视频 (01:24:30)</a></p>
+</div>
+
+<hr />
+<h2 id="12">12. 总结：复杂设备最终都要落到寄存器</h2>
+<p>输入输出设备形态各异：</p>
+<ul>
+<li>GPIO LED；</li>
+<li>UART；</li>
+<li>键盘；</li>
+<li>磁盘；</li>
+<li>打印机；</li>
+<li>摄像头；</li>
+<li>DMA；</li>
+<li>GPU、NPU；</li>
+<li>PCIe、USB、CXL。</li>
+</ul>
+<p>但在操作系统看来，它们最终都被抽象成实现了 <code>file_operations</code> 的对象：</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Physical Device"] --&gt; B["Controller Registers"]
+    B --&gt; C["Device Driver"]
+    C --&gt; D["file_operations"]
+    D --&gt; E["open / read / write / mmap / ioctl"]
+    E --&gt; F["Application"]
+</code></pre></div>
+
+<p>核心结论：</p>
+<blockquote>
+<p>从最简单的 LED 到复杂的 GPU，设备接口最终都可以归结为寄存器和数据交换；操作系统通过设备驱动把底层复杂性封装成统一、可共享、可同步的文件对象。</p>
+</blockquote>
+<hr />
+<h2 id="_2">附：官方参考与延伸阅读</h2>
+<ul>
+<li><a href="https://jyywiki.cn/OS/demos/persistence/gpio-led">GPIO LED</a></li>
+<li><a href="https://jyywiki.cn/OS/manuals/CalComp-Software-Reference.pdf">Canonical Device 与 CalComp 软件参考手册</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/persistence/postscript">PostScript 实验</a></li>
+<li><a href="https://www.rfc-editor.org/rfc/rfc8011">IPP 协议 RFC 8011</a></li>
+<li><a href="https://docs.qualcomm.com/nav/home/index_SNPE.html">高通 SNPE / NPU SDK</a></li>
+<li><a href="https://jyywiki.cn/OS/img/win98-scanner.mp4">Windows 98 USB 热插拔演示</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/persistence/launcher">Launcher 设备驱动实验</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/persistence/kvm">KVM Device 实验</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/persistence/webcam">WebCam / V4L2 实验</a></li>
+<li><a href="https://pages.cs.wisc.edu/~remzi/OSTEP/file-devices.pdf">Operating Systems: Three Easy Pieces, Chapter 36: I/O Devices</a></li>
+</ul>
+<p>官方课程资料：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/2026/">课程主页</a></li>
+<li><a href="https://jyywiki.cn/OS/2026/lect22.md">第 22 讲讲义：设备和驱动程序</a></li>
+<li><a href="https://www.bilibili.com/video/BV1dYLq6gE8W/">视频：22 - 输入输出设备和驱动</a></li>
+</ul>
+<blockquote>
+<p><strong>版权与署名</strong>：本讲课程材料由蒋炎岩（jyy）编写。课程讲义与幻灯片采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书保留课程出处、作者署名与许可说明。</p>
+</blockquote>
+    </article>
+
+    <!-- Mermaid 图表引擎初始化 -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            mermaid.initialize({ startOnLoad: false, theme: 'default' });
+            
+            // 兼容普通代码块以及丢失 language-mermaid 类名的情况 (CodeHilite 干扰)
+            const codeNodes = document.querySelectorAll('pre code, .highlight code');
+            codeNodes.forEach(function(node) {
+                const text = node.textContent.trim();
+                // 匹配常见的 mermaid 图表前缀
+                if (text.startsWith('graph ') || text.startsWith('flowchart ') || text.startsWith('sequenceDiagram') || text.startsWith('gantt') || text.startsWith('pie') || text.startsWith('classDiagram') || text.startsWith('stateDiagram') || text.startsWith('mindmap')) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.className = 'mermaid';
+                    tempDiv.textContent = text;
+                    
+                    // 获取需要替换的最外层父节点 (比如 div.highlight 或者 pre)
+                    const wrapper = node.closest('.highlight') || node.parentNode;
+                    wrapper.replaceWith(tempDiv); 
+                }
+            });
+            
+            // 所有节点转换完成，统一进行图表动态绘制
+            mermaid.run();
+        });
+    </script>
+    <!-- Lightbox：截图点击放大 -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const lightbox = document.createElement('div');
+            lightbox.className = 'lightbox';
+            lightbox.innerHTML = '<img alt=""><div class="lightbox-caption"></div>';
+            document.body.appendChild(lightbox);
+            const lbImg = lightbox.querySelector('img');
+            const lbCap = lightbox.querySelector('.lightbox-caption');
+            function openLightbox(src, alt) {
+                lbImg.src = src; lbImg.alt = alt || '';
+                lbCap.textContent = alt || '';
+                lightbox.classList.add('open');
+                document.body.style.overflow = 'hidden';
+            }
+            function closeLightbox() {
+                lightbox.classList.remove('open');
+                lbImg.src = '';
+                document.body.style.overflow = '';
+            }
+            document.querySelectorAll('.screenshot-card img').forEach(function(img) {
+                img.addEventListener('click', function() { openLightbox(img.src, img.alt); });
+            });
+            lightbox.addEventListener('click', closeLightbox);
+            document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
+        });
+    </script>
+</body>
+</html>
