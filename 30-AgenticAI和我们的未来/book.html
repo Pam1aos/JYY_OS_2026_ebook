@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agentic AI 和我们的未来：操作系统课程总结</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* ── 基础重置 ── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            color-scheme: light;
+            --bg-primary: #f7f7f8;
+            --bg-secondary: #ffffff;
+            --bg-card: #eef0f3;
+            --bg-code: #f2f3f5;
+            --text-primary: #1f2328;
+            --text-secondary: #57606a;
+            --text-muted: #6e7781;
+            --accent: #2563eb;
+            --accent-glow: rgba(37, 99, 235, 0.08);
+            --border: #d9dce1;
+            --border-subtle: #e7e9ec;
+            --radius: 12px;
+            --shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Serif SC', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.8;
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── 文章容器 ── */
+        .book-content {
+            max-width: 780px;
+            margin: 0 auto;
+            padding: 60px 32px 120px;
+        }
+
+        /* ── 标题 ── */
+        h1 {
+            font-size: 2.2em;
+            font-weight: 700;
+            margin: 0 0 12px;
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+        }
+
+        h2 {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 56px 0 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h3 {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: var(--accent);
+            margin: 36px 0 12px;
+        }
+
+        /* ── 段落与文字 ── */
+        p {
+            margin: 0 0 16px;
+            color: var(--text-primary);
+        }
+
+        strong {
+            color: #0f172a;
+            font-weight: 600;
+        }
+
+        em {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.2s;
+        }
+        a:hover {
+            border-bottom-color: var(--accent);
+        }
+
+        /* ── 引用 ── */
+        blockquote {
+            margin: 24px 0;
+            padding: 16px 20px;
+            background: var(--bg-secondary);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 var(--radius) var(--radius) 0;
+            color: var(--text-secondary);
+        }
+        blockquote p { margin: 0; }
+
+        /* ── 列表 ── */
+        ul, ol {
+            margin: 12px 0 20px 24px;
+            color: var(--text-primary);
+        }
+        li {
+            margin: 6px 0;
+        }
+
+        /* ── 分割线 ── */
+        hr {
+            border: none;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border), transparent);
+            margin: 48px 0;
+        }
+
+        /* ── 表格 ── */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 24px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+        thead {
+            background: var(--bg-card);
+        }
+        th {
+            padding: 12px 16px;
+            font-weight: 600;
+            text-align: left;
+            color: var(--accent);
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        td {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border-subtle);
+        }
+        tbody tr {
+            background: var(--bg-secondary);
+            transition: background 0.15s;
+        }
+        tbody tr:hover {
+            background: var(--bg-card);
+        }
+
+        /* ── 代码 ── */
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-code);
+            padding: 2px 7px;
+            border-radius: 5px;
+            font-size: 0.88em;
+            color: #6d28d9;
+        }
+
+        pre {
+            margin: 20px 0;
+            padding: 20px 24px;
+            background: var(--bg-code);
+            border-radius: var(--radius);
+            overflow-x: auto;
+            border: 1px solid var(--border);
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9em;
+            color: var(--text-primary);
+        }
+
+        /* ── 视频嵌入卡片 ── */
+        .video-card {
+            margin: 32px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .video-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(15, 23, 42, 0.12);
+        }
+
+        .video-wrapper {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 */
+            height: 0;
+            overflow: hidden;
+        }
+        .video-wrapper iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .video-card img {
+            width: 100%;
+            display: block;
+        }
+
+        .video-caption {
+            padding: 12px 16px;
+            font-size: 0.88em;
+            color: var(--text-secondary);
+            text-align: center;
+            line-height: 1.6;
+            margin: 0;
+        }
+        .video-caption a {
+            color: var(--accent);
+        }
+
+        .video-card.fallback {
+            padding: 20px;
+            text-align: center;
+        }
+
+        /* ── Lightbox：截图点击放大 ── */
+        .screenshot-card img { cursor: zoom-in; transition: opacity 0.15s; }
+        .screenshot-card img:hover { opacity: 0.9; }
+        .lightbox {
+            position: fixed; inset: 0; z-index: 999;
+            display: none; align-items: center; justify-content: center;
+            background: rgba(5, 5, 8, 0.92); backdrop-filter: blur(4px);
+            cursor: zoom-out; padding: 24px;
+        }
+        .lightbox.open { display: flex; }
+        .lightbox img {
+            max-width: 96vw; max-height: 90vh;
+            border-radius: 8px; box-shadow: 0 12px 60px rgba(0,0,0,0.7);
+        }
+        .lightbox-caption {
+            position: absolute; bottom: 14px; left: 0; right: 0;
+            text-align: center; color: #f3f4f6; font-size: 0.85em;
+        }
+
+        /* ── 顶部信息栏 ── */
+        .book-content > blockquote:first-of-type {
+            background: var(--accent-glow);
+            border-left-color: var(--accent);
+            border-radius: var(--radius);
+            margin-bottom: 32px;
+        }
+
+        /* ── 图表居中 ── */
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            margin: 32px 0;
+            overflow-x: auto;
+        }
+
+        /* ── 滚动条 ── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* ── 响应式 ── */
+        @media (max-width: 640px) {
+            .book-content { padding: 32px 16px 80px; }
+            h1 { font-size: 1.7em; }
+            h2 { font-size: 1.3em; }
+            pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+            code { overflow-wrap: anywhere; word-break: break-word; }
+        }
+    </style>
+</head>
+<body>
+    <article class="book-content">
+        <h1 id="agentic-ai">Agentic AI 和我们的未来：操作系统课程总结</h1>
+<blockquote>
+<p><strong>课程</strong>：2026 春季学期《操作系统原理》<br />
+<strong>讲师</strong>：蒋炎岩（jyy）<br />
+<strong>官方课程主页</strong>：<a href="https://jyywiki.cn/OS/2026/">https://jyywiki.cn/OS/2026/</a><br />
+<strong>官方讲义</strong>：<a href="https://jyywiki.cn/OS/2026/lect30.md">https://jyywiki.cn/OS/2026/lect30.md</a><br />
+<strong>视频来源</strong>：<a href="https://www.bilibili.com/video/BV1q2jh6FEhX/">Bilibili BV1q2jh6FEhX</a><br />
+<strong>版权说明</strong>：课程讲义与幻灯片归蒋炎岩所有，采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书是对课堂讲授的书面化重构，保留出处与许可说明。</p>
+</blockquote>
+<h2 id="agentic-ai_1">导语：从操作系统课走向 Agentic AI 时代</h2>
+<p><em>(参考时间: 00:00)</em></p>
+<p>这是课程的最后一讲。前半段回顾复习方法和整学期知识地图，后半段讨论一个更宏大的问题：当大模型和 Agent 持续 scaling，操作系统、大学教育和个人的未来会发生什么变化？</p>
+<p>课程一开始就给出了操作系统的两种视角：</p>
+<ul>
+<li><strong>应用视角</strong>：操作系统是一组管理硬件资源、支撑应用生态的 API；</li>
+<li><strong>硬件视角</strong>：CPU 不认识操作系统，只严格按指令和规范执行，操作系统与硬件共同演化。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    APP["应用程序"] --&gt; API["操作系统 API"]
+    API --&gt; OS["内核对象与资源管理"]
+    OS --&gt; HW["CPU / 内存 / 设备"]
+    HW --&gt; ISA["指令集规范"]
+    ISA --&gt; CPU["CPU 按规范执行"]
+    CPU --&gt; OS
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_00_40.png" alt="操作系统是一组管理硬件资源并支撑应用生态的 API" loading="lazy">
+  <p class="video-caption">📷 操作系统是一组管理硬件资源并支撑应用生态的 API<br><a href="https://www.bilibili.com/video/BV1q2jh6FEhX/?t=40" target="_blank" rel="noopener">回到原视频 (00:00:40)</a></p>
+</div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_02_40.png" alt="应用视角与硬件视角共同构成操作系统的完整图景" loading="lazy">
+  <p class="video-caption">📷 应用视角与硬件视角共同构成操作系统的完整图景<br><a href="https://www.bilibili.com/video/BV1q2jh6FEhX/?t=160" target="_blank" rel="noopener">回到原视频 (00:02:40)</a></p>
+</div>
+
+<hr />
+<h2 id="1">1. 怎样复习操作系统</h2>
+<h3 id="11">1.1 从需求出发，而不是背事实</h3>
+<p><em>(参考时间: 07:00)</em></p>
+<p>这门课真正希望留下的，不只是若干 API 和系统调用，而是一套 first principles：</p>
+<ol>
+<li>应用程序想做什么？</li>
+<li>操作系统能怎样提供这个能力？</li>
+<li>这个机制还能被怎样使用？</li>
+<li>如果让我重新设计，我会怎么做？</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    NEED["应用需求"] --&gt; API["设计操作系统 API"]
+    API --&gt; MECH["实现机制"]
+    MECH --&gt; USE["应用如何使用"]
+    USE --&gt; NEW["发现新的用法与问题"]
+    NEW --&gt; NEED
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_08_30.png" alt="复习时应从应用需求和 first principles 重新推导系统设计" loading="lazy">
+  <p class="video-caption">📷 复习时应从应用需求和 first principles 重新推导系统设计<br><a href="https://www.bilibili.com/video/BV1q2jh6FEhX/?t=510" target="_blank" rel="noopener">回到原视频 (00:08:30)</a></p>
+</div>
+
+<p>课程中的 demo 都围绕一个原则：计算机系统里没有魔法。只要行为异常，就一定能通过代码、系统调用、硬件状态和调度顺序解释。</p>
+<h3 id="12-agent">1.2 让 Agent 帮你构建复习工具</h3>
+<p><em>(参考时间: 09:30)</em></p>
+<p>课程内容全部以代码和 Markdown 保存，因此可以被 Agent 直接读取、执行、分析和重组。最有效的方式不是只下载课件，而是让 Coding Agent：</p>
+<ul>
+<li>克隆课程仓库；</li>
+<li>整理目录；</li>
+<li>编译运行所有 demo；</li>
+<li>提取每节课的知识点和代码；</li>
+<li>生成不同粒度的复习提纲；</li>
+<li>针对每个知识点生成模拟题；</li>
+<li>交互式追问和验证。</li>
+</ul>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_10_30.png" alt="Coding Agent 可以把零散课程文件整理成可运行的复习环境" loading="lazy">
+  <p class="video-caption">📷 Coding Agent 可以把零散课程文件整理成可运行的复习环境<br><a href="https://www.bilibili.com/video/BV1q2jh6FEhX/?t=630" target="_blank" rel="noopener">回到原视频 (00:10:30)</a></p>
+</div>
+
+<h3 id="13-unix-philosophy">1.3 Unix Philosophy：组合小工具完成大任务</h3>
+<p><em>(参考时间: 12:00)</em></p>
+<p>Windows 生态偏向功能完整的单一应用，例如 Office 或 Adobe 全家桶。Unix 更强调让每个工具做好一件事，再通过管道组合。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_14_00.png" alt="Unix 强调组合小工具，Windows 更倾向完整应用生态" loading="lazy">
+  <p class="video-caption">📷 Unix 强调组合小工具，Windows 更倾向完整应用生态<br><a href="https://www.bilibili.com/video/BV1q2jh6FEhX/?t=840" target="_blank" rel="noopener">回到原视频 (00:14:00)</a></p>
+</div>
+
+<p>例如，从所有课件中收集课程 demo 可以写成：</p>
+<div class="highlight"><pre><span></span><code>find<span class="w"> </span>OS2026/<span class="w"> </span>-name<span class="w"> </span><span class="s1">'lect*.py'</span><span class="w"> </span><span class="p">|</span>
+<span class="w">  </span>sort<span class="w"> </span>-V<span class="w"> </span><span class="p">|</span>
+<span class="w">  </span>xargs<span class="w"> </span>grep<span class="w"> </span>-h<span class="w"> </span>render_os_demo<span class="w"> </span><span class="p">|</span>
+<span class="w">  </span>awk<span class="w"> </span><span class="s1">'{$1=$1}!s[$0]++'</span><span class="w"> </span><span class="p">|</span>
+<span class="w">  </span>pbcopy
+</code></pre></div>
+
+<p>这条管道依次完成：</p>
+<ol>
+<li>找到课件文件；</li>
+<li>按讲次自然排序；</li>
+<li>搜索课程 demo；</li>
+<li>去除重复行；</li>
+<li>放入剪贴板。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    FIND["find"] --&gt; SORT["sort -V"]
+    SORT --&gt; XARGS["xargs grep"]
+    XARGS --&gt; AWK["awk 去重"]
+    AWK --&gt; CLIP["pbcopy"]
+    CLIP --&gt; RESULT["整学期 demo 清单"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_18_00.png" alt="Unix 管道把小工具组合成完整的数据处理流程" loading="lazy">
+  <p class="video-caption">📷 Unix 管道把小工具组合成完整的数据处理流程<br><a href="https://www.bilibili.com/video/BV1q2jh6FEhX/?t=1080" target="_blank" rel="noopener">回到原视频 (00:18:00)</a></p>
+</div>
+
+<p>这也是 Agent 时代非常重要的能力：工具之间通过文本、文件和系统调用合作，而不是把所有逻辑封死在单个应用内。</p>
+<h3 id="14-ai">1.4 用 AI 生成模拟题，但要保留判断</h3>
+<p><em>(参考时间: 20:30)</em></p>
+<p>课堂现场让 Agent 根据课件出一套模拟卷，内容覆盖了：</p>
+<ul>
+<li>并发控制与锁；</li>
+<li><code>fork()</code> 对进程状态的复制；</li>
+<li>文件描述符和偏移量继承；</li>
+<li>进程地址空间；</li>
+<li>万能的条件变量同步方法；</li>
+<li>文件系统崩溃一致性；</li>
+<li>资源泄漏和线程安全的数据结构。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    LECT["Lecture Notes"] --&gt; AGENT["Coding Agent"]
+    AGENT --&gt; TOPICS["提取知识点"]
+    TOPICS --&gt; QUESTIONS["按知识点生成问题"]
+    QUESTIONS --&gt; MOCK["模拟卷"]
+    MOCK --&gt; CHECK["学生作答与 Review"]
+    CHECK --&gt; GAPS["发现知识盲点"]
+    GAPS --&gt; TOPICS
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_22_20.png" alt="AI 可以依据课件为每个知识点生成复习题和解释" loading="lazy">
+  <p class="video-caption">📷 AI 可以依据课件为每个知识点生成复习题和解释<br><a href="https://www.bilibili.com/video/BV1q2jh6FEhX/?t=1340" target="_blank" rel="noopener">回到原视频 (00:22:20)</a></p>
+</div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_22_50.png" alt="AI 生成模拟卷后，学生仍需人工判断重点与正确性" loading="lazy">
+  <p class="video-caption">📷 AI 生成模拟卷后，学生仍需人工判断重点与正确性<br><a href="https://www.bilibili.com/video/BV1q2jh6FEhX/?t=1370" target="_blank" rel="noopener">回到原视频 (00:22:50)</a></p>
+</div>
+
+<p>但 AI 也有 alignment 问题。它认为重要的内容，未必和讲师的考试重点一致。正确用法是把它当作高吞吐的练习生成器和审阅器，而不是放弃自己的判断。</p>
+<h3 id="15">1.5 对照练习：把系统重新设计一遍</h3>
+<p><em>(参考时间: 24:00)</em></p>
+<p>复习一个机制时，可以执行以下循环：</p>
+<div class="highlight"><pre><span></span><code>理解需求
+  -&gt; 自己设计一个方案
+  -&gt; 对照真实操作系统
+  -&gt; 找出差异和原因
+  -&gt; 用代码和实验验证
+</code></pre></div>
+
+<p>例如 <code>fork()</code> 会复制“所有状态”，不仅是程序变量，还包括：</p>
+<ul>
+<li>地址空间；</li>
+<li>文件描述符；</li>
+<li>打开文件对象和偏移量；</li>
+<li>信号处理状态；</li>
+<li>操作系统对象引用。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    FORK["fork()"] --&gt; MEM["复制地址空间"]
+    FORK --&gt; FD["继承文件描述符"]
+    FD --&gt; OFFSET["共享打开文件偏移量"]
+    FORK --&gt; SIGNAL["继承信号状态"]
+    FORK --&gt; OBJ["继承部分操作系统对象引用"]
+    MEM --&gt; CHILD["子进程"]
+    FD --&gt; CHILD
+    SIGNAL --&gt; CHILD
+    OBJ --&gt; CHILD
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_26_00.png" alt="理解 fork 的关键是理解“复制所有状态”的真实范围" loading="lazy">
+  <p class="video-caption">📷 理解 fork 的关键是理解“复制所有状态”的真实范围<br><a href="https://www.bilibili.com/video/BV1q2jh6FEhX/?t=1560" target="_blank" rel="noopener">回到原视频 (00:26:00)</a></p>
+</div>
+
+<hr />
+<h2 id="2">2. 整学期知识地图</h2>
+<h3 id="21">2.1 从数字电路到最小操作系统</h3>
+<p><em>(参考时间: 34:30)</em></p>
+<p>课程从数字逻辑开始：时钟、导线、NAND 和寄存器构成数字系统，状态在每个时钟周期离散更新。随后：</p>
+<ul>
+<li>用 C 实现数字电路模拟器；</li>
+<li>实现 single-header RISC-V 模拟器；</li>
+<li>运行无 MMU 的 Linux；</li>
+<li>理解 CPU Reset 后的初始状态；</li>
+<li>调试 SeaBIOS 和 OpenSBI；</li>
+<li>构建最小可执行文件和最小操作系统。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    LOGIC["数字逻辑"] --&gt; CPU["RISC-V / x86 CPU"]
+    CPU --&gt; RESET["CPU Reset"]
+    RESET --&gt; FIRMWARE["Firmware"]
+    FIRMWARE --&gt; KERNEL["Kernel"]
+    KERNEL --&gt; INIT["第一个用户进程"]
+    INIT --&gt; WORLD["完整应用世界"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_35_20.png" alt="课程从数字逻辑、模拟器和 CPU Reset 逐步构建计算机系统全貌" loading="lazy">
+  <p class="video-caption">📷 课程从数字逻辑、模拟器和 CPU Reset 逐步构建计算机系统全貌<br><a href="https://www.bilibili.com/video/BV1q2jh6FEhX/?t=2120" target="_blank" rel="noopener">回到原视频 (00:35:20)</a></p>
+</div>
+
+<h3 id="22">2.2 程序、编译器与系统调用边界</h3>
+<p><em>(参考时间: 37:30)</em></p>
+<p>汉诺塔展示了 C 语言“顺序执行”和全局副作用的重要性。把递归程序改写成 SimpleC 后，可以明确看到：</p>
+<ul>
+<li>每个函数调用对应一个栈帧；</li>
+<li>栈帧必须记录执行位置；</li>
+<li>函数调用是状态机的一次迁移；</li>
+<li>编译器可以重写语义等价的状态迁移；</li>
+<li>系统调用是编译器无法穿透的边界。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    STATE["当前程序状态"] --&gt; STMT["执行一条 SimpleC 语句"]
+    STMT --&gt; OPT["编译优化可重写"]
+    STMT --&gt; SYSCALL["system call"]
+    SYSCALL --&gt; OS["控制流进入操作系统"]
+    OS --&gt; STATE2["返回一个可能被改变的世界"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_38_10.png" alt="编译器可以把普通语句重写为等价状态迁移，但不能穿透系统调用" loading="lazy">
+  <p class="video-caption">📷 编译器可以把普通语句重写为等价状态迁移，但不能穿透系统调用<br><a href="https://www.bilibili.com/video/BV1q2jh6FEhX/?t=2290" target="_blank" rel="noopener">回到原视频 (00:38:10)</a></p>
+</div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_41_50.png" alt="CPU Reset 到第一个用户进程构成系统启动的完整链路" loading="lazy">
+  <p class="video-caption">📷 CPU Reset 到第一个用户进程构成系统启动的完整链路<br><a href="https://www.bilibili.com/video/BV1q2jh6FEhX/?t=2510" target="_blank" rel="noopener">回到原视频 (00:41:50)</a></p>
+</div>
+
+<p>系统调用像一次麻醉手术：进程在调用期间无法感知外部世界，返回时地址空间、权限和对象状态都可能已经改变。</p>
+<h3 id="23">2.3 虚拟化：进程、地址空间与对象</h3>
+<p><em>(参考时间: 40:30)</em></p>
+<p>Virtualization 部分从一个 init 进程开始，通过 <code>fork</code>、<code>execve</code>、<code>exit</code> 等系统调用构建进程树。</p>
+<p>进程最重要的资源是虚拟地址空间。课程中的实验包括：</p>
+<ul>
+<li>自行实现 <code>malloc</code> / <code>free</code>；</li>
+<li>使用 <code>mmap</code> 按需分配大块内存；</li>
+<li>读取和修改其他进程的地址空间；</li>
+<li>调试一个最简单 C 程序的每条指令；</li>
+<li>通过文件描述符访问操作系统对象。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    INIT["init 进程"] --&gt; PID["fork / execve / exit"]
+    PID --&gt; TREE["进程树"]
+    INIT --&gt; AS["虚拟地址空间"]
+    AS --&gt; HEAP["mmap / malloc"]
+    AS --&gt; CODE["可执行代码"]
+    AS --&gt; STACK["线程栈"]
+    INIT --&gt; FD["文件描述符"]
+    FD --&gt; FILE["文件 / 管道 / Socket / 设备"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_43_30.png" alt="进程树和虚拟地址空间共同构成应用运行的操作系统环境" loading="lazy">
+  <p class="video-caption">📷 进程树和虚拟地址空间共同构成应用运行的操作系统环境<br><a href="https://www.bilibili.com/video/BV1q2jh6FEhX/?t=2610" target="_blank" rel="noopener">回到原视频 (00:43:30)</a></p>
+</div>
+
+<h3 id="24-everything-is-a-file">2.4 Everything is a File 与动态链接</h3>
+<p><em>(参考时间: 44:30)</em></p>
+<p>文件描述符是进程访问操作系统对象的句柄。Linux 把文件、管道、终端、Socket、设备等尽可能统一成文件接口。</p>
+<p>动态链接进一步暴露了系统边界中的“可玩性”：</p>
+<ul>
+<li>解释器可以在 libc 前加载其他库；</li>
+<li>符号可以被预加载库覆盖；</li>
+<li><code>LD_PRELOAD</code> 可以替换 <code>read</code>、<code>gettimeofday</code> 等函数；</li>
+<li>在应用和真实内核之间叠一层“模拟操作系统”。</li>
+</ul>
+<p>课堂演示的“变速齿轮”通过覆盖时间相关 API，让应用看到十倍速度的虚拟时间。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    APP["应用程序"] --&gt; LIBC["libc"]
+    PRELOAD["LD_PRELOAD 虚拟层"] --&gt; LIBC
+    LIBC --&gt; SYSCALL["真实系统调用"]
+    PRELOAD --&gt; TIME["替换时间 API"]
+    TIME --&gt; SLOW["改变应用感知的时间尺度"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_46_30.png" alt="LD_PRELOAD 可以在应用和内核之间插入一层虚拟化实现" loading="lazy">
+  <p class="video-caption">📷 LD_PRELOAD 可以在应用和内核之间插入一层虚拟化实现<br><a href="https://www.bilibili.com/video/BV1q2jh6FEhX/?t=2790" target="_blank" rel="noopener">回到原视频 (00:46:30)</a></p>
+</div>
+
+<h3 id="25">2.5 并发：打开魔鬼的盒子</h3>
+<p><em>(参考时间: 47:30)</em></p>
+<p>为了让多个处理器并行工作，进程内部出现多个共享内存的线程。共享内存让通信成本极低，同时引入数据竞争。</p>
+<p>课程从“山寨支付宝”的竞态开始，逐步讲到：</p>
+<ul>
+<li>线程、栈和线程局部存储；</li>
+<li>mutex、原子指令和自旋锁；</li>
+<li>宽松内存模型；</li>
+<li>Peterson 算法及其局限；</li>
+<li>生产者消费者；</li>
+<li>条件变量和信号量；</li>
+<li>死锁、lockdep 和 ThreadSanitizer；</li>
+<li>协程、Go channel、GPU 和 CUDA；</li>
+<li>指令级并行和 SIMT。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    THREAD["多线程"] --&gt; RACE["数据竞争"]
+    RACE --&gt; MUTEX["互斥"]
+    MUTEX --&gt; ATOMIC["原子指令"]
+    RACE --&gt; SYNC["条件同步"]
+    SYNC --&gt; COND["条件变量"]
+    SYNC --&gt; SEM["信号量"]
+    MUTEX --&gt; DEADLOCK["死锁"]
+    DEADLOCK --&gt; DETECT["lockdep / TSAN"]
+    THREAD --&gt; COROUTINE["协程 / Channel"]
+    THREAD --&gt; GPU["GPU / SIMT"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_48_30.png" alt="并发是整学期最独立也最困难的一部分，核心是控制执行流之间的顺序" loading="lazy">
+  <p class="video-caption">📷 并发是整学期最独立也最困难的一部分，核心是控制执行流之间的顺序<br><a href="https://www.bilibili.com/video/BV1q2jh6FEhX/?t=2910" target="_blank" rel="noopener">回到原视频 (00:48:30)</a></p>
+</div>
+
+<h3 id="26-io">2.6 I/O、设备和持久化</h3>
+<p><em>(参考时间: 50:30)</em></p>
+<p>操作系统统一管理 I/O 设备。设备驱动把系统调用翻译成设备寄存器和协议操作，再通过 <code>struct file_operations</code> 暴露成文件接口。</p>
+<p>课程覆盖了：</p>
+<ul>
+<li>GPIO LED；</li>
+<li>打印语言 PostScript；</li>
+<li>设备驱动和 KVM；</li>
+<li>WebCam 与 V4L2；</li>
+<li>Linux Block I/O；</li>
+<li>磁盘、NVMe 和 SSD；</li>
+<li>文件系统、FAT、ext4；</li>
+<li>WAL、Crash Consistency Checker；</li>
+<li>LVM、OverlayFS、符号链接和 mmap 数据结构。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    APP["应用 read / write"] --&gt; VFS["文件系统接口"]
+    VFS --&gt; DRIVER["设备驱动"]
+    DRIVER --&gt; DEVICE["硬盘 / USB / GPU / 摄像头"]
+    VFS --&gt; FS["文件系统"]
+    FS --&gt; BLOCK["Block Device"]
+    BLOCK --&gt; STORAGE["持久化存储"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_52_30.png" alt="操作系统把复杂设备抽象成文件接口，并在其上构建文件系统" loading="lazy">
+  <p class="video-caption">📷 操作系统把复杂设备抽象成文件接口，并在其上构建文件系统<br><a href="https://www.bilibili.com/video/BV1q2jh6FEhX/?t=3150" target="_blank" rel="noopener">回到原视频 (00:52:30)</a></p>
+</div>
+
+<h3 id="27-systems">2.7 Systems 的核心：好抽象</h3>
+<p><em>(参考时间: 53:30)</em></p>
+<p>操作系统的主题可以概括为：</p>
+<blockquote>
+<p>用好的抽象隐藏底层复杂性，同时尽可能保留底层能力。</p>
+</blockquote>
+<p>每一层抽象都在做两件事：</p>
+<ul>
+<li>对上层提供干净模型；</li>
+<li>对下层保留足够控制能力。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    APP["应用抽象"] --&gt; SYSCALL["系统调用"]
+    SYSCALL --&gt; OBJECT["操作系统对象"]
+    OBJECT --&gt; DRIVER["驱动程序"]
+    DRIVER --&gt; HARDWARE["硬件"]
+    HARDWARE --&gt; COMPLEX["复杂性消失了吗？"]
+    COMPLEX --&gt; NO["没有，只是被封装"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_54_00.png" alt="好的系统抽象降低开发者心智负担，但底层复杂性并没有消失" loading="lazy">
+  <p class="video-caption">📷 好的系统抽象降低开发者心智负担，但底层复杂性并没有消失<br><a href="https://www.bilibili.com/video/BV1q2jh6FEhX/?t=3240" target="_blank" rel="noopener">回到原视频 (00:54:00)</a></p>
+</div>
+
+<hr />
+<h2 id="3-scaling">3. 回望过去：技术与时代的 Scaling</h2>
+<h3 id="31-teaching-is-a-powerful-tool-to-learn">3.1 Teaching is a Powerful Tool to Learn</h3>
+<p><em>(参考时间: 55:30)</em></p>
+<p>讲师引用费曼的观点：在课堂上重新思考已经清楚的基本问题，本身就能产生新的研究方向。每一年重新讲授操作系统，都可能发现更好的组织和更深刻的联系。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    TEACH["教学"] --&gt; QUESTION["重新提问"]
+    QUESTION --&gt; UNDERSTAND["更深入理解"]
+    UNDERSTAND --&gt; RESEARCH["发现新研究问题"]
+    RESEARCH --&gt; TEACH
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_56_30.png" alt="教学不是知识输出的终点，而是重新学习和发现问题的过程" loading="lazy">
+  <p class="video-caption">📷 教学不是知识输出的终点，而是重新学习和发现问题的过程<br><a href="https://www.bilibili.com/video/BV1q2jh6FEhX/?t=3390" target="_blank" rel="noopener">回到原视频 (00:56:30)</a></p>
+</div>
+
+<h3 id="32">3.2 历史突破不是偶然</h3>
+<p><em>(参考时间: 57:30)</em></p>
+<p>课堂把多项技术突破放在 scaling 曲线中：</p>
+<ul>
+<li>1997 年 DeepBlue 击败国际象棋世界冠军；</li>
+<li>1998 年 Google 建立在存储密度增长之上；</li>
+<li>Intel、NVIDIA 分别抓住 CPU 和并行计算浪潮；</li>
+<li>OpenAI 建立在大规模语言模型 scaling 上。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    COMPUTE["算力指数增长"] --&gt; DEEPBLUE["DeepBlue"]
+    STORAGE["存储密度增长"] --&gt; GOOGLE["Google"]
+    CPU["CPU / 摩尔定律"] --&gt; INTEL["Intel"]
+    GPU["GPU 并行计算"] --&gt; NVIDIA["NVIDIA"]
+    SCALE["大模型 Scaling Law"] --&gt; OPENAI["OpenAI / LLM"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_57_30.png" alt="多项历史突破都发生在算力、存储或模型能力出现指数增长之后" loading="lazy">
+  <p class="video-caption">📷 多项历史突破都发生在算力、存储或模型能力出现指数增长之后<br><a href="https://www.bilibili.com/video/BV1q2jh6FEhX/?t=3450" target="_blank" rel="noopener">回到原视频 (00:57:30)</a></p>
+</div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_59_30.png" alt="GPU 与 AI 训练规模形成新的指数增长曲线" loading="lazy">
+  <p class="video-caption">📷 GPU 与 AI 训练规模形成新的指数增长曲线<br><a href="https://www.bilibili.com/video/BV1q2jh6FEhX/?t=3570" target="_blank" rel="noopener">回到原视频 (00:59:30)</a></p>
+</div>
+
+<p>每当某个关键能力开始指数增长，相关领域就可能发生结构性变化。</p>
+<h3 id="33-first-principles">3.3 从事实记忆转向 First Principles</h3>
+<p><em>(参考时间: 01:01:00)</em></p>
+<p>课程尤其强调从需求推导设计：</p>
+<div class="highlight"><pre><span></span><code>应用需要加载二进制
+  -&gt; 进程地址空间需要若干区域
+  -&gt; 可执行文件必须描述这些区域
+  -&gt; ELF 文件格式自然出现
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>应用需要动态加载库
+  -&gt; 需要符号解析与延迟绑定
+  -&gt; 动态链接器和 PLT/GOT 自然出现
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_01_20.png" alt="从应用需求出发可以重新推导 ELF、进程地址空间和动态链接" loading="lazy">
+  <p class="video-caption">📷 从应用需求出发可以重新推导 ELF、进程地址空间和动态链接<br><a href="https://www.bilibili.com/video/BV1q2jh6FEhX/?t=3680" target="_blank" rel="noopener">回到原视频 (01:01:20)</a></p>
+</div>
+
+<p>Git 是另一个例子。不要只记 command，而要从需求理解它：</p>
+<ul>
+<li>开发者需要本地版本管理；</li>
+<li>不同开发者之间需要同步；</li>
+<li>快照可以表示为 tree of blobs；</li>
+<li>提交形成 commit DAG；</li>
+<li>branch、stash、worktree 都可以从数据结构自然推导。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    SNAP["文件系统快照"] --&gt; BLOB["Blob"]
+    SNAP --&gt; TREE["Tree of Blobs"]
+    TREE --&gt; COMMIT["Commit"]
+    COMMIT --&gt; DAG["Commit DAG"]
+    DAG --&gt; BRANCH["Branch"]
+    DAG --&gt; STASH["Stash"]
+    DAG --&gt; WORKTREE["Worktree"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_04_00.png" alt="Git 可以被理解为管理文件系统快照的数据结构和提交 DAG" loading="lazy">
+  <p class="video-caption">📷 Git 可以被理解为管理文件系统快照的数据结构和提交 DAG<br><a href="https://www.bilibili.com/video/BV1q2jh6FEhX/?t=3840" target="_blank" rel="noopener">回到原视频 (01:04:00)</a></p>
+</div>
+
+<hr />
+<h2 id="4-agentic-ai-agi">4. 走向未来：Agentic AI 与 AGI</h2>
+<h3 id="41">4.1 三个阶段的能力放大</h3>
+<p><em>(参考时间: 01:06:20)</em></p>
+<p>大模型的能力增长可以分成三类 scaling：</p>
+<h4 id="pretraining-time-scaling">Pretraining-time scaling</h4>
+<p>更多高质量数据、更大参数、更强基础模型。</p>
+<h4 id="post-training-scaling">Post-training scaling</h4>
+<p>通过监督、强化学习和可验证反馈提高特定能力。代码具有清晰反馈信号，因此成为模型能力提升的重要训练场。</p>
+<h4 id="test-time-scaling">Test-time scaling</h4>
+<p>给模型更多思考时间、采样次数、检查和重试机会。模型可以在推理阶段继续搜索、验证和改进答案。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    PRE["Pretraining Scaling"] --&gt; BASE["强基础模型"]
+    BASE --&gt; POST["Post-training Scaling"]
+    POST --&gt; SKILL["代码 / 推理 / 工具能力"]
+    SKILL --&gt; TEST["Test-time Scaling"]
+    TEST --&gt; THINK["更长思考、自检、重试、搜索"]
+    THINK --&gt; OUT["更强任务表现"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_06_40.png" alt="预训练、后训练和测试时 scaling 共同推动模型能力增长" loading="lazy">
+  <p class="video-caption">📷 预训练、后训练和测试时 scaling 共同推动模型能力增长<br><a href="https://www.bilibili.com/video/BV1q2jh6FEhX/?t=4000" target="_blank" rel="noopener">回到原视频 (01:06:40)</a></p>
+</div>
+
+<p>可以把高中到大学类比为：</p>
+<ul>
+<li>高中阶段是广泛预训练；</li>
+<li>大学专业方向是后训练和微调；</li>
+<li>考试时的复盘与检查是 test-time scaling。</li>
+</ul>
+<h3 id="42">4.2 用“穷尽”解决难题</h3>
+<p><em>(参考时间: 01:08:30)</em></p>
+<p>当 AI 面对陌生数学题时，可以把问题与一个巨大的题集进行匹配，让模型遍历相似题目和解答，再组合已有思路。</p>
+<p>核心观察是：</p>
+<blockquote>
+<p>很多“难题”并没有真正新的结构，只是已有技巧的新组合。</p>
+</blockquote>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    PROBLEM["当前问题"] --&gt; RETRIEVE["枚举相似题与解答"]
+    RETRIEVE --&gt; MATCH["匹配问题和技巧"]
+    MATCH --&gt; COMPOSE["组合已有解法"]
+    COMPOSE --&gt; VERIFY["验证答案"]
+    VERIFY -- "失败" --&gt; RETRIEVE
+    VERIFY -- "成功" --&gt; SOLVED["解决"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_08_30.png" alt="Test-time scaling 通过枚举、匹配、组合与验证扩大有效推理预算" loading="lazy">
+  <p class="video-caption">📷 Test-time scaling 通过枚举、匹配、组合与验证扩大有效推理预算<br><a href="https://www.bilibili.com/video/BV1q2jh6FEhX/?t=4110" target="_blank" rel="noopener">回到原视频 (01:08:30)</a></p>
+</div>
+
+<p>只要有足够算力和反馈，这种过程可以持续扩展。</p>
+<h3 id="43">4.3 教育和工作的结构变化</h3>
+<p><em>(参考时间: 01:10:30)</em></p>
+<p>讲师的判断是：AGI 会逐渐削弱传统“服从性教学”和“信息差权力”的价值。</p>
+<ul>
+<li>学生可以获得适合自己的个性化教学；</li>
+<li>Agent 可以补平普通人之间的知识信息差；</li>
+<li>过去依赖记忆、流程和资历的优势会缩小；</li>
+<li>“比别人不菜一点”不再足以稳定胜出；</li>
+<li>真正稀缺的是想象力、提出问题、判断和持续学习能力。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    AGI["AGI 能力提升"] --&gt; TUTOR["个性化 AI 教师"]
+    AGI --&gt; AGENT["通用 Agent"]
+    TUTOR --&gt; EDUCATION["教育方式变化"]
+    AGENT --&gt; INFO["信息差缩小"]
+    INFO --&gt; WORK["职业结构变化"]
+    EDUCATION --&gt; POSITION["个人需要重新定位"]
+    WORK --&gt; POSITION
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_10_50.png" alt="AGI 会同时改变知识获取、教学方式和职业竞争结构" loading="lazy">
+  <p class="video-caption">📷 AGI 会同时改变知识获取、教学方式和职业竞争结构<br><a href="https://www.bilibili.com/video/BV1q2jh6FEhX/?t=4250" target="_blank" rel="noopener">回到原视频 (01:10:50)</a></p>
+</div>
+
+<p>未来的竞争不再是简单记忆和重复执行，而是能否定义问题、构建 Agent 工作流、判断结果并探索真正的未知。</p>
+<h3 id="44-vibeos">4.4 VibeOS：完全由模型幻觉出来的操作系统</h3>
+<p><em>(参考时间: 01:13:00)</em></p>
+<p>课堂播放了微软 BUILD 的一个演示项目 VibeOS。它是一个虚拟机镜像，界面包含记事本、计算器、浏览器和应用商店。</p>
+<p>特别之处在于：</p>
+<ul>
+<li>没有传统意义上的应用代码；</li>
+<li>按钮、事件处理和界面逻辑都由模型实时生成；</li>
+<li>网页内容和搜索结果也是模型幻觉；</li>
+<li>甚至可以继续模拟嵌套操作系统和终端。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    USER["用户输入"] --&gt; MODEL["生成模型"]
+    MODEL --&gt; UI["实时生成 UI"]
+    MODEL --&gt; CONTENT["实时生成内容"]
+    MODEL --&gt; LOGIC["实时解释操作"]
+    UI --&gt; SCREEN["屏幕状态"]
+    CONTENT --&gt; SCREEN
+    LOGIC --&gt; SCREEN
+    SCREEN --&gt; MODEL
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_20_40.png" alt="VibeOS 演示了没有传统应用代码、由模型实时生成界面和交互的全新计算形态" loading="lazy">
+  <p class="video-caption">📷 VibeOS 演示了没有传统应用代码、由模型实时生成界面和交互的全新计算形态<br><a href="https://www.bilibili.com/video/BV1q2jh6FEhX/?t=4840" target="_blank" rel="noopener">回到原视频 (01:20:40)</a></p>
+</div>
+
+<p>这类系统目前更像原型，但它提示了一个方向：</p>
+<ul>
+<li>用户只需要表达意图；</li>
+<li>模型生成界面、逻辑和数据；</li>
+<li>世界模型实时维持环境一致性；</li>
+<li>软件从“预先编写”转向“即时生成”。</li>
+</ul>
+<h3 id="45-generative-software-engineering">4.5 Generative Software Engineering</h3>
+<p><em>(参考时间: 01:22:20)</em></p>
+<p>下一步课程从传统 Web Coding 改名为 Generative Software Engineering，关注：</p>
+<ul>
+<li>使用国产一线模型构建应用；</li>
+<li>Agent Harness 设计；</li>
+<li>工具、Skills 和 Subagents；</li>
+<li>自动化评测与反馈；</li>
+<li>如何把复杂任务拆给模型；</li>
+<li>如何在 Agent 时代获得可信结果。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    GEN["Generative Software Engineering"] --&gt; MODEL["基础模型"]
+    GEN --&gt; HARNESS["Agent Harness"]
+    GEN --&gt; TOOLS["Tools / Skills"]
+    GEN --&gt; EVAL["自动评测"]
+    HARNESS --&gt; TASK["复杂任务分解"]
+    EVAL --&gt; RELIABILITY["可靠性与验证"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_22_30.png" alt="课程的未来方向是让模型、工具、测试和 Agent 工作流共同构建软件" loading="lazy">
+  <p class="video-caption">📷 课程的未来方向是让模型、工具、测试和 Agent 工作流共同构建软件<br><a href="https://www.bilibili.com/video/BV1q2jh6FEhX/?t=4950" target="_blank" rel="noopener">回到原视频 (01:22:30)</a></p>
+</div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_24_00.png" alt="课程结束时，每个人都需要在变化时代找到自己的位置" loading="lazy">
+  <p class="video-caption">📷 课程结束时，每个人都需要在变化时代找到自己的位置<br><a href="https://www.bilibili.com/video/BV1q2jh6FEhX/?t=5040" target="_blank" rel="noopener">回到原视频 (01:24:00)</a></p>
+</div>
+
+<hr />
+<h2 id="5">5. 总结：操作系统课留下的不是一张船票</h2>
+<p><em>(参考时间: 01:23:30)</em></p>
+<p>这门课从 API、进程、地址空间、并发和文件系统出发，最终回到一个更普遍的问题：如何在快速变化的世界中保持理解和创造能力。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    OS["操作系统"] --&gt; ABSTRACT["抽象"]
+    OS --&gt; CONCURRENCY["并发"]
+    OS --&gt; PERSIST["持久化"]
+    OS --&gt; SECURITY["安全"]
+    ABSTRACT --&gt; SYSTEMS["Systems Thinking"]
+    CONCURRENCY --&gt; SYSTEMS
+    PERSIST --&gt; SYSTEMS
+    SECURITY --&gt; SYSTEMS
+    SYSTEMS --&gt; AI["Agentic AI"]
+    AI --&gt; FUTURE["重新定义学习、工作与软件"]
+</code></pre></div>
+
+<p>核心结论：</p>
+<ul>
+<li>操作系统是应用需求、硬件能力和抽象设计之间的桥梁；</li>
+<li>真正应该掌握的是 first principles，而不是孤立事实；</li>
+<li>Unix 哲学与 Agent 工作流高度契合；</li>
+<li>Pretraining、post-training 和 test-time scaling 正在共同推动 AGI；</li>
+<li>信息差和服从性学习的价值会下降，问题定义、判断和想象力更加重要；</li>
+<li>VibeOS 展示了“软件即时生成”的可能性，但可靠系统仍需要操作系统、抽象、验证和工程约束；</li>
+<li>大学、工作和个人发展的游戏规则都会发生变化。</li>
+</ul>
+<p>课程结束时最重要的不是拿到一张保研、大厂或公务员的船票，而是理解船票只是起点。面对快速 scaling 的 AI，每个人都需要找到自己的兴趣、判断和长期方向。</p>
+<hr />
+<h2 id="demo">附：课程 Demo 与延伸资料</h2>
+<h3 id="introduction">Introduction</h3>
+<ul>
+<li><a href="https://jyywiki.cn/OS/demos/intro/logisim">数字电路模拟器</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/intro/mini-rv32ima">RISC-V 处理器模拟器</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/intro/cpu-reset">探索 CPU Reset</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/intro/minimal">最小可执行文件</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/intro/os-minimal">最小操作系统</a></li>
+</ul>
+<h3 id="virtualization">Virtualization</h3>
+<ul>
+<li><a href="https://jyywiki.cn/OS/demos/virtualization/fork-demo">理解 fork()</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/virtualization/addr-space">进程地址空间</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/virtualization/mmap">mmap 系统调用</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/virtualization/pipe">UNIX 管道</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/virtualization/bloat">动态链接与加载</a></li>
+</ul>
+<h3 id="concurrency">Concurrency</h3>
+<ul>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/alipay">山寨支付宝</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/producer-consumer">条件变量与生产者消费者</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/deadlock">死锁演示</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/tsan">ThreadSanitizer</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/concurrency/mandelbrot-cu">CUDA Mandelbrot</a></li>
+</ul>
+<h3 id="persistence">Persistence</h3>
+<ul>
+<li><a href="https://jyywiki.cn/OS/demos/virtualization/filedesc">文件描述符</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/persistence/mmds">Memory-mapped 数据结构</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/persistence/ccheck">Crash Consistency Checker</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/persistence/overlay">OverlayFS</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/persistence/lvm">逻辑卷管理 LVM</a></li>
+</ul>
+<h3 id="_1">课程与未来方向</h3>
+<ul>
+<li><a href="https://jyywiki.cn/OS/2026/">课程主页</a></li>
+<li><a href="https://jyywiki.cn/OS/2026/lect30.md">第 30 讲讲义：课程总结</a></li>
+<li><a href="https://www.bilibili.com/video/BV1kgEM6VEvL/">VibeOS 演示</a></li>
+<li><a href="https://deepmind.google/models/genie/">Genie 3 World Model</a></li>
+</ul>
+<blockquote>
+<p><strong>版权与署名</strong>：本讲课程材料由蒋炎岩（jyy）编写。课程讲义与幻灯片采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书保留课程出处、作者署名与许可说明。</p>
+</blockquote>
+    </article>
+
+    <!-- Mermaid 图表引擎初始化 -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            mermaid.initialize({ startOnLoad: false, theme: 'default' });
+            
+            // 兼容普通代码块以及丢失 language-mermaid 类名的情况 (CodeHilite 干扰)
+            const codeNodes = document.querySelectorAll('pre code, .highlight code');
+            codeNodes.forEach(function(node) {
+                const text = node.textContent.trim();
+                // 匹配常见的 mermaid 图表前缀
+                if (text.startsWith('graph ') || text.startsWith('flowchart ') || text.startsWith('sequenceDiagram') || text.startsWith('gantt') || text.startsWith('pie') || text.startsWith('classDiagram') || text.startsWith('stateDiagram') || text.startsWith('mindmap')) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.className = 'mermaid';
+                    tempDiv.textContent = text;
+                    
+                    // 获取需要替换的最外层父节点 (比如 div.highlight 或者 pre)
+                    const wrapper = node.closest('.highlight') || node.parentNode;
+                    wrapper.replaceWith(tempDiv); 
+                }
+            });
+            
+            // 所有节点转换完成，统一进行图表动态绘制
+            mermaid.run();
+        });
+    </script>
+    <!-- Lightbox：截图点击放大 -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const lightbox = document.createElement('div');
+            lightbox.className = 'lightbox';
+            lightbox.innerHTML = '<img alt=""><div class="lightbox-caption"></div>';
+            document.body.appendChild(lightbox);
+            const lbImg = lightbox.querySelector('img');
+            const lbCap = lightbox.querySelector('.lightbox-caption');
+            function openLightbox(src, alt) {
+                lbImg.src = src; lbImg.alt = alt || '';
+                lbCap.textContent = alt || '';
+                lightbox.classList.add('open');
+                document.body.style.overflow = 'hidden';
+            }
+            function closeLightbox() {
+                lightbox.classList.remove('open');
+                lbImg.src = '';
+                document.body.style.overflow = '';
+            }
+            document.querySelectorAll('.screenshot-card img').forEach(function(img) {
+                img.addEventListener('click', function() { openLightbox(img.src, img.alt); });
+            });
+            lightbox.addEventListener('click', closeLightbox);
+            document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
+        });
+    </script>
+</body>
+</html>

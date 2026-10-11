@@ -116,3 +116,7 @@
   - [Markdown 源稿](./28-计算机系统安全/book.md)
   - 视频：[Bilibili BV1qkEX6FEb5](https://www.bilibili.com/video/BV1qkEX6FEb5/)
   - 官方讲义：[第 28 讲](https://jyywiki.cn/OS/2026/lect28.md)
+- [第 30 讲：Agentic AI 和我们的未来；课程总结](./30-AgenticAI和我们的未来/book.html)
+  - [Markdown 源稿](./30-AgenticAI和我们的未来/book.md)
+  - 视频：[Bilibili BV1q2jh6FEhX](https://www.bilibili.com/video/BV1q2jh6FEhX/)
+  - 官方讲义：[第 30 讲](https://jyywiki.cn/OS/2026/lect30.md)
