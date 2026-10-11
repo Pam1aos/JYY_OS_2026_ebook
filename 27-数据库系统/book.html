@@ -1,0 +1,1419 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数据库系统：从文件持久化到 ACID 与向量检索</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* ── 基础重置 ── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            color-scheme: light;
+            --bg-primary: #f7f7f8;
+            --bg-secondary: #ffffff;
+            --bg-card: #eef0f3;
+            --bg-code: #f2f3f5;
+            --text-primary: #1f2328;
+            --text-secondary: #57606a;
+            --text-muted: #6e7781;
+            --accent: #2563eb;
+            --accent-glow: rgba(37, 99, 235, 0.08);
+            --border: #d9dce1;
+            --border-subtle: #e7e9ec;
+            --radius: 12px;
+            --shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Serif SC', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.8;
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── 文章容器 ── */
+        .book-content {
+            max-width: 780px;
+            margin: 0 auto;
+            padding: 60px 32px 120px;
+        }
+
+        /* ── 标题 ── */
+        h1 {
+            font-size: 2.2em;
+            font-weight: 700;
+            margin: 0 0 12px;
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+        }
+
+        h2 {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 56px 0 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h3 {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: var(--accent);
+            margin: 36px 0 12px;
+        }
+
+        /* ── 段落与文字 ── */
+        p {
+            margin: 0 0 16px;
+            color: var(--text-primary);
+        }
+
+        strong {
+            color: #0f172a;
+            font-weight: 600;
+        }
+
+        em {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.2s;
+        }
+        a:hover {
+            border-bottom-color: var(--accent);
+        }
+
+        /* ── 引用 ── */
+        blockquote {
+            margin: 24px 0;
+            padding: 16px 20px;
+            background: var(--bg-secondary);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 var(--radius) var(--radius) 0;
+            color: var(--text-secondary);
+        }
+        blockquote p { margin: 0; }
+
+        /* ── 列表 ── */
+        ul, ol {
+            margin: 12px 0 20px 24px;
+            color: var(--text-primary);
+        }
+        li {
+            margin: 6px 0;
+        }
+
+        /* ── 分割线 ── */
+        hr {
+            border: none;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border), transparent);
+            margin: 48px 0;
+        }
+
+        /* ── 表格 ── */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 24px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+        thead {
+            background: var(--bg-card);
+        }
+        th {
+            padding: 12px 16px;
+            font-weight: 600;
+            text-align: left;
+            color: var(--accent);
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        td {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border-subtle);
+        }
+        tbody tr {
+            background: var(--bg-secondary);
+            transition: background 0.15s;
+        }
+        tbody tr:hover {
+            background: var(--bg-card);
+        }
+
+        /* ── 代码 ── */
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-code);
+            padding: 2px 7px;
+            border-radius: 5px;
+            font-size: 0.88em;
+            color: #6d28d9;
+        }
+
+        pre {
+            margin: 20px 0;
+            padding: 20px 24px;
+            background: var(--bg-code);
+            border-radius: var(--radius);
+            overflow-x: auto;
+            border: 1px solid var(--border);
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9em;
+            color: var(--text-primary);
+        }
+
+        /* ── 视频嵌入卡片 ── */
+        .video-card {
+            margin: 32px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .video-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(15, 23, 42, 0.12);
+        }
+
+        .video-wrapper {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 */
+            height: 0;
+            overflow: hidden;
+        }
+        .video-wrapper iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .video-card img {
+            width: 100%;
+            display: block;
+        }
+
+        .video-caption {
+            padding: 12px 16px;
+            font-size: 0.88em;
+            color: var(--text-secondary);
+            text-align: center;
+            line-height: 1.6;
+            margin: 0;
+        }
+        .video-caption a {
+            color: var(--accent);
+        }
+
+        .video-card.fallback {
+            padding: 20px;
+            text-align: center;
+        }
+
+        /* ── Lightbox：截图点击放大 ── */
+        .screenshot-card img { cursor: zoom-in; transition: opacity 0.15s; }
+        .screenshot-card img:hover { opacity: 0.9; }
+        .lightbox {
+            position: fixed; inset: 0; z-index: 999;
+            display: none; align-items: center; justify-content: center;
+            background: rgba(5, 5, 8, 0.92); backdrop-filter: blur(4px);
+            cursor: zoom-out; padding: 24px;
+        }
+        .lightbox.open { display: flex; }
+        .lightbox img {
+            max-width: 96vw; max-height: 90vh;
+            border-radius: 8px; box-shadow: 0 12px 60px rgba(0,0,0,0.7);
+        }
+        .lightbox-caption {
+            position: absolute; bottom: 14px; left: 0; right: 0;
+            text-align: center; color: #f3f4f6; font-size: 0.85em;
+        }
+
+        /* ── 顶部信息栏 ── */
+        .book-content > blockquote:first-of-type {
+            background: var(--accent-glow);
+            border-left-color: var(--accent);
+            border-radius: var(--radius);
+            margin-bottom: 32px;
+        }
+
+        /* ── 图表居中 ── */
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            margin: 32px 0;
+            overflow-x: auto;
+        }
+
+        /* ── 滚动条 ── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* ── 响应式 ── */
+        @media (max-width: 640px) {
+            .book-content { padding: 32px 16px 80px; }
+            h1 { font-size: 1.7em; }
+            h2 { font-size: 1.3em; }
+            pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+            code { overflow-wrap: anywhere; word-break: break-word; }
+        }
+    </style>
+</head>
+<body>
+    <article class="book-content">
+        <h1 id="acid">数据库系统：从文件持久化到 ACID 与向量检索</h1>
+<blockquote>
+<p><strong>课程</strong>：2026 春季学期《操作系统原理》<br />
+<strong>讲师</strong>：蒋炎岩（jyy）<br />
+<strong>官方课程主页</strong>：<a href="https://jyywiki.cn/OS/2026/">https://jyywiki.cn/OS/2026/</a><br />
+<strong>官方讲义</strong>：<a href="https://jyywiki.cn/OS/2026/lect27.md">https://jyywiki.cn/OS/2026/lect27.md</a><br />
+<strong>视频来源</strong>：<a href="https://www.bilibili.com/video/BV1eqEA6JEZA/">Bilibili BV1eqEA6JEZA</a><br />
+<strong>版权说明</strong>：课程讲义与幻灯片归蒋炎岩所有，采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书是对课堂讲授的书面化重构，保留出处与许可说明。</p>
+</blockquote>
+<h2 id="_1">导语：应用程序的数据最终都是数据结构</h2>
+<p><em>(参考时间: 00:00)</em></p>
+<p>上一讲把文件系统理解为“磁盘上的一个数据结构”：UNIX 文件系统要保存一棵目录树或目录图，并且必须在块设备上实现它。除了树和图本身，持久化系统还要解决两个额外问题：</p>
+<ul>
+<li>文件系统的 crash consistency；</li>
+<li>应用程序自己的 crash consistency。</li>
+</ul>
+<p>系统可能在任何时刻断电。重启后，最近的少量操作可以丢失，但整个数据结构不能损坏，并且必须能够恢复到一个合法状态。</p>
+<p>这一讲顺着文件系统继续向后走。既然文件系统可以持久保存数据，那么应用程序应该怎样保存自己的数据？从小型课程网站到教务系统，再到服务全国乃至全球用户的数据库，持久数据的方法会如何演化？</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["应用程序"] --&gt; B["文件与目录"]
+    B --&gt; C["文件系统数据结构"]
+    C --&gt; D["块设备"]
+    D --&gt; E["持久化存储"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_00_10.png" alt="文件系统把块设备抽象成可恢复的目录图" loading="lazy">
+  <p class="video-caption">📷 文件系统把块设备抽象成可恢复的目录图<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=10" target="_blank" rel="noopener">回到原视频 (00:00:10)</a></p>
+</div>
+
+<hr />
+<h2 id="1">1. 持久保存应用数据</h2>
+<h3 id="11">1.1 应用程序是物理世界过程的投影</h3>
+<p><em>(参考时间: 03:00)</em></p>
+<p>讲师用一句话概括软件：</p>
+<blockquote>
+<p>软件是物理世界过程在信息世界中的投影。</p>
+</blockquote>
+<p>这个投影通常是有损的。现实世界包含人的情绪、上下文以及无法完整记录的信息，而软件只能保存其中有限的一部分。即便如此，软件仍然天生具有持久保存数据的需求：</p>
+<ul>
+<li>个人信息和学籍；</li>
+<li>订单与支付记录；</li>
+<li>日志、维护记录和业务状态；</li>
+<li>课程、成绩、聊天与用户行为。</li>
+</ul>
+<p>这些数据的共同本质，是对某个数据结构进行创建、读取、更新和删除，也就是 CRUD。文件、数据库、配置、聊天记录，看起来是完全不同的产品，背后都是数据结构的维护问题。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_02_20.png" alt="真实应用中的一次点击最终都会转化为数据结构操作" loading="lazy">
+  <p class="video-caption">📷 真实应用中的一次点击最终都会转化为数据结构操作<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=140" target="_blank" rel="noopener">回到原视频 (00:02:20)</a></p>
+</div>
+
+<p>一个典型例子是学校的教务系统。教师、管理员和学生看到不同界面，也拥有不同的权限：</p>
+<ul>
+<li>教师可以查看教学班、周历和考核信息；</li>
+<li>学生可以查看自己的选课列表；</li>
+<li>不同角色只能修改允许修改的字段。</li>
+</ul>
+<p>讲师在演示中打开了操作系统课程的教学班。授课类型等字段可以编辑，而考核方式等危险字段会禁止修改。页面上的每一次配置，最终都对应后台数据结构中的一次更新。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_04_10.png" alt="教务系统把课程、教学班、周历和权限组织成数据结构" loading="lazy">
+  <p class="video-caption">📷 教务系统把课程、教学班、周历和权限组织成数据结构<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=250" target="_blank" rel="noopener">回到原视频 (00:04:10)</a></p>
+</div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_05_20.png" alt="权限控制决定哪些字段能够被修改" loading="lazy">
+  <p class="video-caption">📷 权限控制决定哪些字段能够被修改<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=320" target="_blank" rel="noopener">回到原视频 (00:05:20)</a></p>
+</div>
+
+<h3 id="12-pptx">1.2 连 PPTX 也是一个数据结构</h3>
+<p><em>(参考时间: 06:00)</em></p>
+<p>人们通常不把演示文稿当成数据库，但 PPTX 本质上就是一棵树形数据结构。它遵循 Office Open XML 标准，真实格式是一个 ZIP 容器，内部包含 XML、媒体文件和布局描述。</p>
+<p>可以直接执行：</p>
+<div class="highlight"><pre><span></span><code>file<span class="w"> </span>lecture.pptx
+unzip<span class="w"> </span>lecture.pptx<span class="w"> </span>-d<span class="w"> </span>lecture_unpacked
+find<span class="w"> </span>lecture_unpacked/ppt/media<span class="w"> </span>-type<span class="w"> </span>f
+</code></pre></div>
+
+<p>解包后可以看到：</p>
+<ul>
+<li>每一页幻灯片对应的 XML；</li>
+<li>幻灯片母版和版式；</li>
+<li>图片、字体和其他媒体资源；</li>
+<li>页面上每个对象的位置和样式。</li>
+</ul>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_06_30.png" alt="PPTX 既能被办公软件打开，也能作为 ZIP 文件解析" loading="lazy">
+  <p class="video-caption">📷 PPTX 既能被办公软件打开，也能作为 ZIP 文件解析<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=390" target="_blank" rel="noopener">回到原视频 (00:06:30)</a></p>
+</div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_07_00.png" alt="解包后可以从 ppt/media 中直接取出原始图片" loading="lazy">
+  <p class="video-caption">📷 解包后可以从 ppt/media 中直接取出原始图片<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=420" target="_blank" rel="noopener">回到原视频 (00:07:00)</a></p>
+</div>
+
+<p>这也意味着，PPTX 可以被程序直接修改。课堂演示中，讲师打开一个 Coding Agent，让它批量修改演示文稿中的文本。页面标题和正文被替换为英文，其他结构保持不变。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    PPTX["PPTX 文件"] --&gt; ZIP["ZIP 容器"]
+    ZIP --&gt; SLIDES["Slides XML"]
+    ZIP --&gt; LAYOUT["Layouts / Masters"]
+    ZIP --&gt; MEDIA["图片与媒体"]
+    SLIDES --&gt; TEXT["文本结构"]
+    SLIDES --&gt; SHAPES["对象与位置"]
+</code></pre></div>
+
+<p>这种修改方式简单直接，但也暴露出问题：XML 不一定规整，对复杂文档直接做文本替换并不可靠。更稳妥的做法是使用 Office 自动化接口或具有结构化语义的 API。课堂的判断不是“所有 XML 都必须手工改”，而是：只要一个产品能够被还原为数据结构，它就可以被查询、分析和自动化编辑。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_08_20.png" alt="Coding Agent 可以操作演示文稿背后的结构化数据" loading="lazy">
+  <p class="video-caption">📷 Coding Agent 可以操作演示文稿背后的结构化数据<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=500" target="_blank" rel="noopener">回到原视频 (00:08:20)</a></p>
+</div>
+
+<h3 id="13-everything-is-a-file">1.3 方法一：Everything is a File</h3>
+<p><em>(参考时间: 09:30)</em></p>
+<p>如果要在 UNIX 上实现一个教务系统，最直接的方法是使用目录和文件：</p>
+<div class="highlight"><pre><span></span><code>ehall.nju.edu.cn/teacherJxrwApp/22020230/4
+├── enrollment
+│   ├── 231220001.md
+│   ├── 231220002.md
+│   └── ...
+├── metadata.json
+├── syllabus
+│   ├── 1-intro.md
+│   └── ...
+└── textbook
+    └── 1-ostep.md
+</code></pre></div>
+
+<p>每个学生、课程或选课记录都可以对应一个目录或文件。符号链接还能表达“引用”关系。例如，选课目录中的学生链接可以指向学生主目录：</p>
+<div class="highlight"><pre><span></span><code>enrollment/231220001 -&gt; ../../students/231220001
+</code></pre></div>
+
+<p>学生更新邮箱或手机号后，通过链接读取到的新信息会自动同步，不需要复制第二份。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_10_00.png" alt="用目录、文件和符号链接直接表达业务对象及引用关系" loading="lazy">
+  <p class="video-caption">📷 用目录、文件和符号链接直接表达业务对象及引用关系<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=600" target="_blank" rel="noopener">回到原视频 (00:10:00)</a></p>
+</div>
+
+<p>这种方法具有明显优势：</p>
+<ul>
+<li><code>find</code>、<code>grep</code>、<code>sort</code>、<code>xargs</code> 等 UNIX 工具直接可用；</li>
+<li>文件格式透明，人和程序都容易检查；</li>
+<li>Coding Agent 天然熟悉文件系统；</li>
+<li>可以利用符号链接、权限、原子 rename 等既有机制。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    ROOT["教务系统目录"] --&gt; STUDENTS["students"]
+    ROOT --&gt; COURSE["course/22020230"]
+    ROOT --&gt; ENROLL["enrollment"]
+    ENROLL --&gt; LINK1["231220001 -&gt; 学生目录"]
+    ENROLL --&gt; LINK2["231220002 -&gt; 学生目录"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_12_50.png" alt="符号链接是一个可被文件系统直接理解的对象引用" loading="lazy">
+  <p class="video-caption">📷 符号链接是一个可被文件系统直接理解的对象引用<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=770" target="_blank" rel="noopener">回到原视频 (00:12:50)</a></p>
+</div>
+
+<h3 id="14-online-judge">1.4 课程网站与 Online Judge</h3>
+<p><em>(参考时间: 13:50)</em></p>
+<p>课程网站是文件系统方案的典型应用。所有学生提交都存放在固定目录中：</p>
+<div class="highlight"><pre><span></span><code>/var/www/filerecv/OS2026/M1/[stuid]/
+  2026-04-04-19-26-43.tar.bz2
+  2026-04-04-19-26-43.tar.bz2.result
+</code></pre></div>
+
+<p>提交程序只负责把压缩包放入目录。另一个监听程序不断扫描：</p>
+<ul>
+<li>存在提交包，但不存在对应 <code>.result</code>；</li>
+<li>说明该提交尚未评测；</li>
+<li>将压缩包送入 Online Judge；</li>
+<li>评测完成后，把结果写回同名 <code>.result</code> 文件。</li>
+</ul>
+<p>统计提交结果可以直接使用 Shell：</p>
+<div class="highlight"><pre><span></span><code>cat<span class="w"> </span>M5/*.result<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span><span class="s1">'Accepted'</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>wc<span class="w"> </span>-l
+</code></pre></div>
+
+<p>重新评测也十分简单：</p>
+<div class="highlight"><pre><span></span><code><span class="nb">echo</span><span class="w"> </span>M5/**/*.result<span class="w"> </span><span class="p">|</span><span class="w"> </span>xargs<span class="w"> </span>rm
+</code></pre></div>
+
+<p>监听程序发现缺少结果，就会重新把它送入评测队列。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_14_10.png" alt="课程提交目录同时包含提交包和评测结果" loading="lazy">
+  <p class="video-caption">📷 课程提交目录同时包含提交包和评测结果<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=850" target="_blank" rel="noopener">回到原视频 (00:14:10)</a></p>
+</div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_15_20.png" alt="Shell 命令可以直接统计或清理提交结果" loading="lazy">
+  <p class="video-caption">📷 Shell 命令可以直接统计或清理提交结果<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=920" target="_blank" rel="noopener">回到原视频 (00:15:20)</a></p>
+</div>
+
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant Student as 学生
+    participant Submit as make submit
+    participant FS as 文件系统
+    participant OJ as Online Judge
+    Student-&gt;&gt;Submit: 上传压缩包
+    Submit-&gt;&gt;FS: 写入 tar.bz2
+    OJ-&gt;&gt;FS: 扫描缺少 .result 的提交
+    OJ-&gt;&gt;OJ: 编译和评测
+    OJ-&gt;&gt;FS: 写入 .result
+    Student-&gt;&gt;FS: 查看评测结果
+</code></pre></div>
+
+<h3 id="15">1.5 文件方案的代价</h3>
+<p><em>(参考时间: 17:20)</em></p>
+<p>文件系统很好用，但它不是免费的：</p>
+<ol>
+<li><strong>多文件写入没有全局原子性。</strong> 批量导入 100 个学生的选课信息时，如果写到第 50 个文件系统崩溃，数据就处于半完成状态。</li>
+<li><strong>需要自行实现 recovery。</strong> 应用必须像 Git 一样采用 append-only 结构，或者自己执行类似 FSCK 的一致性修复。</li>
+<li><strong>存在读写放大和额外元数据开销。</strong> 路径解析、权限检查、inode 更新、访问时间和修改时间等，可能都是应用并不需要维护的信息。</li>
+</ol>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_17_40.png" alt="一次业务操作可能被拆成多个文件写入，中途崩溃会留下不一致状态" loading="lazy">
+  <p class="video-caption">📷 一次业务操作可能被拆成多个文件写入，中途崩溃会留下不一致状态<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=1060" target="_blank" rel="noopener">回到原视频 (00:17:40)</a></p>
+</div>
+
+<p>这不是说文件方案不可靠，而是它的可靠性边界在应用层。课程网站可以使用这种方案，因为：</p>
+<ul>
+<li>云 SSD 和虚拟机通常相当可靠；</li>
+<li>即使偶发丢失一个 <code>.result</code>，学生重新提交即可；</li>
+<li>小规模系统的开发效率远比极致的存储效率重要。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    OP["批量导入 100 个学生"] --&gt; W1["写入文件 1"]
+    W1 --&gt; W2["写入文件 2"]
+    W2 --&gt; GAP["系统崩溃"]
+    GAP --&gt; BAD["前 50 条已存在，后 50 条缺失"]
+    BAD --&gt; FIX1["应用层 FSCK"]
+    BAD --&gt; FIX2["临时目录 + 原子 rename"]
+    BAD --&gt; FIX3["append-only + replay"]
+</code></pre></div>
+
+<h3 id="16">1.6 方法二：直接在文件上构建数据结构</h3>
+<p><em>(参考时间: 19:40)</em></p>
+<p>既然磁盘是一个字节数组，文件也是一个字节数组，那么我们可以把文件当成虚拟磁盘，在其上重新实现数据结构。</p>
+<p>一个微型的教务数据库可以在文件头部放一个 Superblock：</p>
+<div class="highlight"><pre><span></span><code><span class="k">struct</span><span class="w"> </span><span class="nc">superblock</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">student</span><span class="w"> </span><span class="o">*</span><span class="n">students</span><span class="p">;</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">course</span><span class="w"> </span><span class="o">*</span><span class="n">courses</span><span class="p">;</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">enrollment</span><span class="w"> </span><span class="o">*</span><span class="n">enrollments</span><span class="p">;</span>
+<span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">count</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="k">struct</span><span class="w"> </span><span class="nc">student</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">char</span><span class="w"> </span><span class="n">stuid</span><span class="p">[</span><span class="mi">16</span><span class="p">];</span>
+<span class="w">    </span><span class="kt">char</span><span class="w"> </span><span class="n">name</span><span class="p">[</span><span class="mi">32</span><span class="p">];</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">student</span><span class="w"> </span><span class="o">*</span><span class="n">next</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="k">struct</span><span class="w"> </span><span class="nc">course</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">char</span><span class="w"> </span><span class="n">cid</span><span class="p">[</span><span class="mi">16</span><span class="p">];</span>
+<span class="w">    </span><span class="kt">char</span><span class="w"> </span><span class="n">title</span><span class="p">[</span><span class="mi">64</span><span class="p">];</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">course</span><span class="w"> </span><span class="o">*</span><span class="n">next</span><span class="p">;</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<p>实现 CRUD 的方式，与数据结构课中的链表、哈希表和树没有本质区别：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="nf">enroll</span><span class="p">(</span><span class="k">struct</span><span class="w"> </span><span class="nc">student</span><span class="w"> </span><span class="o">*</span><span class="n">s</span><span class="p">,</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="nc">course</span><span class="w"> </span><span class="o">*</span><span class="n">c</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">enrollment</span><span class="w"> </span><span class="o">*</span><span class="n">e</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">allocate</span><span class="p">();</span>
+<span class="w">    </span><span class="n">e</span><span class="o">-&gt;</span><span class="n">student</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">s</span><span class="p">;</span>
+<span class="w">    </span><span class="n">e</span><span class="o">-&gt;</span><span class="n">course</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">c</span><span class="p">;</span>
+<span class="w">    </span><span class="n">e</span><span class="o">-&gt;</span><span class="n">next</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">database</span><span class="o">-&gt;</span><span class="n">enrollments</span><span class="p">;</span>
+<span class="w">    </span><span class="n">database</span><span class="o">-&gt;</span><span class="n">enrollments</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">e</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_21_00.png" alt="文件头部可以像 ELF 一样保存 Superblock 和关系数据" loading="lazy">
+  <p class="video-caption">📷 文件头部可以像 ELF 一样保存 Superblock 和关系数据<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=1260" target="_blank" rel="noopener">回到原视频 (00:21:00)</a></p>
+</div>
+
+<h3 id="17-mmap">1.7 mmap：把持久文件映射成内存指针</h3>
+<p><em>(参考时间: 22:00)</em></p>
+<p>如果每次都把数据库文件映射到同一个虚拟地址，那么内存中的绝对指针就可以被持久化。下次打开数据库时，所有指针仍然指向相同地址。</p>
+<div class="highlight"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="o">*</span><span class="n">base</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">mmap</span><span class="p">(</span>
+<span class="w">    </span><span class="n">FIXED_ADDRESS</span><span class="p">,</span>
+<span class="w">    </span><span class="n">file_size</span><span class="p">,</span>
+<span class="w">    </span><span class="n">PROT_READ</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="n">PROT_WRITE</span><span class="p">,</span>
+<span class="w">    </span><span class="n">MAP_SHARED</span><span class="p">,</span>
+<span class="w">    </span><span class="n">fd</span><span class="p">,</span>
+<span class="w">    </span><span class="mi">0</span>
+<span class="p">);</span>
+
+<span class="k">struct</span><span class="w"> </span><span class="nc">superblock</span><span class="w"> </span><span class="o">*</span><span class="n">db</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">base</span><span class="p">;</span>
+</code></pre></div>
+
+<p>课堂中的演示程序直接创建了学生链表。退出并重新打开后，学生记录依然存在；查看二进制文件时，甚至可以看见学生姓名。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_23_20.png" alt="把数据库文件映射到固定地址后，指针本身也可以被持久化" loading="lazy">
+  <p class="video-caption">📷 把数据库文件映射到固定地址后，指针本身也可以被持久化<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=1400" target="_blank" rel="noopener">回到原视频 (00:23:20)</a></p>
+</div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_25_20.png" alt="进程退出后重新打开数据库，链表数据仍能恢复" loading="lazy">
+  <p class="video-caption">📷 进程退出后重新打开数据库，链表数据仍能恢复<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=1520" target="_blank" rel="noopener">回到原视频 (00:25:20)</a></p>
+</div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    FILE["database.bin"] --&gt; MAP["mmap 到固定虚拟地址"]
+    MAP --&gt; SUPER["Superblock"]
+    SUPER --&gt; HEAD["Student *head"]
+    HEAD --&gt; S1["Student 1"]
+    S1 --&gt; S2["Student 2"]
+    S2 --&gt; NULL["NULL"]
+    S1 --&gt; FREE["空闲链表分配器"]
+</code></pre></div>
+
+<h3 id="18-mmap-crash-consistency">1.8 mmap 并不等于 crash consistency</h3>
+<p><em>(参考时间: 26:30)</em></p>
+<p>mmap 隐藏了很多复杂度。内存页不会在每次写入后立刻回到磁盘，CPU 缓存中的数据也不会自动变成持久数据：</p>
+<ul>
+<li>映射区写入默认不一定立即 write-back；</li>
+<li><code>msync</code> 只请求同步映射区，不等价于具备持久化保证的 <code>fdatasync</code>；</li>
+<li><code>madvise</code> 用来提示访问模式，不是通用 POSIX 标准，性能和语义都更复杂。</li>
+</ul>
+<div class="highlight"><pre><span></span><code><span class="n">msync</span><span class="p">(</span><span class="n">addr</span><span class="p">,</span><span class="w"> </span><span class="n">len</span><span class="p">,</span><span class="w"> </span><span class="n">MS_SYNC</span><span class="p">);</span>
+<span class="n">fdatasync</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+</code></pre></div>
+
+<p><code>msync</code> 解决的是内存映射与文件之间的同步问题，<code>fdatasync</code> 继续负责把相关数据推到持久存储。要获得可恢复的事务语义，还需要额外的 WAL。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_28_10.png" alt="msync、fdatasync 和写回策略共同决定 mmap 数据的持久化边界" loading="lazy">
+  <p class="video-caption">📷 msync、fdatasync 和写回策略共同决定 mmap 数据的持久化边界<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=1690" target="_blank" rel="noopener">回到原视频 (00:28:10)</a></p>
+</div>
+
+<h3 id="19-superblock-write-ahead-log">1.9 在 Superblock 中加入 Write-Ahead Log</h3>
+<p><em>(参考时间: 29:30)</em></p>
+<p>课堂中的微型数据库偷懒但有效：在 Superblock 中放置一个很小的 WAL 区域。</p>
+<div class="highlight"><pre><span></span><code><span class="k">struct</span><span class="w"> </span><span class="nc">superblock</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">magic</span><span class="p">;</span><span class="w">          </span><span class="c1">// 例如 "jyDB"</span>
+<span class="w">    </span><span class="kt">char</span><span class="w"> </span><span class="n">wal</span><span class="p">[</span><span class="mi">256</span><span class="p">];</span><span class="w">          </span><span class="c1">// "add 99 XX"</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">student</span><span class="w"> </span><span class="o">*</span><span class="n">head</span><span class="p">;</span>
+<span class="w">    </span><span class="cm">/* ... */</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<p>每次执行操作时，遵循以下顺序：</p>
+<ol>
+<li>把操作记录写入 WAL；</li>
+<li><code>msync</code>，再用 <code>fdatasync</code> 确保日志真正落盘；</li>
+<li>执行内存数据结构更新；</li>
+<li>确认更新落盘；</li>
+<li>清空 WAL。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant App as 应用程序
+    participant WAL as WAL
+    participant DS as 数据结构
+    App-&gt;&gt;WAL: 写入 add student
+    App-&gt;&gt;WAL: msync + fdatasync
+    WAL--&gt;&gt;App: 操作已持久
+    App-&gt;&gt;DS: 执行数据结构更新
+    App-&gt;&gt;DS: 确认更新落盘
+    App-&gt;&gt;WAL: 清空日志
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_30_40.png" alt="Superblock 中保存的操作日志让崩溃恢复可以重放未完成事务" loading="lazy">
+  <p class="video-caption">📷 Superblock 中保存的操作日志让崩溃恢复可以重放未完成事务<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=1840" target="_blank" rel="noopener">回到原视频 (00:30:40)</a></p>
+</div>
+
+<p>如果系统在更新数据结构后、清空 WAL 前崩溃，重启时直接重放日志；如果日志已经清空，说明事务完成。课堂演示中，讲师直接修改了 WAL 内容：</p>
+<div class="highlight"><pre><span></span><code>add 99 XX
+</code></pre></div>
+
+<p>重新打开数据库后，恢复代码重放命令，99 号学生出现，WAL 随后被清空。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_31_45.png" alt="恢复过程重放 WAL，把未完成的操作重新应用到数据库" loading="lazy">
+  <p class="video-caption">📷 恢复过程重放 WAL，把未完成的操作重新应用到数据库<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=1905" target="_blank" rel="noopener">回到原视频 (00:31:45)</a></p>
+</div>
+
+<h3 id="110-single-level-store">1.10 Single-Level Store</h3>
+<p><em>(参考时间: 33:20)</em></p>
+<p>如果把整个程序的地址空间都映射到持久内存，那么进程退出和系统崩溃后，运行状态本身也不会消失。这会得到一种 Single-Level Store 操作系统：</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    PROC["进程地址空间"] --&gt; VM["持久内存映射"]
+    VM --&gt; PMEM["Persistent Memory"]
+    PMEM --&gt; PROC
+    PROC --&gt; STATE["进程状态、数据结构、对象图"]
+</code></pre></div>
+
+<p>在传统系统中，内存是易失的，进程状态在断电后消失；当持久内存足够成熟时，可以把“内存”和“磁盘”统一成一层持久对象空间。课堂提到的研究问题，就是如何让整个系统的状态自然持久化。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_33_30.png" alt="把进程地址空间整体持久化，会通向 Single-Level Store" loading="lazy">
+  <p class="video-caption">📷 把进程地址空间整体持久化，会通向 Single-Level Store<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=2010" target="_blank" rel="noopener">回到原视频 (00:33:30)</a></p>
+</div>
+
+<hr />
+<h2 id="2">2. 关系型数据库</h2>
+<h3 id="21">2.1 我们需要一个“非常非常好的数据结构”</h3>
+<p><em>(参考时间: 35:20)</em></p>
+<p>数据库的目标比微型教务系统大得多。一个理想的数据结构需要同时满足：</p>
+<ul>
+<li><strong>好用</strong>：能表达几乎任意业务数据，普通人也能理解和操作；</li>
+<li><strong>高性能</strong>：全校同时选课、全球用户同时聊天也不能崩溃；</li>
+<li><strong>持久化</strong>：系统随时崩溃，磁盘不坏，数据仍然正确；</li>
+<li><strong>支持 multi-write</strong>：一次业务操作涉及多个更新时做到 all-or-nothing。</li>
+</ul>
+<p>例如批量导入成绩，不能出现一半学生看见成绩、另一半学生看不到；批量导入选课名单，也不能留下半套记录。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_36_20.png" alt="数据库需要同时满足通用性、性能和崩溃一致性" loading="lazy">
+  <p class="video-caption">📷 数据库需要同时满足通用性、性能和崩溃一致性<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=2180" target="_blank" rel="noopener">回到原视频 (00:36:20)</a></p>
+</div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    GOOD["理想数据库"] --&gt; USE["好用且通用"]
+    GOOD --&gt; PERF["高性能、高并发"]
+    GOOD --&gt; PERSIST["持久化与崩溃恢复"]
+    GOOD --&gt; ATOMIC["multi-write all-or-nothing"]
+    USE --&gt; SQL["声明式查询与数据模型"]
+    PERF --&gt; INDEX["索引、缓存、并发控制、分片"]
+    PERSIST --&gt; WAL["WAL 与恢复"]
+    ATOMIC --&gt; TX["Transaction"]
+</code></pre></div>
+
+<h3 id="22-pointer-machine">2.2 Pointer Machine 与关系模型</h3>
+<p><em>(参考时间: 38:20)</em></p>
+<p>计算机通常被视为 Pointer Machine。内存中的数据结构依赖对象之间的指针：</p>
+<div class="highlight"><pre><span></span><code><span class="k">struct</span><span class="w"> </span><span class="nc">node</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">char</span><span class="w"> </span><span class="n">value</span><span class="p">[</span><span class="mi">32</span><span class="p">];</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">node</span><span class="w"> </span><span class="o">*</span><span class="n">left</span><span class="p">;</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">node</span><span class="w"> </span><span class="o">*</span><span class="n">right</span><span class="p">;</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<p>学生、课程和选课关系也可以用指针表示：</p>
+<div class="highlight"><pre><span></span><code><span class="k">struct</span><span class="w"> </span><span class="nc">enrollment</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">student</span><span class="w"> </span><span class="o">*</span><span class="n">student</span><span class="p">;</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">course</span><span class="w"> </span><span class="o">*</span><span class="n">course</span><span class="p">;</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<p>但指针不适合作为跨应用、跨语言、跨机器的公共数据模型。数据库中常见的替代方案是二维表。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    PTR["指针"] --&gt; REL["对象之间的关系"]
+    REL --&gt; TABLE["关系表"]
+    TABLE --&gt; ROW["每一行是一个对象或事实"]
+    TABLE --&gt; KEY["用 ID / Key 表示引用"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_39_20.png" alt="Pointer Machine 通过对象和关系表达世界，数据库用表来表示同样的关系" loading="lazy">
+  <p class="video-caption">📷 Pointer Machine 通过对象和关系表达世界，数据库用表来表示同样的关系<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=2360" target="_blank" rel="noopener">回到原视频 (00:39:20)</a></p>
+</div>
+
+<h3 id="23-everything-is-a-table">2.3 Everything is a table</h3>
+<p><em>(参考时间: 40:20)</em></p>
+<p>关系模型把世界描述成若干事实表。选课系统只需要三类最小事实：</p>
+<div class="highlight"><pre><span></span><code>Student(stuid, name, ...)
+Course(classid, title, ...)
+Takes_Course(stuid, classid, grade, ...)
+</code></pre></div>
+
+<p>例如：</p>
+<table>
+<thead>
+<tr>
+<th>stuid</th>
+<th>name</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>张三</td>
+</tr>
+<tr>
+<td>2</td>
+<td>李四</td>
+</tr>
+<tr>
+<td>3</td>
+<td>王五</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>classid</th>
+<th>title</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>4</td>
+<td>操作系统</td>
+</tr>
+<tr>
+<td>5</td>
+<td>编译原理</td>
+</tr>
+<tr>
+<td>6</td>
+<td>数据库系统</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>stuid</th>
+<th>classid</th>
+<th>grade</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>3</td>
+<td>4</td>
+<td>未录入</td>
+</tr>
+<tr>
+<td>3</td>
+<td>5</td>
+<td>未录入</td>
+</tr>
+<tr>
+<td>6</td>
+<td>1</td>
+<td>未录入</td>
+</tr>
+</tbody>
+</table>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_40_30.png" alt="学生、课程和选课被拆成最小事实表" loading="lazy">
+  <p class="video-caption">📷 学生、课程和选课被拆成最小事实表<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=2430" target="_blank" rel="noopener">回到原视频 (00:40:30)</a></p>
+</div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_42_30.png" alt="选课表用两个 Key 把学生和课程关联起来" loading="lazy">
+  <p class="video-caption">📷 选课表用两个 Key 把学生和课程关联起来<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=2550" target="_blank" rel="noopener">回到原视频 (00:42:30)</a></p>
+</div>
+
+<p>这是一种“对象和指针”的另一种表达：</p>
+<ul>
+<li>表中的一行是对象；</li>
+<li>主键唯一标识对象；</li>
+<li>外键表示对象之间的关系；</li>
+<li>多对多关系被显式拆成中间表。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    STUDENT["STUDENT&lt;br/&gt;stuid PK&lt;br/&gt;name"] --&gt;|enrolls| ENROLL["TAKES_COURSE&lt;br/&gt;stuid FK&lt;br/&gt;classid FK&lt;br/&gt;grade"]
+    COURSE["COURSE&lt;br/&gt;classid PK&lt;br/&gt;title"] --&gt;|contains| ENROLL
+</code></pre></div>
+
+<h3 id="24-join">2.4 Join：把事实组合成查询结果</h3>
+<p><em>(参考时间: 42:50)</em></p>
+<p>假如要查“选修操作系统这门课的学生”，最朴素的理解方式是：</p>
+<div class="highlight"><pre><span></span><code>for each student s:
+    for each course c:
+        for each enrollment e:
+            if e.stuid == s.stuid and e.classid == c.classid:
+                output (s, c, e)
+</code></pre></div>
+
+<p>这就是笛卡尔积后的筛选，也就是 Join 的直观定义。绝大多数组合会被条件过滤掉，因为 <code>stuid</code> 和 <code>classid</code> 都是唯一键。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_44_10.png" alt="Join 可以被理解成笛卡尔积后按 Key 进行配对" loading="lazy">
+  <p class="video-caption">📷 Join 可以被理解成笛卡尔积后按 Key 进行配对<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=2650" target="_blank" rel="noopener">回到原视频 (00:44:10)</a></p>
+</div>
+
+<p>SQL 把这种关系运算写成声明式查询：</p>
+<div class="highlight"><pre><span></span><code><span class="k">SELECT</span><span class="w"> </span><span class="n">Courses</span><span class="p">.</span><span class="n">Title</span>
+<span class="k">FROM</span><span class="w"> </span><span class="n">Student</span>
+<span class="k">JOIN</span><span class="w"> </span><span class="n">Takes_Course</span>
+<span class="w">  </span><span class="k">ON</span><span class="w"> </span><span class="n">Student</span><span class="p">.</span><span class="n">ID</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Takes_Course</span><span class="p">.</span><span class="n">ID</span>
+<span class="k">JOIN</span><span class="w"> </span><span class="n">Courses</span>
+<span class="w">  </span><span class="k">ON</span><span class="w"> </span><span class="n">Takes_Course</span><span class="p">.</span><span class="n">ClassID</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Courses</span><span class="p">.</span><span class="n">ClassID</span>
+<span class="k">WHERE</span><span class="w"> </span><span class="n">Student</span><span class="p">.</span><span class="n">Name</span><span class="w"> </span><span class="k">LIKE</span><span class="w"> </span><span class="s1">'张%'</span><span class="p">;</span>
+</code></pre></div>
+
+<p>数据库不要求用户写三层循环。用户只说“我想要什么”，执行引擎负责决定怎么高效地得到结果：</p>
+<ul>
+<li>用主键或索引定位学生；</li>
+<li>用外键定位选课记录；</li>
+<li>用课程主键定位课程；</li>
+<li>过滤姓名前缀；</li>
+<li>组合最终元组。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Student"] --&gt; J1["按 stuid Join"]
+    B["Takes_Course"] --&gt; J1
+    J1 --&gt; J2["按 classid Join"]
+    C["Course"] --&gt; J2
+    J2 --&gt; F["WHERE name LIKE '张%'"]
+    F --&gt; R["Result: Course.Title"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_47_20.png" alt="SQL 查询可以表达过滤、连接和投影等关系代数操作" loading="lazy">
+  <p class="video-caption">📷 SQL 查询可以表达过滤、连接和投影等关系代数操作<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=2840" target="_blank" rel="noopener">回到原视频 (00:47:20)</a></p>
+</div>
+
+<h3 id="25-acid-transaction">2.5 ACID 与 Transaction</h3>
+<p><em>(参考时间: 48:40)</em></p>
+<p>关系数据库用 ACID 描述它提供的能力：</p>
+<ul>
+<li><strong>Atomicity</strong>：事务中的操作要么全部生效，要么全部不生效；</li>
+<li><strong>Consistency</strong>：事务执行前后，数据库满足约束；</li>
+<li><strong>Isolation</strong>：并发事务彼此隔离；</li>
+<li><strong>Durability</strong>：事务提交后的修改不会因系统崩溃而丢失。</li>
+</ul>
+<p>从操作系统课程的角度，可以抓住两个更强的性质：</p>
+<ul>
+<li><strong>Serializability</strong>：无论多少事务并发读写，最终效果都等价于某种串行执行；</li>
+<li><strong>Strong crash consistency</strong>：系统崩溃也不会损坏数据结构或丢掉已经提交的操作。</li>
+</ul>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_49_30.png" alt="ACID 把稳定性、并发隔离和持久性统一封装在事务接口中" loading="lazy">
+  <p class="video-caption">📷 ACID 把稳定性、并发隔离和持久性统一封装在事务接口中<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=2970" target="_blank" rel="noopener">回到原视频 (00:49:30)</a></p>
+</div>
+
+<p>最典型的例子是转账：</p>
+<div class="highlight"><pre><span></span><code><span class="n">tx_begin</span><span class="p">();</span>
+
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">user1</span><span class="p">.</span><span class="n">balance</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">amount</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">tx_abort</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="n">user1</span><span class="p">.</span><span class="n">balance</span><span class="w"> </span><span class="o">-=</span><span class="w"> </span><span class="n">amount</span><span class="p">;</span>
+<span class="n">user2</span><span class="p">.</span><span class="n">balance</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="n">amount</span><span class="p">;</span>
+
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">some_business_condition_is_invalid</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">tx_abort</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="n">tx_commit</span><span class="p">();</span>
+</code></pre></div>
+
+<p>事务中可以执行任意图灵完备的计算，甚至可以 <code>sleep</code>，可以检查复杂业务条件。只要没有提交，前面的修改都可以撤销；一旦提交，所有修改一起生效。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    BEGIN["tx_begin"] --&gt; CHECK{"余额足够？"}
+    CHECK -- "否" --&gt; ABORT["tx_abort，全部撤销"]
+    CHECK -- "是" --&gt; DEBIT["user1.balance -= m"]
+    DEBIT --&gt; CREDIT["user2.balance += m"]
+    CREDIT --&gt; COMMIT{"tx_commit"}
+    COMMIT -- "成功" --&gt; VISIBLE["修改原子地对外可见"]
+    COMMIT -- "失败" --&gt; ABORT
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_50_50.png" alt="转账事务把多个读写封装成不可分割的业务操作" loading="lazy">
+  <p class="video-caption">📷 转账事务把多个读写封装成不可分割的业务操作<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=3050" target="_blank" rel="noopener">回到原视频 (00:50:50)</a></p>
+</div>
+
+<h3 id="26">2.6 “一把大锁”为什么仍然快</h3>
+<p><em>(参考时间: 51:50)</em></p>
+<p>从使用者的角度看，事务就像一个巨大的锁：</p>
+<div class="highlight"><pre><span></span><code>tx_begin()
+  ...
+tx_commit()
+</code></pre></div>
+
+<p>程序员不需要在每个字段、每张表、每个对象上手工加锁。数据库在后台实现细粒度并发：</p>
+<ul>
+<li>不同事务可以并行读写不冲突的数据；</li>
+<li>同一组数据上的冲突由并发控制发现和解决；</li>
+<li>日志保证崩溃恢复；</li>
+<li>缓存、索引、分库分表降低访问成本。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    USER["用户看到"] --&gt; LOCK["一个大事务锁"]
+    LOCK --&gt; ENGINE["数据库执行引擎"]
+    ENGINE --&gt; ROWLOCK["行锁 / 页锁 / MVCC"]
+    ENGINE --&gt; WAL["WAL 与恢复"]
+    ENGINE --&gt; CACHE["缓存与索引"]
+    ENGINE --&gt; SHARD["分库分表"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_52_30.png" alt="事务在接口上像一把大锁，内部却可以并行且具有高性能" loading="lazy">
+  <p class="video-caption">📷 事务在接口上像一把大锁，内部却可以并行且具有高性能<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=3150" target="_blank" rel="noopener">回到原视频 (00:52:30)</a></p>
+</div>
+
+<h3 id="27">2.7 数据库不是“存数据”，而是实现一个系统</h3>
+<p><em>(参考时间: 53:40)</em></p>
+<p>数据库系统内部的实现包含很多操作系统与编译器问题：</p>
+<ul>
+<li>查询重写；</li>
+<li>执行计划选择；</li>
+<li>B+ Tree 等索引；</li>
+<li>Buffer Pool 和缓存替换；</li>
+<li>并发控制；</li>
+<li>WAL 与恢复；</li>
+<li>分区、复制、分库分表。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    SQL["SQL 查询"] --&gt; PARSE["解析"]
+    PARSE --&gt; PLAN["逻辑计划"]
+    PLAN --&gt; REWRITE["语义等价重写"]
+    REWRITE --&gt; PHYSICAL["物理执行计划"]
+    PHYSICAL --&gt; EXEC["执行器"]
+    EXEC --&gt; INDEX["索引与存储引擎"]
+    EXEC --&gt; CONCURRENCY["并发控制"]
+    EXEC --&gt; WAL["日志与恢复"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_55_00.png" alt="SQL 查询会经过解析、重写、计划选择和物理执行" loading="lazy">
+  <p class="video-caption">📷 SQL 查询会经过解析、重写、计划选择和物理执行<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=3300" target="_blank" rel="noopener">回到原视频 (00:55:00)</a></p>
+</div>
+
+<p>查询优化尤其像编译器。编译器把高级语言反复重写为更高效的机器代码；数据库把关系代数表达式重写为更高效的执行计划。例如，把过滤条件下推，可以大幅减少参与 Join 的数据量。</p>
+<h3 id="28-2pl-mvcc">2.8 并发控制的难点：2PL 与 MVCC</h3>
+<p><em>(参考时间: 56:20)</em></p>
+<p>事务可以并发读、写数据库的不同部分，但可能会出现冲突：</p>
+<div class="highlight"><pre><span></span><code>T1: tx_begin(); x = 1; may_crash(); y = 2; tx_commit();
+T2: tx_begin(); y = 1; sleep(long); x = 2; tx_commit();
+</code></pre></div>
+
+<p>T1 先写 X 再写 Y，T2 先写 Y 再写 X。两个事务可能形成 ABBA 死锁。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_57_20.png" alt="并发事务可能在不同数据上以相反顺序加锁，形成死锁" loading="lazy">
+  <p class="video-caption">📷 并发事务可能在不同数据上以相反顺序加锁，形成死锁<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=3440" target="_blank" rel="noopener">回到原视频 (00:57:20)</a></p>
+</div>
+
+<p>第一种方案是 Two-Phase Locking（2PL）：</p>
+<ul>
+<li>读数据时加读锁；</li>
+<li>写数据时加写锁；</li>
+<li>边执行边加锁；</li>
+<li>发现锁等待环后选择一个事务回滚；</li>
+<li>被回滚的事务重新执行；</li>
+<li>事务提交时释放锁。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    T1["T1: lock X"] --&gt; WAIT["T1: 等待 Y"]
+    T2["T2: lock Y"] --&gt; WAIT2["T2: 等待 X"]
+    WAIT --&gt; CYCLE["等待图中形成环"]
+    WAIT2 --&gt; CYCLE
+    CYCLE --&gt; VICTIM["选择 T2 回滚"]
+    VICTIM --&gt; RELEASE["释放 T2 已持有的锁"]
+    RELEASE --&gt; T1COMMIT["T1 继续并提交"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_58_30.png" alt="2PL 检测锁等待环，并回滚其中一个事务来打破死锁" loading="lazy">
+  <p class="video-caption">📷 2PL 检测锁等待环，并回滚其中一个事务来打破死锁<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=3510" target="_blank" rel="noopener">回到原视频 (00:58:30)</a></p>
+</div>
+
+<p>第二种方案是 Multiversion Concurrency Control（MVCC）。讲师用 Git 分支来类比：</p>
+<ul>
+<li>数据库当前状态等价于 <code>main</code>；</li>
+<li><code>tx_begin()</code> 等价于 checkout 一个新分支；</li>
+<li>事务读自己的快照；</li>
+<li>事务把自己的写入应用到分支；</li>
+<li><code>tx_commit()</code> 尝试把它 merge 回 <code>main</code>；</li>
+<li>如果没有冲突，多个事务都可以提交；</li>
+<li>如果修改了同一行且无法自动解决冲突，其中一个事务必须回滚。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    MAIN["数据库 main 快照"] --&gt; T1["T1 branch&lt;br/&gt;write X"]
+    MAIN --&gt; T2["T2 branch&lt;br/&gt;write Y"]
+    T1 --&gt; MERGE{"Commit 时 merge 回 main"}
+    T2 --&gt; MERGE
+    MERGE -- "无冲突" --&gt; BOTH["两个事务都提交"]
+    MERGE -- "同一数据冲突" --&gt; ROLLBACK["选择一个事务回滚"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_00_30.png" alt="MVCC 用快照和版本关系实现并发，Commit 时才检查冲突" loading="lazy">
+  <p class="video-caption">📷 MVCC 用快照和版本关系实现并发，Commit 时才检查冲突<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=3630" target="_blank" rel="noopener">回到原视频 (01:00:30)</a></p>
+</div>
+
+<p>数据库不能像 Git 那样让人工解决所有 merge conflict，因为事务中可能包含任意计算。数据库只能根据读集合和写集合检测冲突，必要时回滚整个事务。这正是一个复杂但非常重要的工程问题。</p>
+<h3 id="29-sqlite">2.9 SQLite：无处不在的小数据库</h3>
+<p><em>(参考时间: 01:02:40)</em></p>
+<p>手机设置中的每一个开关都可以持久保存。实现方式并不是为每个偏好创建一个文件再反复 <code>fsync</code>，而是使用一个小型 SQLite 数据库。</p>
+<p>SQLite 的特点：</p>
+<ul>
+<li>是 C 语言实现的一个库，而不是独立数据库服务器；</li>
+<li>整个数据库通常就是一个文件；</li>
+<li>支持 SQL、事务和崩溃恢复；</li>
+<li>零配置，发行版通常自带 <code>libsqlite3.so</code>；</li>
+<li>内嵌在 Android、iOS、macOS、Chrome 等大量应用和系统中；</li>
+<li>被称为世界上使用最广泛的数据库引擎。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    APP["应用 / 手机设置"] --&gt; LIB["libsqlite3"]
+    LIB --&gt; DB["单个数据库文件"]
+    DB --&gt; SQL["SQL 查询与更新"]
+    DB --&gt; TX["事务 / WAL / Recovery"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_03_10.png" alt="手机设置页面背后常常是一个嵌入式 SQLite 数据库" loading="lazy">
+  <p class="video-caption">📷 手机设置页面背后常常是一个嵌入式 SQLite 数据库<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=3790" target="_blank" rel="noopener">回到原视频 (01:03:10)</a></p>
+</div>
+
+<p>SQLite 让普通应用不必自己处理文件同步、事务提交和崩溃恢复。只要链接一个小型 C 库，就能获得成熟数据库的持久化能力。</p>
+<hr />
+<h2 id="3-sql-nosqlnewsql">3. 从 SQL 到 NoSQL、NewSQL 与向量数据库</h2>
+<h3 id="31-sql">3.1 国民级应用与 SQL 的压力</h3>
+<p><em>(参考时间: 01:05:00)</em></p>
+<p>微信聊天记录本质上可以是数据库中的一张表：</p>
+<div class="highlight"><pre><span></span><code><span class="k">SELECT</span><span class="w"> </span><span class="o">*</span>
+<span class="k">FROM</span><span class="w"> </span><span class="n">chat_records</span>
+<span class="k">WHERE</span><span class="w"> </span><span class="p">(</span><span class="n">sender_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">@</span><span class="n">user_id1</span><span class="w"> </span><span class="k">AND</span><span class="w"> </span><span class="n">receiver_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">@</span><span class="n">user_id2</span><span class="p">)</span>
+<span class="w">   </span><span class="k">OR</span><span class="w"> </span><span class="p">(</span><span class="n">sender_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">@</span><span class="n">user_id2</span><span class="w"> </span><span class="k">AND</span><span class="w"> </span><span class="n">receiver_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">@</span><span class="n">user_id1</span><span class="p">)</span>
+<span class="k">ORDER</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="k">timestamp</span><span class="w"> </span><span class="k">DESC</span>
+<span class="k">LIMIT</span><span class="w"> </span><span class="mi">10</span><span class="p">;</span>
+</code></pre></div>
+
+<p>这条查询在语义上完全正确。用户打开对话，只看到最近十条消息；数据库负责过滤、排序和截断。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_05_30.png" alt="微信聊天记录可以被抽象成一张带发送者、接收者和时间戳的表" loading="lazy">
+  <p class="video-caption">📷 微信聊天记录可以被抽象成一张带发送者、接收者和时间戳的表<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=3930" target="_blank" rel="noopener">回到原视频 (01:05:30)</a></p>
+</div>
+
+<p>随着用户规模增长，问题不在 SQL 能不能表达，而在执行成本：</p>
+<ul>
+<li>分库分表；</li>
+<li>读写分离；</li>
+<li>索引设计；</li>
+<li>缓存；</li>
+<li>复杂 Join 和排序；</li>
+<li>查询计划选择。</li>
+</ul>
+<p>更麻烦的是，数据库无法预先知道程序会写什么查询。一个订单页面可能涉及几十张表，一次查询需要多层 Join、日期过滤、排序和分页。功能越通用，越容易被滥用。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_07_50.png" alt="复杂的多表查询会让执行计划成为性能瓶颈" loading="lazy">
+  <p class="video-caption">📷 复杂的多表查询会让执行计划成为性能瓶颈<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=4070" target="_blank" rel="noopener">回到原视频 (01:07:50)</a></p>
+</div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    SQL["提供完整 SQL"] --&gt; POWER["表达能力强"]
+    POWER --&gt; ABUSE["难以预知程序如何写查询"]
+    ABUSE --&gt; PERF["Performance Bug"]
+    PERF --&gt; SCALE["数据量增长后不断放大"]
+    SCALE --&gt; OPS["分库分表、缓存、读写分离"]
+    OPS --&gt; DIST["最终仍然需要走向分布式"]
+</code></pre></div>
+
+<p>这不是某一个程序员的错误，而是任何通用 Systems 都难以避免的技术债。<code>fork()</code> 也曾因为接口过于通用而带来大量实现和使用成本。</p>
+<h3 id="32-key-value-store">3.2 做减法：Key-Value Store</h3>
+<p><em>(参考时间: 01:10:00)</em></p>
+<p>如果完整 SQL 太重，可以做减法，只保留一个够用的数据结构：Key-Value Store。</p>
+<div class="highlight"><pre><span></span><code>user:{uid}                 -&gt; User JSON
+user:{uid}:like_history    -&gt; List
+user:{uid}:like_count      -&gt; Integer
+</code></pre></div>
+
+<p>用户信息可以序列化成 JSON 存到：</p>
+<div class="highlight"><pre><span></span><code>user:1001
+</code></pre></div>
+
+<p>当一个用户选课或退课时，可以把事件追加到列表：</p>
+<div class="highlight"><pre><span></span><code>enroll:2026:user:1001 -&gt; [enroll OS2026, drop OS2026, ...]
+</code></pre></div>
+
+<p>需要得到最终选课列表时，从头重放事件；也可以缓存一个“当前选课列表”视图。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    EV1["enroll OS2026"] --&gt; LOG["append-only event list"]
+    EV2["drop OS2026"] --&gt; LOG
+    EV3["enroll DB2026"] --&gt; LOG
+    LOG --&gt; REPLAY["按顺序 replay"]
+    REPLAY --&gt; VIEW["当前选课列表"]
+    VIEW --&gt; CACHE["缓存当前视图"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_12_20.png" alt="选课与退选可以记录为 append-only 事件，需要时再重放得到当前状态" loading="lazy">
+  <p class="video-caption">📷 选课与退选可以记录为 append-only 事件，需要时再重放得到当前状态<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=4340" target="_blank" rel="noopener">回到原视频 (01:12:20)</a></p>
+</div>
+
+<p>Append-only 结构具有重要优势：</p>
+<ul>
+<li>通常比“读旧值、计算、写回”更容易实现；</li>
+<li>更容易保证崩溃一致性；</li>
+<li>可以并行追加多个日志片段，再拼接起来；</li>
+<li>点赞、浏览历史和消息流天然适合追加。</li>
+</ul>
+<h3 id="33-hash-lsm-tree">3.3 Hash 分片与 LSM Tree</h3>
+<p><em>(参考时间: 01:14:00)</em></p>
+<p>Key-Value Store 很容易横向扩展：</p>
+<div class="highlight"><pre><span></span><code>shard = hash(key) % number_of_machines
+</code></pre></div>
+
+<p>一个足够好的哈希函数会把 Key 均匀映射到大量机器，实现自动负载均衡。由于数据主要是 append-only，存储引擎还可以使用 Log-Structured Merge Tree（LSM Tree）：</p>
+<ul>
+<li>写入先进入内存 MemTable；</li>
+<li>同时写 WAL 保证崩溃恢复；</li>
+<li>MemTable 写满后刷成不可变 SSTable；</li>
+<li>后台合并 SSTable，清除旧版本；</li>
+<li>读取时从新到旧查找多个层级。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    WRITE["Write Key"] --&gt; WAL["WAL"]
+    WRITE --&gt; MEM["MemTable"]
+    MEM --&gt; FLUSH["Flush"]
+    FLUSH --&gt; L0["Level 0 SSTable"]
+    L0 --&gt; L1["Level 1"]
+    L1 --&gt; L2["Level 2"]
+    L2 --&gt; READ["Read: newest to oldest"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_14_30.png" alt="Key 经过哈希后分配到多台机器，append-only 结构降低一致性成本" loading="lazy">
+  <p class="video-caption">📷 Key 经过哈希后分配到多台机器，append-only 结构降低一致性成本<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=4470" target="_blank" rel="noopener">回到原视频 (01:14:30)</a></p>
+</div>
+
+<h3 id="34-redis-key-value">3.4 Redis：内存中的 Key-Value 与缓存</h3>
+<p><em>(参考时间: 01:15:50)</em></p>
+<p>Redis 是一个内存 Key-Value 数据库，支持：</p>
+<ul>
+<li>String；</li>
+<li>List；</li>
+<li>Set；</li>
+<li>Hash；</li>
+<li>Sorted Set；</li>
+<li>Stream。</li>
+</ul>
+<p>典型用途是缓存与写缓冲。例如统计点赞数：</p>
+<ol>
+<li>每次点赞先在内存计数器上加一；</li>
+<li>一分钟内可能累积数百万次；</li>
+<li>定时把增量合并到持久数据库；</li>
+<li>数据库只承受少量批量更新。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    USERS["大量用户点赞"] --&gt; REDIS["Redis Counter / List"]
+    REDIS --&gt; BATCH["周期性批量合并"]
+    BATCH --&gt; DB["持久数据库"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_16_00.png" alt="Redis 把高频随机写入缓冲起来，周期性合成到持久数据库" loading="lazy">
+  <p class="video-caption">📷 Redis 把高频随机写入缓冲起来，周期性合成到持久数据库<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=4560" target="_blank" rel="noopener">回到原视频 (01:16:00)</a></p>
+</div>
+
+<p>这种设计的核心不是“数据永远不丢”，而是根据业务价值选择一致性等级。点赞数差几条通常可以接受，但所有点赞都执行完整事务会浪费大量资源。</p>
+<h3 id="35-nosql-newsql">3.5 NoSQL 与 NewSQL</h3>
+<p><em>(参考时间: 01:17:40)</em></p>
+<p>人们仍然希望拥有比简单 Key-Value 更丰富的数据模型，于是出现多种折中：</p>
+<ul>
+<li><strong>MongoDB</strong>：Document 数据库，Key 对应 BSON 文档，可以 append 消息、嵌套对象和数组；</li>
+<li><strong>Cassandra</strong>：Column 数据库，使用 CQL，仍然保留 Table 风格，但只提供受控的 SQL 子集；</li>
+<li><strong>Google Spanner、TiDB、CockroachDB</strong>：提供接近完整 SQL 的分布式数据库；</li>
+<li><strong>TiDB</strong>：国产数据库出海的代表性案例之一。</li>
+</ul>
+<p>例如 Cassandra 仍然可以写：</p>
+<div class="highlight"><pre><span></span><code><span class="k">INSERT</span><span class="w"> </span><span class="k">INTO</span><span class="w"> </span><span class="n">messages</span>
+<span class="w">    </span><span class="p">(</span><span class="n">user_id</span><span class="p">,</span><span class="w"> </span><span class="n">message_id</span><span class="p">,</span><span class="w"> </span><span class="n">content</span><span class="p">,</span><span class="w"> </span><span class="k">timestamp</span><span class="p">)</span>
+<span class="k">VALUES</span>
+<span class="w">    </span><span class="p">(</span><span class="s1">'1234567'</span><span class="p">,</span><span class="w"> </span><span class="n">now</span><span class="p">(),</span><span class="w"> </span><span class="n">message</span><span class="p">,</span><span class="w"> </span><span class="n">toTimestamp</span><span class="p">(</span><span class="n">now</span><span class="p">()));</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    KV["Key-Value"] --&gt; DOC["Document: MongoDB"]
+    KV --&gt; COL["Column: Cassandra"]
+    KV --&gt; NEWSQL["NewSQL: Spanner / TiDB / CockroachDB"]
+    DOC --&gt; SUBSET["更受控的查询能力"]
+    COL --&gt; SUBSET
+    NEWSQL --&gt; FULL["接近完整 SQL + 分布式扩展"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_18_10.png" alt="NoSQL 与 NewSQL 在数据模型和查询能力之间做不同取舍" loading="lazy">
+  <p class="video-caption">📷 NoSQL 与 NewSQL 在数据模型和查询能力之间做不同取舍<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=4690" target="_blank" rel="noopener">回到原视频 (01:18:10)</a></p>
+</div>
+
+<p>这些系统希望保留 SQL 的易用性，同时通过受控接口、分片和分布式共识降低滥用风险。数据库设计的核心始终是取舍：给应用提供多少能力，系统就要承担多少复杂性和性能风险。</p>
+<h3 id="36-vector-database">3.6 Vector Database：把语义变成距离</h3>
+<p><em>(参考时间: 01:19:20)</em></p>
+<p>传统数据库按字段、Key 和关系查询；向量数据库保存 Embedding，并按距离寻找相似对象。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    TEXT["文档 / 图片 / 代码"] --&gt; MODEL["Embedding Model"]
+    MODEL --&gt; VEC["高维向量"]
+    VEC --&gt; VDB["Vector Database"]
+    QUERY["查询内容"] --&gt; QVEC["查询向量"]
+    QVEC --&gt; ANN["Approximate Nearest Neighbor"]
+    VDB --&gt; ANN
+    ANN --&gt; RESULT["语义相近的结果"]
+</code></pre></div>
+
+<p>课堂演示把课程提纲、每页幻灯片描述或每一讲的文档交给一个小型模型，生成高维向量。向量之间可以用：</p>
+<ul>
+<li>点积；</li>
+<li>余弦距离；</li>
+<li>欧氏距离；</li>
+</ul>
+<p>来衡量相似度。距离越近，通常意味着内容越相关。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_19_40.png" alt="Embedding 把文本映射到高维空间，距离表达语义相似度" loading="lazy">
+  <p class="video-caption">📷 Embedding 把文本映射到高维空间，距离表达语义相似度<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=4780" target="_blank" rel="noopener">回到原视频 (01:19:40)</a></p>
+</div>
+
+<p>讲师还展示了课程各讲的 Embedding 距离图：</p>
+<ul>
+<li>并发相关的第 13 到第 21 讲聚在一起；</li>
+<li>文件系统和数据库相关的第 24 到第 27 讲形成相近区域；</li>
+<li>第 4 讲的 Agentic AI 内容比较像一座孤岛。</li>
+</ul>
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_20_40.png" alt="课程各讲的向量距离能够自动呈现出主题聚类关系" loading="lazy">
+  <p class="video-caption">📷 课程各讲的向量距离能够自动呈现出主题聚类关系<br><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/?t=4840" target="_blank" rel="noopener">回到原视频 (01:20:40)</a></p>
+</div>
+
+<p>向量数据库的典型需求是：</p>
+<ul>
+<li>存储数百万到上亿个向量；</li>
+<li>每个向量可能有几千维；</li>
+<li>给定查询向量，快速查找最近邻；</li>
+<li>使用 ANN 近似算法换取可扩展性；</li>
+<li>返回“最近”的文档、图片、商品或论文。</li>
+</ul>
+<p>未来的数据系统很可能同时包含：</p>
+<ul>
+<li>结构化表；</li>
+<li>Key-Value 索引；</li>
+<li>append-only 事件流；</li>
+<li>向量索引；</li>
+<li>全文索引。</li>
+</ul>
+<p>每条记录都可以拥有一个语义向量，使系统既支持精确查询，也支持模糊的语义检索。</p>
+<hr />
+<h2 id="4-crud">4. 总结：所有应用最终都是数据结构的 CRUD</h2>
+<p><em>(参考时间: 01:22:20)</em></p>
+<p>这一课从“文件系统是磁盘上的数据结构”出发，一路走到数据库和向量检索。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    FS["文件系统"] --&gt; FILE["目录与文件"]
+    FS --&gt; MMAP["mmap + WAL"]
+    FILE --&gt; RDBMS["关系型数据库"]
+    MMAP --&gt; RDBMS
+    RDBMS --&gt; SQL["Table / Join / ACID"]
+    SQL --&gt; CONCURRENCY["2PL / MVCC / Recovery"]
+    RDBMS --&gt; KV["Key-Value"]
+    KV --&gt; REDIS["Redis / Cache"]
+    KV --&gt; NOSQL["MongoDB / Cassandra"]
+    KV --&gt; NEWSQL["Spanner / TiDB / CockroachDB"]
+    RDBMS --&gt; VECTOR["Vector Database"]
+    VECTOR --&gt; SEMANTIC["Embedding / ANN"]
+</code></pre></div>
+
+<p>核心结论：</p>
+<ul>
+<li>应用程序把物理世界投影成一个可持久化的数据结构；</li>
+<li>文件系统适合小规模、工具友好、Agent 友好的系统；</li>
+<li>mmap 和 WAL 可以直接在文件上实现自定义数据结构与恢复协议；</li>
+<li>关系数据库把数据表达、查询优化、事务、并发控制和恢复封装成通用服务；</li>
+<li>SQL 的强大也使查询滥用成为长期存在的性能问题；</li>
+<li>NoSQL 通过减少接口能力换取扩展性；</li>
+<li>NewSQL 试图重新组合 SQL 与分布式能力；</li>
+<li>Vector Database 为 AI 应用提供语义检索基础设施。</li>
+</ul>
+<p>无论技术形态如何变化，数据库的本质仍然是一个“非常非常好的数据结构”：它让应用程序不必反复发明持久化、并发和崩溃恢复，而是用统一接口管理不断变化的业务事实。</p>
+<hr />
+<h2 id="_2">附：官方参考与延伸阅读</h2>
+<ul>
+<li><a href="https://dl.acm.org/doi/10.1145/362384.362685">A Relational Model of Data for Large Shared Data Banks</a></li>
+<li><a href="https://dl.acm.org/doi/10.1145/3477132.3483563">Single-Level Store</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/persistence/mmds">Memory-Mapped Data Structures</a></li>
+<li><a href="https://15445.courses.cs.cmu.edu/">CMU 15-445: Database Systems</a></li>
+<li><a href="https://sqlite.org/index.html">SQLite 官方网站</a></li>
+<li><a href="https://redis.io/docs/latest/develop/data-types/streams/">Redis Streams</a></li>
+<li><a href="https://redis.io/docs/latest/develop/interact/transactions/">Redis Transactions</a></li>
+<li><a href="https://ehallapp.nju.edu.cn/jwapp/sys/teacherJxrwApp/*default/index.do">南京大学教务系统</a></li>
+</ul>
+<p>官方课程资料：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/2026/">课程主页</a></li>
+<li><a href="https://jyywiki.cn/OS/2026/lect27.md">第 27 讲讲义：数据库系统</a></li>
+<li><a href="https://www.bilibili.com/video/BV1eqEA6JEZA/">视频：27 - 数据库系统</a></li>
+</ul>
+<blockquote>
+<p><strong>版权与署名</strong>：本讲课程材料由蒋炎岩（jyy）编写。课程讲义与幻灯片采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书保留课程出处、作者署名与许可说明。</p>
+</blockquote>
+    </article>
+
+    <!-- Mermaid 图表引擎初始化 -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            mermaid.initialize({ startOnLoad: false, theme: 'default' });
+            
+            // 兼容普通代码块以及丢失 language-mermaid 类名的情况 (CodeHilite 干扰)
+            const codeNodes = document.querySelectorAll('pre code, .highlight code');
+            codeNodes.forEach(function(node) {
+                const text = node.textContent.trim();
+                // 匹配常见的 mermaid 图表前缀
+                if (text.startsWith('graph ') || text.startsWith('flowchart ') || text.startsWith('sequenceDiagram') || text.startsWith('gantt') || text.startsWith('pie') || text.startsWith('classDiagram') || text.startsWith('stateDiagram') || text.startsWith('mindmap')) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.className = 'mermaid';
+                    tempDiv.textContent = text;
+                    
+                    // 获取需要替换的最外层父节点 (比如 div.highlight 或者 pre)
+                    const wrapper = node.closest('.highlight') || node.parentNode;
+                    wrapper.replaceWith(tempDiv); 
+                }
+            });
+            
+            // 所有节点转换完成，统一进行图表动态绘制
+            mermaid.run();
+        });
+    </script>
+    <!-- Lightbox：截图点击放大 -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const lightbox = document.createElement('div');
+            lightbox.className = 'lightbox';
+            lightbox.innerHTML = '<img alt=""><div class="lightbox-caption"></div>';
+            document.body.appendChild(lightbox);
+            const lbImg = lightbox.querySelector('img');
+            const lbCap = lightbox.querySelector('.lightbox-caption');
+            function openLightbox(src, alt) {
+                lbImg.src = src; lbImg.alt = alt || '';
+                lbCap.textContent = alt || '';
+                lightbox.classList.add('open');
+                document.body.style.overflow = 'hidden';
+            }
+            function closeLightbox() {
+                lightbox.classList.remove('open');
+                lbImg.src = '';
+                document.body.style.overflow = '';
+            }
+            document.querySelectorAll('.screenshot-card img').forEach(function(img) {
+                img.addEventListener('click', function() { openLightbox(img.src, img.alt); });
+            });
+            lightbox.addEventListener('click', closeLightbox);
+            document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
+        });
+    </script>
+</body>
+</html>

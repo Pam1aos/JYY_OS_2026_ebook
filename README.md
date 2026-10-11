@@ -108,3 +108,7 @@
   - [Markdown 源稿](./26-文件系统实现和崩溃一致性/book.md)
   - 视频：[Bilibili BV12EV66bErd](https://www.bilibili.com/video/BV12EV66bErd/)
   - 官方讲义：[第 26 讲](https://jyywiki.cn/OS/2026/lect26.md)
+- [第 27 讲：数据库系统](./27-数据库系统/book.html)
+  - [Markdown 源稿](./27-数据库系统/book.md)
+  - 视频：[Bilibili BV1eqEA6JEZA](https://www.bilibili.com/video/BV1eqEA6JEZA/)
+  - 官方讲义：[第 27 讲](https://jyywiki.cn/OS/2026/lect27.md)
