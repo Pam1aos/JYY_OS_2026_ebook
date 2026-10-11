@@ -1,0 +1,1230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>计算机系统安全：隔离、访问控制与攻击面</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* ── 基础重置 ── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            color-scheme: light;
+            --bg-primary: #f7f7f8;
+            --bg-secondary: #ffffff;
+            --bg-card: #eef0f3;
+            --bg-code: #f2f3f5;
+            --text-primary: #1f2328;
+            --text-secondary: #57606a;
+            --text-muted: #6e7781;
+            --accent: #2563eb;
+            --accent-glow: rgba(37, 99, 235, 0.08);
+            --border: #d9dce1;
+            --border-subtle: #e7e9ec;
+            --radius: 12px;
+            --shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Serif SC', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.8;
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── 文章容器 ── */
+        .book-content {
+            max-width: 780px;
+            margin: 0 auto;
+            padding: 60px 32px 120px;
+        }
+
+        /* ── 标题 ── */
+        h1 {
+            font-size: 2.2em;
+            font-weight: 700;
+            margin: 0 0 12px;
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+        }
+
+        h2 {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 56px 0 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h3 {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: var(--accent);
+            margin: 36px 0 12px;
+        }
+
+        /* ── 段落与文字 ── */
+        p {
+            margin: 0 0 16px;
+            color: var(--text-primary);
+        }
+
+        strong {
+            color: #0f172a;
+            font-weight: 600;
+        }
+
+        em {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.2s;
+        }
+        a:hover {
+            border-bottom-color: var(--accent);
+        }
+
+        /* ── 引用 ── */
+        blockquote {
+            margin: 24px 0;
+            padding: 16px 20px;
+            background: var(--bg-secondary);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 var(--radius) var(--radius) 0;
+            color: var(--text-secondary);
+        }
+        blockquote p { margin: 0; }
+
+        /* ── 列表 ── */
+        ul, ol {
+            margin: 12px 0 20px 24px;
+            color: var(--text-primary);
+        }
+        li {
+            margin: 6px 0;
+        }
+
+        /* ── 分割线 ── */
+        hr {
+            border: none;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border), transparent);
+            margin: 48px 0;
+        }
+
+        /* ── 表格 ── */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 24px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+        thead {
+            background: var(--bg-card);
+        }
+        th {
+            padding: 12px 16px;
+            font-weight: 600;
+            text-align: left;
+            color: var(--accent);
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        td {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border-subtle);
+        }
+        tbody tr {
+            background: var(--bg-secondary);
+            transition: background 0.15s;
+        }
+        tbody tr:hover {
+            background: var(--bg-card);
+        }
+
+        /* ── 代码 ── */
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-code);
+            padding: 2px 7px;
+            border-radius: 5px;
+            font-size: 0.88em;
+            color: #6d28d9;
+        }
+
+        pre {
+            margin: 20px 0;
+            padding: 20px 24px;
+            background: var(--bg-code);
+            border-radius: var(--radius);
+            overflow-x: auto;
+            border: 1px solid var(--border);
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9em;
+            color: var(--text-primary);
+        }
+
+        /* ── 视频嵌入卡片 ── */
+        .video-card {
+            margin: 32px 0;
+            border-radius: var(--radius);
+            overflow: hidden;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .video-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(15, 23, 42, 0.12);
+        }
+
+        .video-wrapper {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 */
+            height: 0;
+            overflow: hidden;
+        }
+        .video-wrapper iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .video-card img {
+            width: 100%;
+            display: block;
+        }
+
+        .video-caption {
+            padding: 12px 16px;
+            font-size: 0.88em;
+            color: var(--text-secondary);
+            text-align: center;
+            line-height: 1.6;
+            margin: 0;
+        }
+        .video-caption a {
+            color: var(--accent);
+        }
+
+        .video-card.fallback {
+            padding: 20px;
+            text-align: center;
+        }
+
+        /* ── Lightbox：截图点击放大 ── */
+        .screenshot-card img { cursor: zoom-in; transition: opacity 0.15s; }
+        .screenshot-card img:hover { opacity: 0.9; }
+        .lightbox {
+            position: fixed; inset: 0; z-index: 999;
+            display: none; align-items: center; justify-content: center;
+            background: rgba(5, 5, 8, 0.92); backdrop-filter: blur(4px);
+            cursor: zoom-out; padding: 24px;
+        }
+        .lightbox.open { display: flex; }
+        .lightbox img {
+            max-width: 96vw; max-height: 90vh;
+            border-radius: 8px; box-shadow: 0 12px 60px rgba(0,0,0,0.7);
+        }
+        .lightbox-caption {
+            position: absolute; bottom: 14px; left: 0; right: 0;
+            text-align: center; color: #f3f4f6; font-size: 0.85em;
+        }
+
+        /* ── 顶部信息栏 ── */
+        .book-content > blockquote:first-of-type {
+            background: var(--accent-glow);
+            border-left-color: var(--accent);
+            border-radius: var(--radius);
+            margin-bottom: 32px;
+        }
+
+        /* ── 图表居中 ── */
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            margin: 32px 0;
+            overflow-x: auto;
+        }
+
+        /* ── 滚动条 ── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* ── 响应式 ── */
+        @media (max-width: 640px) {
+            .book-content { padding: 32px 16px 80px; }
+            h1 { font-size: 1.7em; }
+            h2 { font-size: 1.3em; }
+            pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+            code { overflow-wrap: anywhere; word-break: break-word; }
+        }
+    </style>
+</head>
+<body>
+    <article class="book-content">
+        <h1 id="_1">计算机系统安全：隔离、访问控制与攻击面</h1>
+<blockquote>
+<p><strong>课程</strong>：2026 春季学期《操作系统原理》<br />
+<strong>讲师</strong>：蒋炎岩（jyy）<br />
+<strong>官方课程主页</strong>：<a href="https://jyywiki.cn/OS/2026/">https://jyywiki.cn/OS/2026/</a><br />
+<strong>官方讲义</strong>：<a href="https://jyywiki.cn/OS/2026/lect28.md">https://jyywiki.cn/OS/2026/lect28.md</a><br />
+<strong>视频来源</strong>：<a href="https://www.bilibili.com/video/BV1qkEX6FEb5/">Bilibili BV1qkEX6FEb5</a><br />
+<strong>版权说明</strong>：课程讲义与幻灯片归蒋炎岩所有，采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书是对课堂讲授的书面化重构，保留出处与许可说明。</p>
+</blockquote>
+<h2 id="_2">导语：从“裸奔”进入安全世界</h2>
+<p><em>(参考时间: 00:00)</em></p>
+<p>文件系统的接口、实现和崩溃一致性已经讲完。本讲讨论一个此前较少出现的问题：计算机系统安全。</p>
+<p>在计算机发展的早期，安全几乎不存在。8086 真实模式可以让任何程序直接访问任何硬件和内存；没有操作系统 API 的权限检查，也没有进程隔离。互联网早期同样如此，用户密码明文传输，网站可以被轻易枚举和爆破。</p>
+<p>只要系统只承载可有可无的娱乐信息，不安全或许还能被接受。但一旦涉及隐私、支付、身份和关键基础设施，安全性就会成为不可回避的问题。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    HW["8086 真实模式&lt;br/&gt;无隔离、无权限"] --&gt; BBS["BBS 明文密码&lt;br/&gt;可爆破、可钓鱼"]
+    BBS --&gt; NET["互联网承载隐私与支付"]
+    NET --&gt; NEED["安全成为基础需求"]
+    NEED --&gt; CIA["Confidentiality / Integrity / Availability"]
+    CIA --&gt; OS["操作系统访问控制与隔离机制"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_00_45.png" alt="8086 真实模式允许程序直接访问整个地址空间和硬件" loading="lazy">
+  <p class="video-caption">📷 8086 真实模式允许程序直接访问整个地址空间和硬件<br><a href="https://www.bilibili.com/video/BV1qkEX6FEb5/?t=45" target="_blank" rel="noopener">回到原视频 (00:00:45)</a></p>
+</div>
+
+<hr />
+<h2 id="1">1. 信息安全简介</h2>
+<h3 id="11-8086">1.1 回到没有保护的 8086 时代</h3>
+<p><em>(参考时间: 01:00)</em></p>
+<p>8086 使用两个 16 位寄存器描述代码位置：</p>
+<div class="highlight"><pre><span></span><code>CS = code segment
+IP = instruction pointer
+physical address = (CS &lt;&lt; 4) + IP
+</code></pre></div>
+
+<p>这样最多可以寻址 1 MiB 物理内存。问题是 CPU 不检查访问者身份，也不区分内核和用户程序。Firmware 的只读代码虽然改不了，但任意程序都可以修改其他程序的内存、硬件寄存器和中断向量表。</p>
+<p>16 位时代通过 <code>int</code> 指令调用系统服务：</p>
+<div class="highlight"><pre><span></span><code><span class="nf">int</span><span class="w"> </span><span class="no">$x</span>
+</code></pre></div>
+
+<p>CPU 根据中断号 <code>x</code> 找到中断向量表中的地址，再长跳到对应处理程序。它更像一个函数调用，而不是拥有权限边界的系统调用。程序可以改写中断向量，把系统调用引向自己的代码。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    APP["应用程序"] --&gt; INT["int x"]
+    INT --&gt; TABLE["0x0000 起始的中断向量表"]
+    TABLE --&gt; HANDLER["Firmware / 系统服务代码"]
+    APP --&gt; PATCH["也可写入中断向量和硬件状态"]
+    PATCH --&gt; TABLE
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_01_40.png" alt="16 位系统的 int 调用本质上是一次经中断向量表跳转的函数调用" loading="lazy">
+  <p class="video-caption">📷 16 位系统的 int 调用本质上是一次经中断向量表跳转的函数调用<br><a href="https://www.bilibili.com/video/BV1qkEX6FEb5/?t=100" target="_blank" rel="noopener">回到原视频 (00:01:40)</a></p>
+</div>
+
+<h3 id="12-cih">1.2 病毒、加壳与 CIH</h3>
+<p><em>(参考时间: 02:00)</em></p>
+<p>没有内存保护之后，病毒可以复制自己、感染其他程序，甚至破坏硬件。一个典型技术是“加壳”：</p>
+<ol>
+<li>在可执行文件中注入一段恶意代码；</li>
+<li>把程序入口改成恶意代码；</li>
+<li>恶意代码运行后，再跳回原入口；</li>
+<li>用户看到程序行为不变，但每次启动都会悄悄执行恶意逻辑。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    ENTRY["ELF Entry"] --&gt; SHELL["恶意壳代码"]
+    SHELL --&gt; PAYLOAD["复制、感染或破坏"]
+    SHELL --&gt; ORIGINAL["跳回原程序入口"]
+    ORIGINAL --&gt; NORMAL["正常界面与行为"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_02_40.png" alt="加壳可以在保持程序外观的同时劫持执行入口" loading="lazy">
+  <p class="video-caption">📷 加壳可以在保持程序外观的同时劫持执行入口<br><a href="https://www.bilibili.com/video/BV1qkEX6FEb5/?t=160" target="_blank" rel="noopener">回到原视频 (00:02:40)</a></p>
+</div>
+
+<p>CIH 是 16 位时代最著名的病毒之一，它的破坏不仅限于文件，还能影响主板 Flash 芯片。这说明“软件漏洞”在缺少隔离时可以直接变成物理世界中的破坏。</p>
+<h3 id="13-bbs">1.3 BBS 时代的明文与爆破</h3>
+<p><em>(参考时间: 03:20)</em></p>
+<p>南京大学小百合和后来长期运行的水木社区代表了 BBS 时代。那时的网站大多使用 HTTP：</p>
+<ul>
+<li>用户名和密码在网络上明文传输；</li>
+<li>一个钓鱼路由器就能收集大量密码；</li>
+<li>用户列表可以被程序枚举；</li>
+<li>登录接口缺少速率限制和风控；</li>
+<li>可以用密码字典持续尝试。</li>
+</ul>
+<p>课堂回忆中，攻击者获得大量账号后，只是想让自己发的帖子进入“站内十大热门话题”。这件事如果放在今天，已经涉及未授权访问和个人信息风险。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_03_50.png" alt="早期 BBS 用明文协议传输用户名和密码" loading="lazy">
+  <p class="video-caption">📷 早期 BBS 用明文协议传输用户名和密码<br><a href="https://www.bilibili.com/video/BV1qkEX6FEb5/?t=230" target="_blank" rel="noopener">回到原视频 (00:03:50)</a></p>
+</div>
+
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant User as 用户
+    participant Router as 不可信路由器
+    participant BBS as BBS 服务器
+    User-&gt;&gt;Router: username + password（明文）
+    Router-&gt;&gt;BBS: 转发登录请求
+    Router--&gt;&gt;User: 正常返回页面
+    Note over Router: 同时复制凭据
+</code></pre></div>
+
+<h3 id="14">1.4 信息安全三要素</h3>
+<p><em>(参考时间: 06:00)</em></p>
+<p>信息安全通常从三个目标理解：</p>
+<h4 id="confidentiality">Confidentiality，保密性</h4>
+<p>不想让别人看到的信息，别人看不到。</p>
+<p>典型实现包括：</p>
+<ul>
+<li>文件系统加密；</li>
+<li>全盘加密；</li>
+<li>手机中的安全计算区；</li>
+<li>密钥与生物识别信息的安全存储。</li>
+</ul>
+<p>手机中的安全芯片甚至不信任操作系统，认为操作系统本身也可能被攻破。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_06_20.png" alt="保密性要求未授权者无法读取敏感信息" loading="lazy">
+  <p class="video-caption">📷 保密性要求未授权者无法读取敏感信息<br><a href="https://www.bilibili.com/video/BV1qkEX6FEb5/?t=380" target="_blank" rel="noopener">回到原视频 (00:06:20)</a></p>
+</div>
+
+<h4 id="integrity">Integrity，完整性</h4>
+<p>不想让别人修改的数据，别人改不了。</p>
+<p>课堂举了一个学长入侵教务系统的真实案例。攻击者向教务员发送一个 XSS 链接，获得教务员会话，进而能够以教务员身份查看和修改系统数据。即使最终没有修改成绩，这也同时破坏了保密性和完整性。</p>
+<p>相关行为不是“技术恶作剧”，而可能构成破坏计算机信息系统等违法行为。</p>
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_07_30.png" alt="教务系统入侵案例同时暴露了会话安全和完整性保护问题" loading="lazy">
+  <p class="video-caption">📷 教务系统入侵案例同时暴露了会话安全和完整性保护问题<br><a href="https://www.bilibili.com/video/BV1qkEX6FEb5/?t=450" target="_blank" rel="noopener">回到原视频 (00:07:30)</a></p>
+</div>
+
+<h4 id="availability">Availability，可用性</h4>
+<p>自己的服务不能被别人恶意中断。</p>
+<p>拒绝服务攻击不仅包括传统的 DDoS，也包括算法复杂性攻击：</p>
+<ul>
+<li>Fork bomb 持续创建进程，耗尽进程表；</li>
+<li>超长输入让 AI 模型生成巨量 token；</li>
+<li>精心构造大量哈希冲突，让哈希表退化为线性结构；</li>
+<li>租用云主机发送高复杂度请求。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    ATTACK["可用性攻击"] --&gt; VOLUME["流量型 DDoS"]
+    ATTACK --&gt; RESOURCE["资源耗尽&lt;br/&gt;Fork bomb"]
+    ATTACK --&gt; COMPLEXITY["算法复杂性攻击"]
+    COMPLEXITY --&gt; HASH["哈希冲突"]
+    COMPLEXITY --&gt; PARSE["超长解析或计算"]
+    COMPLEXITY --&gt; LLM["模型生成长输出的成本"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_10_30.png" alt="可用性攻击可以让合法用户无法访问正常服务" loading="lazy">
+  <p class="video-caption">📷 可用性攻击可以让合法用户无法访问正常服务<br><a href="https://www.bilibili.com/video/BV1qkEX6FEb5/?t=630" target="_blank" rel="noopener">回到原视频 (00:10:30)</a></p>
+</div>
+
+<p>一个健壮的哈希表实现需要在冲突过多时切换数据结构，例如把碰撞链转换为红黑树，降低最坏情况下的时间成本。</p>
+<h3 id="15">1.5 一分钟密码学</h3>
+<p><em>(参考时间: 13:30)</em></p>
+<h4 id="one-way-function">One-way function</h4>
+<p>单向函数满足：</p>
+<ul>
+<li>正向 <code>f(x) = y</code> 容易计算；</li>
+<li>已知 <code>y</code> 反推 <code>x</code> 极其困难；</li>
+<li>找到两个不同输入产生相同输出也很难。</li>
+</ul>
+<p>密码学哈希函数，例如 SHA-256，几乎表现得像随机函数。输入发生一位变化，输出会完全不同。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    M["任意文件或消息"] --&gt; HASH["SHA-256"]
+    HASH --&gt; DIGEST["固定长度摘要"]
+    DIGEST --&gt; CHECK["校验下载完整性"]
+    DIGEST --&gt; SIGN["与数字签名配合"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_14_00.png" alt="密码学哈希让文件摘要看起来像随机数" loading="lazy">
+  <p class="video-caption">📷 密码学哈希让文件摘要看起来像随机数<br><a href="https://www.bilibili.com/video/BV1qkEX6FEb5/?t=840" target="_blank" rel="noopener">回到原视频 (00:14:00)</a></p>
+</div>
+
+<h4 id="trapdoor-one-way-function">Trapdoor one-way function</h4>
+<p>陷门单向函数多了一个秘密 <code>t</code>：</p>
+<ul>
+<li>没有 <code>t</code> 时，反向求解困难；</li>
+<li>有 <code>t</code> 时，可以快速求逆。</li>
+</ul>
+<p>公钥对应公开函数，私钥对应陷门。它有两种典型用法：</p>
+<ol>
+<li><strong>加密</strong>：任何人都能公开加密，只有私钥持有者能解密；</li>
+<li><strong>签名</strong>：只有私钥持有者能生成证明，任何人都能公开验证。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    PUB["公开函数 f"] --&gt; ENC["Bob 计算 f(message)"]
+    ENC --&gt; CIPHER["密文"]
+    CIPHER --&gt; DEC["Alice 用私钥 t 解密"]
+    PUB --&gt; VERIFY["验证者检查 f(response)"]
+    PRIV["Alice 私钥 t"] --&gt; RESPONSE["生成 response"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_17_20.png" alt="陷门函数可以同时实现保密通信和身份认证" loading="lazy">
+  <p class="video-caption">📷 陷门函数可以同时实现保密通信和身份认证<br><a href="https://www.bilibili.com/video/BV1qkEX6FEb5/?t=1040" target="_blank" rel="noopener">回到原视频 (00:17:20)</a></p>
+</div>
+
+<h3 id="16-append-only-log">1.6 区块链：全球共享的 Append-only Log</h3>
+<p><em>(参考时间: 19:00)</em></p>
+<p>区块链可以理解为全球共同维护、难以篡改的 append-only 日志。每个新区块包含前序状态的哈希，形成链式证明。</p>
+<p>课堂用“狗和骨头”做类比：</p>
+<ul>
+<li>任何参与者都可以提交想 append 的内容；</li>
+<li>必须先完成昂贵的 hash 搜索，也就是 proof-of-work；</li>
+<li>找到有效结果后广播给其他人；</li>
+<li>其他人验证并接受这个块；</li>
+<li>出现分叉时，通常选择更长的链。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    B0["Block n-1"] --&gt; B1["Block n&lt;br/&gt;prev hash + data + nonce"]
+    B1 --&gt; B2["Block n+1"]
+    POW["Proof of Work"] --&gt; B1
+    REPLICAS["全球副本"] --&gt; AVAIL["高可用性"]
+    B1 --&gt; PUBLIC["所有人都可查看"]
+    PUBLIC --&gt; NO_CONF["没有保密性"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_21_20.png" alt="区块通过前序哈希与工作量证明形成全球共享日志" loading="lazy">
+  <p class="video-caption">📷 区块通过前序哈希与工作量证明形成全球共享日志<br><a href="https://www.bilibili.com/video/BV1qkEX6FEb5/?t=1280" target="_blank" rel="noopener">回到原视频 (00:21:20)</a></p>
+</div>
+
+<p>区块链协议本身也可以运行图灵完备的虚拟机。交易可以是一段代码，所有节点重放它并得到相同状态。这提供了分布式共识和高可用性，但并不意味着天然保密。</p>
+<hr />
+<h2 id="2">2. 访问控制</h2>
+<h3 id="21">2.1 操作系统把对象访问收口到系统调用</h3>
+<p><em>(参考时间: 24:00)</em></p>
+<p>现代操作系统已经提供了第一层保护：</p>
+<ul>
+<li>每个进程拥有独立虚拟地址空间；</li>
+<li>普通计算指令只能访问自己的地址空间；</li>
+<li>对文件、设备、网络和进程等共享对象的访问必须通过系统调用；</li>
+<li>系统调用是用户态和内核态之间的唯一受控入口。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    PROCESS["进程地址空间"] --&gt; USER["用户态计算"]
+    USER --&gt; SYSCALL["系统调用入口"]
+    SYSCALL --&gt; ACL["访问控制检查"]
+    ACL -- "允许" --&gt; OBJECT["操作系统对象"]
+    ACL -- "拒绝" --&gt; EACCES["EACCES / Permission denied"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_25_00.png" alt="虚拟内存隔离和系统调用边界构成访问控制的基础" loading="lazy">
+  <p class="video-caption">📷 虚拟内存隔离和系统调用边界构成访问控制的基础<br><a href="https://www.bilibili.com/video/BV1qkEX6FEb5/?t=1500" target="_blank" rel="noopener">回到原视频 (00:25:00)</a></p>
+</div>
+
+<p>系统调用同时包含两个层面：</p>
+<ul>
+<li><strong>机制</strong>：如何执行操作并检查访问；</li>
+<li><strong>策略</strong>：哪些进程可以访问哪些对象。</li>
+</ul>
+<h3 id="22">2.2 访问控制矩阵</h3>
+<p><em>(参考时间: 27:00)</em></p>
+<p>理论上，访问控制可以表示为一张巨大的矩阵：</p>
+<table>
+<thead>
+<tr>
+<th>进程</th>
+<th>对象</th>
+<th>操作</th>
+<th>是否允许</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>/etc/passwd</code></td>
+<td>read</td>
+<td>是</td>
+</tr>
+<tr>
+<td>1</td>
+<td><code>/etc/passwd</code></td>
+<td>write</td>
+<td>是</td>
+</tr>
+<tr>
+<td>4132</td>
+<td><code>/etc/passwd</code></td>
+<td>write</td>
+<td>否</td>
+</tr>
+<tr>
+<td>4132</td>
+<td><code>/tmp/hello.txt</code></td>
+<td>write</td>
+<td>是</td>
+</tr>
+</tbody>
+</table>
+<p>这个矩阵的规模是：</p>
+<div class="highlight"><pre><span></span><code>进程数 × 对象数 × 操作数
+</code></pre></div>
+
+<p>系统中可能有几万个进程和几百万个对象，直接存储完整矩阵不可行。因此需要从矩阵中提取低秩结构，或者只维护一小部分最关键的关系。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    MATRIX["Access Control Matrix&lt;br/&gt;(Process, Object, Action) -&gt; Bool"] --&gt; LOWRANK["低秩分解"]
+    LOWRANK --&gt; UID["UID / GID / Mode"]
+    LOWRANK --&gt; ACL["ACL"]
+    LOWRANK --&gt; LABEL["AppArmor / SELinux"]
+    LOWRANK --&gt; CAP["Capabilities"]
+    LOWRANK --&gt; BPF["seccomp / LSM BPF"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_28_00.png" alt="访问控制矩阵可以从身份、对象、程序或系统调用等维度近似分解" loading="lazy">
+  <p class="video-caption">📷 访问控制矩阵可以从身份、对象、程序或系统调用等维度近似分解<br><a href="https://www.bilibili.com/video/BV1qkEX6FEb5/?t=1680" target="_blank" rel="noopener">回到原视频 (00:28:00)</a></p>
+</div>
+
+<h3 id="23-unix-uidgid-mode">2.3 UNIX 的身份模型：uid、gid 和 mode</h3>
+<p><em>(参考时间: 29:30)</em></p>
+<p>UNIX 用少量整数近似表达身份关系：</p>
+<ul>
+<li><code>uid</code>：用户身份；</li>
+<li><code>gid</code>：用户组身份；</li>
+<li><code>mode</code>：owner、group、other 的 <code>rwx</code> 权限。</li>
+</ul>
+<p>规则包括：</p>
+<ul>
+<li><code>uid == 0</code> 是 root；</li>
+<li>root 通常可以访问所有对象；</li>
+<li>root 可以切换到其他 uid；</li>
+<li>子进程继承父进程 uid；</li>
+<li>一个用户可以属于多个组。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    USER["用户"] --&gt; UID["UID"]
+    USER --&gt; GID["多个 GID"]
+    UID --&gt; MODE["文件 mode"]
+    GID --&gt; MODE
+    MODE --&gt; OWNER["owner: rwx"]
+    MODE --&gt; GROUP["group: rwx"]
+    MODE --&gt; OTHER["other: rwx"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_30_30.png" alt="UNIX 把巨大的访问矩阵压缩为 uid、gid 和 mode" loading="lazy">
+  <p class="video-caption">📷 UNIX 把巨大的访问矩阵压缩为 uid、gid 和 mode<br><a href="https://www.bilibili.com/video/BV1qkEX6FEb5/?t=1830" target="_blank" rel="noopener">回到原视频 (00:30:30)</a></p>
+</div>
+
+<h3 id="24-etcpasswd">2.4 <code>/etc/passwd</code> 与用户数据库</h3>
+<p><em>(参考时间: 32:00)</em></p>
+<p>传统用户信息保存在 <code>/etc/passwd</code>：</p>
+<div class="highlight"><pre><span></span><code>username:password:uid:gid:comment:home:shell
+</code></pre></div>
+
+<p>现代系统通常把密码哈希放进只有 root 可读的 shadow 文件。普通用户可以读取用户名和 uid，但不能修改自己的身份记录。</p>
+<p>登录过程可以理解为：</p>
+<ol>
+<li>登录程序以 root 权限运行；</li>
+<li>校验用户密码哈希；</li>
+<li>通过 <code>setuid</code> 切换到目标用户；</li>
+<li>启动该用户的 shell。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant Login as login
+    participant Shadow as /etc/shadow
+    participant Kernel as Kernel
+    participant Shell as User Shell
+    Login-&gt;&gt;Shadow: 读取密码哈希
+    Login-&gt;&gt;Login: 校验用户输入
+    Login-&gt;&gt;Kernel: setuid(target)
+    Kernel--&gt;&gt;Shell: 以目标 UID 启动
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_32_50.png" alt="用户数据库保存身份与登录配置，密码哈希在现代系统中移至 shadow 文件" loading="lazy">
+  <p class="video-caption">📷 用户数据库保存身份与登录配置，密码哈希在现代系统中移至 shadow 文件<br><a href="https://www.bilibili.com/video/BV1qkEX6FEb5/?t=1970" target="_blank" rel="noopener">回到原视频 (00:32:50)</a></p>
+</div>
+
+<h3 id="25-passwd-uid">2.5 <code>passwd</code> 悖论与多种 UID</h3>
+<p><em>(参考时间: 35:30)</em></p>
+<p>普通用户明明不能修改 <code>/etc/passwd</code>，为什么可以运行 <code>passwd</code> 修改自己的密码？</p>
+<p>原因在 setuid：</p>
+<div class="highlight"><pre><span></span><code>ls<span class="w"> </span>-l<span class="w"> </span>/bin/passwd
+</code></pre></div>
+
+<p>可以看到：</p>
+<div class="highlight"><pre><span></span><code>-rwsr-xr-x root root /bin/passwd
+</code></pre></div>
+
+<p>owner 执行位的 <code>x</code> 变成 <code>s</code>，表示程序运行时使用文件 owner 的 uid，而不是调用者 uid：</p>
+<div class="highlight"><pre><span></span><code>程序固定，但 euid 会随父进程或 setuid 位变化
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart LR
+    USER["普通用户执行 passwd"] --&gt; SETUID["setuid bit&lt;br/&gt;owner = root"]
+    SETUID --&gt; EUID["进程 euid = 0"]
+    EUID --&gt; FILE["允许修改 shadow"]
+    FILE --&gt; EXIT["程序退出，权限消失"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_38_20.png" alt="setuid 程序在执行期间临时获得文件所有者的权限" loading="lazy">
+  <p class="video-caption">📷 setuid 程序在执行期间临时获得文件所有者的权限<br><a href="https://www.bilibili.com/video/BV1qkEX6FEb5/?t=2300" target="_blank" rel="noopener">回到原视频 (00:38:20)</a></p>
+</div>
+
+<p>真实 UNIX 中并不只有一个 uid：</p>
+<ul>
+<li>Real UID：真实调用者身份；</li>
+<li>Effective UID：访问控制实际使用的身份；</li>
+<li>Saved UID：允许程序恢复权限；</li>
+<li>Filesystem UID：Linux 历史上用于独立控制文件访问。</li>
+</ul>
+<p>复杂性来自“程序需要临时提权，但提权后又必须能安全恢复”的需求。系统越大，这种兼容性补丁越多。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    REAL["Real UID"] --&gt; PROCESS["进程身份"]
+    EFFECTIVE["Effective UID"] --&gt; ACCESS["实际访问控制"]
+    SAVED["Saved UID"] --&gt; RESTORE["权限恢复"]
+    FSUID["Filesystem UID"] --&gt; FS["文件系统访问"]
+    PROCESS --&gt; SETUID["setuid / seteuid"]
+    SETUID --&gt; EFFECTIVE
+    SETUID --&gt; SAVED
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_40_20.png" alt="UID 系统为兼容提权和恢复权限扩展出多个身份字段" loading="lazy">
+  <p class="video-caption">📷 UID 系统为兼容提权和恢复权限扩展出多个身份字段<br><a href="https://www.bilibili.com/video/BV1qkEX6FEb5/?t=2420" target="_blank" rel="noopener">回到原视频 (00:40:20)</a></p>
+</div>
+
+<h3 id="26-acl">2.6 从 ACL 到可编程访问控制</h3>
+<p><em>(参考时间: 41:00)</em></p>
+<p>传统 mode 只能表达 owner、group、other 三类。更细粒度的方案包括：</p>
+<h4 id="posix-acl">POSIX ACL</h4>
+<p>以文件和用户为单位设置权限，底层通常保存在扩展属性中。</p>
+<div class="highlight"><pre><span></span><code>getfacl<span class="w"> </span>file
+setfacl<span class="w"> </span>-m<span class="w"> </span>u:alice:r<span class="w"> </span>file
+</code></pre></div>
+
+<h4 id="apparmor-selinux">AppArmor / SELinux</h4>
+<p>不是只按用户身份判断，而是限制某个程序可以访问的对象集合。例如让 Nginx 只能看到自己的几个目录，即使它被攻破，也看不到 <code>/etc/passwd</code>。</p>
+<h4 id="capabilities">Capabilities</h4>
+<p>把 root 的巨大权限拆成行为类别，例如网络原始套接字、挂载文件系统、修改时间等。</p>
+<div class="highlight"><pre><span></span><code>capsh<span class="w"> </span>--drop<span class="o">=</span>cap_net_raw<span class="w"> </span>--<span class="w"> </span>-c<span class="w"> </span><span class="s1">'ping 127.0.0.1'</span>
+</code></pre></div>
+
+<h4 id="seccomp-lsm-bpf">seccomp 与 LSM BPF</h4>
+<p>在进程或内核安全钩子上运行一段受限制的程序，对每一次系统调用或访问返回 allow/deny。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    SYSCALL["系统调用"] --&gt; HOOK["LSM Hook"]
+    HOOK --&gt; BPF["BPF 检查程序"]
+    BPF --&gt; ALLOW["返回允许"]
+    BPF --&gt; DENY["返回拒绝"]
+    ALLOW --&gt; OBJECT["执行对象访问"]
+    DENY --&gt; ERROR["返回权限错误"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_43_40.png" alt="ACL、程序标签、Capabilities 与 BPF 都在从不同维度切片访问控制矩阵" loading="lazy">
+  <p class="video-caption">📷 ACL、程序标签、Capabilities 与 BPF 都在从不同维度切片访问控制矩阵<br><a href="https://www.bilibili.com/video/BV1qkEX6FEb5/?t=2620" target="_blank" rel="noopener">回到原视频 (00:43:40)</a></p>
+</div>
+
+<hr />
+<h2 id="3">3. 软件系统安全</h2>
+<h3 id="31">3.1 程序有大量无人理解的路径</h3>
+<p><em>(参考时间: 48:30)</em></p>
+<p>访问控制只能判断“主体有没有权限访问对象”。即使每一次访问都合法，程序仍然可能被恶意输入引导到异常状态。</p>
+<p>原因包括：</p>
+<ul>
+<li>程序路径复杂，开发者无法穷举；</li>
+<li>用户行为无法完全预期；</li>
+<li>恶意用户可以有目的地探索边界条件；</li>
+<li>一个看似合法的输入可能触发内存破坏、整数溢出或算法退化。</li>
+</ul>
+<p>例如无符号整数减法到 0 后继续减一，可能变成极大值，导致“余额无穷大”之类的业务漏洞。</p>
+<h3 id="32-fuzz-testing">3.2 Fuzz Testing：让机器寻找意外输入</h3>
+<p><em>(参考时间: 49:30)</em></p>
+<p>Fuzz Testing 自动生成大量随机或变异输入，观察程序是否崩溃、卡死、越权或进入异常状态。</p>
+<p>典型工具：</p>
+<ul>
+<li>AFL，基于覆盖率引导的灰盒 fuzz；</li>
+<li>OSS-Fuzz，持续 fuzz 开源项目；</li>
+<li>针对协议、文件格式、编译器和内核的专用 fuzzer。</li>
+</ul>
+<p>OSS-Fuzz 已经发现成千上万个漏洞。LLM 加入后，代码审计和输入生成能力进一步提高，攻击者获得 0-day 的速度也可能提高。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    SEED["初始输入"] --&gt; MUTATE["变异"]
+    MUTATE --&gt; RUN["运行目标程序"]
+    RUN --&gt; CRASH{"异常？"}
+    CRASH -- "否" --&gt; COVER["收集覆盖率"]
+    COVER --&gt; MUTATE
+    CRASH -- "是" --&gt; TRIAGE["归类与复现"]
+    TRIAGE --&gt; VULN["可能得到可利用漏洞"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_50_20.png" alt="Fuzz Testing 通过自动生成异常输入探索程序路径" loading="lazy">
+  <p class="video-caption">📷 Fuzz Testing 通过自动生成异常输入探索程序路径<br><a href="https://www.bilibili.com/video/BV1qkEX6FEb5/?t=3020" target="_blank" rel="noopener">回到原视频 (00:50:20)</a></p>
+</div>
+
+<h3 id="33">3.3 栈缓冲区溢出</h3>
+<p><em>(参考时间: 51:00)</em></p>
+<p>课堂用一个 <code>scanf</code> 读取 64 字节缓冲区的程序说明问题：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">char</span><span class="w"> </span><span class="n">buffer</span><span class="p">[</span><span class="mi">64</span><span class="p">];</span>
+<span class="n">scanf</span><span class="p">(</span><span class="s">"%s"</span><span class="p">,</span><span class="w"> </span><span class="n">buffer</span><span class="p">);</span>
+</code></pre></div>
+
+<p>如果输入长度超过缓冲区，写操作会越过边界。返回地址位于更高地址，可能被覆盖。现代编译器会把这种行为视为 undefined behavior。</p>
+<div class="highlight"><pre><span></span><code>高地址
++---------------------------+
+| caller stack frame        |
++---------------------------+
+| return address            |  &lt;-- 溢出可覆盖
++---------------------------+
+| saved frame pointer       |
++---------------------------+
+| buffer[63] ... buffer[0]  |
++---------------------------+
+低地址
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_52_30.png" alt="栈帧中缓冲区与返回地址相邻，越界写入可能影响控制流" loading="lazy">
+  <p class="video-caption">📷 栈帧中缓冲区与返回地址相邻，越界写入可能影响控制流<br><a href="https://www.bilibili.com/video/BV1qkEX6FEb5/?t=3150" target="_blank" rel="noopener">回到原视频 (00:52:30)</a></p>
+</div>
+
+<p>在没有保护机制时，攻击者可能把返回地址改成其他代码地址。现实攻击还依赖：</p>
+<ul>
+<li>栈是否可执行；</li>
+<li>地址是否随机化；</li>
+<li>是否能获得 buffer 地址；</li>
+<li>是否能构造合法参数；</li>
+<li>目标程序是否拥有更高权限。</li>
+</ul>
+<h4 id="_3">编者说明</h4>
+<p>本书只描述漏洞原理，不提供可直接使用的攻击载荷或地址构造步骤。生产系统的安全研究应在授权环境中进行。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    INPUT["恶意超长输入"] --&gt; COPY["越界拷贝"]
+    COPY --&gt; RETURN["覆盖返回地址"]
+    RETURN --&gt; FLOW["劫持控制流"]
+    FLOW --&gt; TARGET["跳转到已有代码或注入代码"]
+    TARGET --&gt; IMPACT["权限提升或进程被控制"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_54_40.png" alt="缓冲区溢出可以把数据错误变成控制流劫持" loading="lazy">
+  <p class="video-caption">📷 缓冲区溢出可以把数据错误变成控制流劫持<br><a href="https://www.bilibili.com/video/BV1qkEX6FEb5/?t=3280" target="_blank" rel="noopener">回到原视频 (00:54:40)</a></p>
+</div>
+
+<h3 id="34">3.4 防御栈攻击</h3>
+<p><em>(参考时间: 56:20)</em></p>
+<p>现代系统采用多层防御：</p>
+<h4 id="nx-wx">NX / W^X</h4>
+<p>栈页面标记为不可执行。即使攻击者把代码写进栈，CPU 也会拒绝执行。</p>
+<h4 id="aslr">ASLR</h4>
+<p>随机化栈、堆、共享库和代码的基地址，使攻击者无法依赖固定地址。</p>
+<h4 id="stack-protector-canary">Stack Protector / Canary</h4>
+<p>在局部变量和返回地址之间放置随机值。函数返回前检查 canary；如果缓冲区溢出覆盖它，程序立即终止。</p>
+<div class="highlight"><pre><span></span><code>+---------------------------+
+| return address            |
++---------------------------+
+| stack canary              |  &lt;-- 溢出必须覆盖它
++---------------------------+
+| local buffer              |
++---------------------------+
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_59_20.png" alt="Canary 像矿井中的金丝雀，用自身被破坏来提示控制流风险" loading="lazy">
+  <p class="video-caption">📷 Canary 像矿井中的金丝雀，用自身被破坏来提示控制流风险<br><a href="https://www.bilibili.com/video/BV1qkEX6FEb5/?t=3560" target="_blank" rel="noopener">回到原视频 (00:59:20)</a></p>
+</div>
+
+<h4 id="control-flow-integrity">Control-Flow Integrity</h4>
+<p>只允许程序按照编译后确定的合法控制流跳转。Intel CET 中的 <code>endbr64</code> 标记间接跳转的合法目标。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    OVERFLOW["栈溢出"] --&gt; NX{"栈可执行？"}
+    NX -- "否" --&gt; ROP["尝试复用已有代码片段"]
+    ROP --&gt; CFI{"目标是否合法？"}
+    CFI -- "否" --&gt; BLOCK["CET / CFI 阻止"]
+    NX -- "是" --&gt; MITIGATE["NX 阻止注入执行"]
+    OVERFLOW --&gt; CANARY{"Canary 被改？"}
+    CANARY -- "是" --&gt; TERM["函数返回前终止"]
+    OVERFLOW --&gt; ASLR["ASLR 隐藏地址"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_00_30.png" alt="NX、ASLR、Canary 和 CFI 从不同阶段阻断控制流劫持" loading="lazy">
+  <p class="video-caption">📷 NX、ASLR、Canary 和 CFI 从不同阶段阻断控制流劫持<br><a href="https://www.bilibili.com/video/BV1qkEX6FEb5/?t=3630" target="_blank" rel="noopener">回到原视频 (01:00:30)</a></p>
+</div>
+
+<h3 id="35-timing-side-channel">3.5 合法访问也会泄露信息：Timing Side Channel</h3>
+<p><em>(参考时间: 01:02:00)</em></p>
+<p>课堂给出一个内核密码检查函数：</p>
+<div class="highlight"><pre><span></span><code><span class="kt">int</span><span class="w"> </span><span class="nf">check_password</span><span class="p">(</span><span class="n">__user</span><span class="w"> </span><span class="kt">char</span><span class="w"> </span><span class="o">*</span><span class="n">given_pass</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="n">strlen</span><span class="p">(</span><span class="n">correct_pass</span><span class="p">);</span><span class="w"> </span><span class="n">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">correct_pass</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="n">given_pass</span><span class="p">[</span><span class="n">i</span><span class="p">])</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">sleep</span><span class="p">(</span><span class="mi">3</span><span class="p">);</span>
+<span class="w">            </span><span class="k">return</span><span class="w"> </span><span class="n">EACCESS</span><span class="p">;</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>看似加入 <code>sleep(3)</code> 能阻止暴力尝试，但比较过程具有数据依赖的时间差。攻击者可以观察哪一位比较导致的执行时间不同，逐位推断密码。</p>
+<p>在更精细的案例中，攻击者通过控制用户缓冲区的位置，让待比较字节落在页边界上：</p>
+<ul>
+<li>猜对时，下一次比较需要读取尚未换入的页面；</li>
+<li>猜错时，循环提前返回；</li>
+<li>页错误和缓存状态形成可测量时间差；</li>
+<li>通过分页或缓存信道逐字节恢复信息。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    GUESS["猜测密码前缀"] --&gt; COMPARE["内核逐字节比较"]
+    COMPARE --&gt; PAGE["跨页访问 / Cache 状态"]
+    PAGE --&gt; TIME["执行时间差异"]
+    TIME --&gt; LEARN["判断当前字节是否正确"]
+    LEARN --&gt; NEXT["继续猜下一位"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_04_30.png" alt="密码比较的数据依赖会被页错误和缓存状态转化为时间侧信道" loading="lazy">
+  <p class="video-caption">📷 密码比较的数据依赖会被页错误和缓存状态转化为时间侧信道<br><a href="https://www.bilibili.com/video/BV1qkEX6FEb5/?t=3870" target="_blank" rel="noopener">回到原视频 (01:04:30)</a></p>
+</div>
+
+<h3 id="36-meltdown">3.6 Meltdown 与投机执行泄漏</h3>
+<p><em>(参考时间: 01:06:40)</em></p>
+<p>CPU 为了提高性能会投机执行分支后面的指令。投机执行不允许改变最终架构状态，却可能改变缓存等微架构状态。</p>
+<p>Meltdown 的核心条件是：</p>
+<ul>
+<li>先执行一个最终非法的内核内存访问；</li>
+<li>CPU 在权限异常真正提交前投机读取数据；</li>
+<li>后续指令用该数据访问探测数组；</li>
+<li>非法结果虽然被丢弃，缓存状态却保留；</li>
+<li>另一线程测量探测数组的访问延迟，恢复被读取的字节。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant T1 as 攻击线程
+    participant CPU as 投机执行
+    participant T2 as 测量线程
+    T1-&gt;&gt;CPU: 非法读取内核数据
+    CPU-&gt;&gt;CPU: 投机得到 secret
+    CPU-&gt;&gt;CPU: 访问 probe_array[secret * page]
+    CPU--&gt;&gt;T1: 架构异常，结果回滚
+    Note over CPU: Cache 状态未完全回滚
+    T2-&gt;&gt;CPU: 测量各 probe 地址延迟
+    T2--&gt;&gt;T2: 恢复 secret
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_09_30.png" alt="Meltdown 利用投机执行和缓存侧信道泄露本无权读取的数据" loading="lazy">
+  <p class="video-caption">📷 Meltdown 利用投机执行和缓存侧信道泄露本无权读取的数据<br><a href="https://www.bilibili.com/video/BV1qkEX6FEb5/?t=4170" target="_blank" rel="noopener">回到原视频 (01:09:30)</a></p>
+</div>
+
+<p>内核最初把内核空间映射在每个进程地址空间中，以降低上下文切换成本。Meltdown 后，Page Table Isolation 将用户页表和内核页表分离，使用户态投机访问也无法直接看到内核映射。</p>
+<p>后续又出现：</p>
+<ul>
+<li>Downfall；</li>
+<li>Inception；</li>
+<li>GhostRace；</li>
+<li>各种分支预测器、缓存和 speculative race 攻击。</li>
+</ul>
+<p>这说明微架构优化会不断打开新的侧信道。</p>
+<h3 id="37">3.7 物理侧信道</h3>
+<p><em>(参考时间: 01:12:20)</em></p>
+<p>攻击者甚至不需要运行代码。</p>
+<h4 id="_4">电磁泄露</h4>
+<p>显示器、键盘和 CPU 在执行时都会产生电磁信号。经典研究可以用天线在数米距离、隔着墙体恢复屏幕内容，甚至提取密钥。</p>
+<h4 id="_5">物理密钥提取</h4>
+<p>通过测量 CPU、电源或电磁泄漏，可以从运行中的设备推导密码学密钥。</p>
+<h4 id="cold-boot-attack">Cold Boot Attack</h4>
+<p>DRAM 断电后数据不会瞬间消失。攻击者可以快速拆机，用低温材料冷却内存条，再放入读取设备恢复内存中的：</p>
+<ul>
+<li>浏览器会话；</li>
+<li>打开的文档；</li>
+<li>操作系统状态；</li>
+<li>私钥和磁盘加密密钥。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    DEVICE["运行中的设备"] --&gt; EM["电磁泄露"]
+    DEVICE --&gt; POWER["功耗/时序"]
+    DEVICE --&gt; MEM["DRAM 残留"]
+    EM --&gt; SECRET["恢复屏幕或密钥"]
+    POWER --&gt; SECRET
+    MEM --&gt; COLD["低温保存并读取"]
+    COLD --&gt; SECRET
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_13_40.png" alt="物理侧信道把软件之外的电磁、功耗和内存残留纳入攻击面" loading="lazy">
+  <p class="video-caption">📷 物理侧信道把软件之外的电磁、功耗和内存残留纳入攻击面<br><a href="https://www.bilibili.com/video/BV1qkEX6FEb5/?t=4420" target="_blank" rel="noopener">回到原视频 (01:13:40)</a></p>
+</div>
+
+<hr />
+<h2 id="4-agent">4. Agent 时代的新安全威胁</h2>
+<h3 id="41-prompt-injection-jailbreak">4.1 Prompt Injection 与 Jailbreak</h3>
+<p><em>(参考时间: 01:15:00)</em></p>
+<p>大模型经过安全训练后会拒绝一部分危险请求，但上下文可以诱导模型改变行为。</p>
+<p>课堂提到“奶奶漏洞”：</p>
+<blockquote>
+<p>我的奶奶每天晚上给我讲 Windows 序列号的故事。</p>
+</blockquote>
+<p>模型原本知道不应输出某些内容，但角色扮演和情感语境会降低安全约束。类似方法还包括：</p>
+<ul>
+<li>伪造历史对话，让模型以为自己已经回答过；</li>
+<li>把恶意要求拆成多次看似无害的请求；</li>
+<li>在长上下文中逐步改变目标；</li>
+<li>修改权重或利用模型实现漏洞。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    SAFE["安全训练后的模型"] --&gt; CONTEXT["长上下文 / 角色扮演"]
+    CONTEXT --&gt; EMOTION["情感诱导"]
+    CONTEXT --&gt; HISTORY["伪造历史"]
+    CONTEXT --&gt; SPLIT["分步注入"]
+    EMOTION --&gt; BYPASS["绕过安全策略"]
+    HISTORY --&gt; BYPASS
+    SPLIT --&gt; BYPASS
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_15_50.png" alt="Prompt Injection 利用上下文和角色设定突破模型的安全约束" loading="lazy">
+  <p class="video-caption">📷 Prompt Injection 利用上下文和角色设定突破模型的安全约束<br><a href="https://www.bilibili.com/video/BV1qkEX6FEb5/?t=4550" target="_blank" rel="noopener">回到原视频 (01:15:50)</a></p>
+</div>
+
+<h3 id="42-agent">4.2 Agent 工具调用把文本风险变成现实操作</h3>
+<p><em>(参考时间: 01:17:00)</em></p>
+<p>如果模型只能回复文本，注入最多影响内容。如果 Agent 可以调用工具，它就可以：</p>
+<ul>
+<li>读取文件；</li>
+<li>发送邮件；</li>
+<li>调用 API；</li>
+<li>修改代码；</li>
+<li>访问数据库；</li>
+<li>执行 shell 命令。</li>
+</ul>
+<p>恶意网页可以把提示词藏在 HTML、注释、图片说明或下载文件中。Agent 抓取网页后，这些内容会进入上下文，可能被误当成用户指令。</p>
+<p>这与 Return-Oriented Programming 有相似之处：</p>
+<ul>
+<li>单次注入内容看似无害；</li>
+<li>多个小片段组合后形成恶意目标；</li>
+<li>最终让 Agent 执行未授权操作。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    WEB["恶意网页 / 文件"] --&gt; FETCH["Agent 抓取内容"]
+    FETCH --&gt; CONTEXT["内容进入模型上下文"]
+    CONTEXT --&gt; INJECT["模型把数据误认为指令"]
+    INJECT --&gt; TOOL["调用文件 / 网络 / Shell 工具"]
+    TOOL --&gt; EXFIL["泄露数据或修改系统"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_17_50.png" alt="Agent 一旦拥有工具权限，Prompt Injection 就可能转化为真实操作" loading="lazy">
+  <p class="video-caption">📷 Agent 一旦拥有工具权限，Prompt Injection 就可能转化为真实操作<br><a href="https://www.bilibili.com/video/BV1qkEX6FEb5/?t=4670" target="_blank" rel="noopener">回到原视频 (01:17:50)</a></p>
+</div>
+
+<p>防御的核心是：</p>
+<ul>
+<li>最小权限；</li>
+<li>沙箱隔离；</li>
+<li>工具调用白名单；</li>
+<li>外部内容与指令严格分离；</li>
+<li>敏感操作需要再次确认；</li>
+<li>为每次大模型调用分配最小资源。</li>
+</ul>
+<p>但完全锁定权限会降低 Agent 能力。开放所有权限又放大注入风险，这是 Agent 时代必须解决的可用性与安全矛盾。</p>
+<h3 id="43">4.3 供应链攻击</h3>
+<p><em>(参考时间: 01:19:20)</em></p>
+<p>现代软件大量依赖第三方包。攻击者不一定攻击最终应用，只要攻破一个依赖即可覆盖成千上万个下游。</p>
+<h4 id="npm-hook">NPM 包与安装 Hook</h4>
+<p>攻击过程可以抽象为：</p>
+<ol>
+<li>获得 GitHub 仓库或维护者凭据；</li>
+<li>创建一个名字具有迷惑性的恶意包；</li>
+<li>等待适当时机，以“添加功能”为理由引入依赖；</li>
+<li>CI/CD 审核通过后发布新版本；</li>
+<li>用户安装时触发 <code>postinstall</code> Hook；</li>
+<li>Hook 扫描环境变量、云配置目录和 API Key；</li>
+<li>将凭据发送到外部地址。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant Attacker as 攻击者
+    participant Repo as GitHub Repo
+    participant CI as CI/CD
+    participant User as 下游用户
+    Attacker-&gt;&gt;Repo: 注入依赖
+    Repo-&gt;&gt;CI: 提交 Pull Request / Release
+    CI--&gt;&gt;Repo: 审核并发布
+    User-&gt;&gt;Repo: 安装新版本
+    Repo--&gt;&gt;User: 执行 postinstall hook
+    User--&gt;&gt;Attacker: API Key / 云凭据被外传
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_20_40.png" alt="供应链攻击通过依赖安装 Hook 获取开发者凭据" loading="lazy">
+  <p class="video-caption">📷 供应链攻击通过依赖安装 Hook 获取开发者凭据<br><a href="https://www.bilibili.com/video/BV1qkEX6FEb5/?t=4840" target="_blank" rel="noopener">回到原视频 (01:20:40)</a></p>
+</div>
+
+<h3 id="44-xz-utils">4.4 XZ Utils 后门</h3>
+<p><em>(参考时间: 01:22:00)</em></p>
+<p>比恶意 npm 包更隐蔽的是长期社会工程攻击。</p>
+<p>XZ Utils 后门的关键点：</p>
+<ul>
+<li>攻击者花费两到三年建立贡献者信任；</li>
+<li>在 <code>liblzma</code> 构建系统中注入混淆代码；</li>
+<li>规避编译检查和 fuzz 流程；</li>
+<li>通过 systemd 影响 sshd；</li>
+<li>使用 Ed448 密钥尝试实现远程代码执行。</li>
+</ul>
+<p>安全影响最终没有全面扩散，原因之一是一个性能异常引起工程师注意。若没有这个性能 Bug，后门可能长期不被发现。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    IDENTITY["长期贡献者身份"] --&gt; TRUST["建立维护者信任"]
+    TRUST --&gt; BUILD["注入构建系统"]
+    BUILD --&gt; OBFUSCATE["混淆与规避检测"]
+    OBFUSCATE --&gt; DEPENDENT["影响 systemd / sshd"]
+    DEPENDENT --&gt; RCE["远程代码执行能力"]
+    RCE --&gt; DISCOVER["性能异常导致被发现"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_23_20.png" alt="XZ Utils 后门展示了长期供应链社会工程攻击的隐蔽性" loading="lazy">
+  <p class="video-caption">📷 XZ Utils 后门展示了长期供应链社会工程攻击的隐蔽性<br><a href="https://www.bilibili.com/video/BV1qkEX6FEb5/?t=5000" target="_blank" rel="noopener">回到原视频 (01:23:20)</a></p>
+</div>
+
+<hr />
+<h2 id="5">5. 总结：安全是系统设计的横切目标</h2>
+<p><em>(参考时间: 01:23:50)</em></p>
+<p>本讲从没有保护的 8086 讲到 Agent 时代的供应链攻击。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    CIA["CIA 三要素"] --&gt; CONF["Confidentiality"]
+    CIA --&gt; INTEG["Integrity"]
+    CIA --&gt; AVAIL["Availability"]
+    CONF --&gt; ACL["访问控制"]
+    INTEG --&gt; ACL
+    AVAIL --&gt; RESOURCE["资源控制与公平调度"]
+    ACL --&gt; UID["UID / GID / Mode"]
+    ACL --&gt; ACL2["ACL / AppArmor / Capabilities"]
+    ACL --&gt; BPF["seccomp / LSM BPF"]
+    ACL --&gt; MEM["内存保护与控制流完整性"]
+    ACL --&gt; SIDE["侧信道防御"]
+    SIDE --&gt; PHYSICAL["物理攻击面"]
+    ACL --&gt; AGENT["Agent 最小权限"]
+    AGENT --&gt; SUPPLY["供应链安全"]
+</code></pre></div>
+
+<p>核心结论：</p>
+<ul>
+<li>安全不是单独功能，而是贯穿操作系统、编译器、CPU、库和应用的目标；</li>
+<li>进程隔离与系统调用为访问控制提供了基础边界；</li>
+<li>访问控制矩阵需要按身份、对象、程序或行为进行低秩近似；</li>
+<li>合法访问也可能通过时间、缓存、电磁或物理信道泄露信息；</li>
+<li>内存安全漏洞需要 NX、ASLR、Canary、CFI 等多层防御；</li>
+<li>LLM 无法靠提示词完全防住注入，工具权限必须由沙箱和访问控制约束；</li>
+<li>供应链攻击提醒我们，可信软件本身也可能在长期演化中被污染。</li>
+</ul>
+<p>安全性越高，能做的事情通常越少；能力越开放，攻击面越大。系统设计者必须根据业务风险，在这两者之间做出明确选择。</p>
+<hr />
+<h2 id="_6">附：官方参考与延伸阅读</h2>
+<ul>
+<li><a href="https://wiki.osdev.org/BIOS">OSDEV: BIOS 与中断调用</a></li>
+<li><a href="https://xiaobao.nju.edu.cn/d4/01/c18184a316417/page.htm">南京大学小百合历史资料</a></li>
+<li><a href="https://ocert.org/advisories/ocert-2011-003.html">Algorithmic Complexity Attack Advisory</a></li>
+<li><a href="https://nvd.nist.gov/vuln/detail/CVE-2011-4858">CVE-2011-4858: Hash Collision DoS</a></li>
+<li><a href="https://www.usenix.org/conference/11th-usenix-security-symposium/setuid-demystified">Setuid Demystified</a></li>
+<li><a href="https://man7.org/linux/man-pages/man2/seccomp.2.html">Linux seccomp</a></li>
+<li><a href="https://docs.kernel.org/bpf/prog_lsm.html">LSM BPF</a></li>
+<li><a href="https://lcamtuf.coredump.cx/afl/">AFL Fuzzing</a></li>
+<li><a href="https://google.github.io/oss-fuzz/">OSS-Fuzz</a></li>
+<li><a href="https://inst.eecs.berkeley.edu/~cs161/fa08/papers/stack_smashing.pdf">Smashing The Stack For Fun And Profit</a></li>
+<li><a href="https://downfall.page/">Downfall</a></li>
+<li><a href="https://comsec.ethz.ch/wp-content/files/inception_sec23.pdf">Inception</a></li>
+<li><a href="https://www.vusec.net/projects/ghostrace/">GhostRace</a></li>
+<li><a href="https://dl.acm.org/doi/10.1145/2851486">Physical Key Extraction Attacks on PCs</a></li>
+<li><a href="https://www.usenix.org/legacy/event/sec08/tech/full_papers/halderman/halderman.pdf">Cold Boot Attacks on Encryption Keys</a></li>
+<li><a href="https://en.wikipedia.org/wiki/XZ_Utils_backdoor">XZ Utils Backdoor</a></li>
+</ul>
+<p>官方课程资料：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/2026/">课程主页</a></li>
+<li><a href="https://jyywiki.cn/OS/2026/lect28.md">第 28 讲讲义：计算机系统安全</a></li>
+<li><a href="https://www.bilibili.com/video/BV1qkEX6FEb5/">视频：28 - 计算机系统安全</a></li>
+</ul>
+<blockquote>
+<p><strong>版权与署名</strong>：本讲课程材料由蒋炎岩（jyy）编写。课程讲义与幻灯片采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书保留课程出处、作者署名与许可说明。</p>
+</blockquote>
+    </article>
+
+    <!-- Mermaid 图表引擎初始化 -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            mermaid.initialize({ startOnLoad: false, theme: 'default' });
+            
+            // 兼容普通代码块以及丢失 language-mermaid 类名的情况 (CodeHilite 干扰)
+            const codeNodes = document.querySelectorAll('pre code, .highlight code');
+            codeNodes.forEach(function(node) {
+                const text = node.textContent.trim();
+                // 匹配常见的 mermaid 图表前缀
+                if (text.startsWith('graph ') || text.startsWith('flowchart ') || text.startsWith('sequenceDiagram') || text.startsWith('gantt') || text.startsWith('pie') || text.startsWith('classDiagram') || text.startsWith('stateDiagram') || text.startsWith('mindmap')) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.className = 'mermaid';
+                    tempDiv.textContent = text;
+                    
+                    // 获取需要替换的最外层父节点 (比如 div.highlight 或者 pre)
+                    const wrapper = node.closest('.highlight') || node.parentNode;
+                    wrapper.replaceWith(tempDiv); 
+                }
+            });
+            
+            // 所有节点转换完成，统一进行图表动态绘制
+            mermaid.run();
+        });
+    </script>
+    <!-- Lightbox：截图点击放大 -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const lightbox = document.createElement('div');
+            lightbox.className = 'lightbox';
+            lightbox.innerHTML = '<img alt=""><div class="lightbox-caption"></div>';
+            document.body.appendChild(lightbox);
+            const lbImg = lightbox.querySelector('img');
+            const lbCap = lightbox.querySelector('.lightbox-caption');
+            function openLightbox(src, alt) {
+                lbImg.src = src; lbImg.alt = alt || '';
+                lbCap.textContent = alt || '';
+                lightbox.classList.add('open');
+                document.body.style.overflow = 'hidden';
+            }
+            function closeLightbox() {
+                lightbox.classList.remove('open');
+                lbImg.src = '';
+                document.body.style.overflow = '';
+            }
+            document.querySelectorAll('.screenshot-card img').forEach(function(img) {
+                img.addEventListener('click', function() { openLightbox(img.src, img.alt); });
+            });
+            lightbox.addEventListener('click', closeLightbox);
+            document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
+        });
+    </script>
+</body>
+</html>

@@ -112,3 +112,7 @@
   - [Markdown 源稿](./27-数据库系统/book.md)
   - 视频：[Bilibili BV1eqEA6JEZA](https://www.bilibili.com/video/BV1eqEA6JEZA/)
   - 官方讲义：[第 27 讲](https://jyywiki.cn/OS/2026/lect27.md)
+- [第 28 讲：计算机系统安全](./28-计算机系统安全/book.html)
+  - [Markdown 源稿](./28-计算机系统安全/book.md)
+  - 视频：[Bilibili BV1qkEX6FEb5](https://www.bilibili.com/video/BV1qkEX6FEb5/)
+  - 官方讲义：[第 28 讲](https://jyywiki.cn/OS/2026/lect28.md)
