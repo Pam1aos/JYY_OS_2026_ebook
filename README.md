@@ -137,13 +137,15 @@
 - **生成脚本**：[`build_site.py`](./build_site.py)
 - 部署配置：Vercel Root Directory 设为 `site`，Production Branch 为 `main`
 
-网站包含 30 讲内容、主题筛选、全文搜索、阅读进度、截图灯箱与移动端适配。章节页左右两侧的目录都可以点击收起，并使用 localStorage 记住布局偏好。所有课堂截图已从 PNG 压缩为 1440px WebP，部署体积约 42.5MB。
+网站包含 30 讲内容、主题筛选、全文搜索、阅读进度、截图灯箱与移动端适配。章节页左右两侧的目录都可以点击收起，并使用 localStorage 记住布局偏好。所有课堂截图已从 PNG 压缩为 1440px WebP，部署体积约 43.4MB。
 
 ### 课程助教 MVP
 
-- 页面右下角的「问课程」入口，支持流式回答和课程原文引用
+- 独立 RAG 工作台：`/assistant/`，包含知识库筛选、回答深度、检索依据面板
+- 页面右下角的「问课程」保留为快捷入口，并可跳转到完整工作台
 - 服务端接口：`/api/chat/`，密钥只保存在 Vercel 环境变量中
-- 检索索引：`site/data/course-index.json`（30 讲，约 1000 个课程小节）
+- 检索索引：`site/data/course-index.json`（30 讲、1,012 个小节、1,013 个全文检索片段）
+- 支持 `scope`（限定讲次）和 `depth`（精简 / 标准 / 深入）参数
 - 未配置模型密钥时自动进入「检索演示模式」，用于预览交互和引用
 - 正式对话：在 Vercel 项目设置中添加 `DEEPSEEK_API_KEY`（Production），然后重新部署
 - 也可以启用 Vercel AI Gateway：添加 `AI_GATEWAY_ENABLED=true`，并确保团队已开通 Gateway 额度

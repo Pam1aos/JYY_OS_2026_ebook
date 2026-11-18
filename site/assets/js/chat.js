@@ -63,7 +63,7 @@
         <textarea class="chat-input" data-chat-input rows="1" maxlength="2000" placeholder="问一个课程问题…" aria-label="输入问题"></textarea>
         <button class="chat-send" data-chat-send type="submit" aria-label="发送问题">${icons.send}</button>
       </form>
-      <p class="chat-footnote">回答基于课程原文，可能有误差，请以原课为准。</p>
+      <p class="chat-footnote">回答基于课程原文，可能有误差，请以原课为准。 · <a href="/assistant/">打开 RAG 工作台 ↗</a></p>
     </section>`;
   body.appendChild(root);
 

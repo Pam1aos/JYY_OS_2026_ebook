@@ -499,11 +499,31 @@ def icon(name: str, cls: str = "") -> str:
         "list": '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M5.6 4.1h8.2M5.6 8h8.2M5.6 11.9h8.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M2.7 4.1h.1M2.7 8h.1M2.7 11.9h.1" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
         "check": '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.2 8.3 3.1 3.1 6.5-6.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
         "search": '<svg viewBox="0 0 18 18" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="5.2" stroke="currentColor" stroke-width="1.4"/><path d="m12 12 3.2 3.2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
+        "spark": '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 2.6c.55 3.3 2.1 4.85 5.4 5.4-3.3.55-4.85 2.1-5.4 5.4-.55-3.3-2.1-4.85-5.4-5.4 3.3-.55 4.85-2.1 5.4-5.4Z" fill="currentColor"/><path d="M15.8 13.1c.25 1.5.95 2.2 2.45 2.45-1.5.25-2.2.95-2.45 2.45-.25-1.5-.95-2.2-2.45-2.45 1.5-.25 2.2-.95 2.45-2.45Z" fill="currentColor"/></svg>',
+        "send": '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m2.2 7.6 11.1-4.4-4.4 11.1-2-4.7-4.7-2Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="m6.9 9.2 3.1-3.1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
+        "layers": '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m8 2 6 3-6 3-6-3 6-3Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="m2 8 6 3 6-3M2 11l6 3 6-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        "close": '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
+        "bookmark": '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 2.7h8v10.6L8 10.8l-4 2.5V2.7Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>',
     }
     return icons[name].replace("<svg ", f'<svg class="{cls}" ', 1) if cls else icons[name]
 
 
-def head(title: str, description: str, css_prefix: str = "assets/") -> str:
+def head(
+    title: str,
+    description: str,
+    css_prefix: str = "assets/",
+    rag: bool = False,
+) -> str:
+    rag_css = (
+        f'<link rel="stylesheet" href="/assets/css/rag.css?v={ASSET_VERSION}">'
+        if rag
+        else ""
+    )
+    rag_js = (
+        f'<script defer src="/assets/js/rag.js?v={ASSET_VERSION}"></script>'
+        if rag
+        else f'<script defer src="/assets/js/chat.js?v={ASSET_VERSION}"></script>'
+    )
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -519,8 +539,9 @@ def head(title: str, description: str, css_prefix: str = "assets/") -> str:
 <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
 <script src="/assets/js/layout-init.js?v={ASSET_VERSION}"></script>
 <link rel="stylesheet" href="/assets/css/main.css?v={ASSET_VERSION}">
+{rag_css}
 <script defer src="/assets/js/app.js?v={ASSET_VERSION}"></script>
-<script defer src="/assets/js/chat.js?v={ASSET_VERSION}"></script>
+{rag_js}
 </head>"""
 
 
@@ -666,7 +687,7 @@ def home_page(chapters: list[dict]) -> str:
 <p>《操作系统原理》2026 春季课程图文电子书。内容整理自开源项目 JYY_OS_2026_ebook，第 29 讲补充自 <a href="https://github.com/Pam1aos/Hazel_tutorail_slice_ebook" target="_blank" rel="noopener">Hazel_tutorail_slice_ebook</a>。课程讲义与幻灯片版权归蒋炎岩所有，采用 CC BY-NC 4.0 许可。</p>
 </div>
 <div class="footer-col"><h4>课程</h4><a href="https://jyywiki.cn/OS/2026/" target="_blank" rel="noopener">官方课程主页 ↗</a><a href="https://space.bilibili.com/202224425" target="_blank" rel="noopener">Bilibili · 蒋炎岩 ↗</a><a href="https://github.com/Pam1aos/JYY_OS_2026_ebook" target="_blank" rel="noopener">电子书源仓库 ↗</a></div>
-<div class="footer-col"><h4>开始</h4><a href="/lecture/01/">第 01 讲 · 绪论</a><a href="/lecture/13/">第 13 讲 · 并发</a><a href="/lecture/30/">第 30 讲 · 总结</a></div>
+<div class="footer-col"><h4>开始</h4><a href="/lecture/01/">第 01 讲 · 绪论</a><a href="/assistant/">RAG 课程助教</a><a href="/lecture/30/">第 30 讲 · 总结</a></div>
 </div>
 <div class="footer-legal"><span>© 2026 JYY OS 2026 电子书 · 非官方学习整理 · CC BY-NC 4.0</span><span>Soft UI Evolution · Designed for slow reading</span></div>
 </div>
@@ -678,6 +699,7 @@ def home_page(chapters: list[dict]) -> str:
 <nav class="nav-links" id="navLinks" aria-label="主导航">
 <a href="#curriculum">课程目录</a>
 <a href="#guide">阅读指南</a>
+<a href="/assistant/">课程助教</a>
 <a href="#about">关于本书</a>
 </nav>
 <a class="nav-cta" href="/lecture/01/">开始阅读 {icon("arrow")}</a>
@@ -817,6 +839,128 @@ def chapter_page(chapter: dict, chapters: list[dict], prev_c: dict | None, next_
     )
 
 
+def rag_page(chapters: list[dict]) -> str:
+    total_images = sum(chapter["images"] for chapter in chapters)
+
+    groups = []
+    for part in PARTS:
+        items = [chapter for chapter in chapters if chapter["part"] == part["key"]]
+        if not items:
+            continue
+        buttons = "".join(
+            f'<button class="rag-source" type="button" data-lecture="{chapter["num"]}" data-search="{html.escape(chapter["title"] + " " + chapter["tag"] + " " + chapter["num"], quote=True)}"><span class="rag-source-num">{chapter["num"]}</span><span class="rag-source-name">{html.escape(chapter["title"])}</span><span class="rag-source-time">{chapter["minutes"]}m</span></button>'
+            for chapter in items
+        )
+        groups.append(
+            f'<div class="rag-lib-group" data-rag-group><h3>{part["num"]} / {part["title"]}</h3>{buttons}</div>'
+        )
+    library_groups = "".join(groups)
+
+    suggestions = [
+        "用三句话总结第 14 讲：互斥",
+        "互斥锁和信号量到底有什么区别？",
+        "第 29 讲讲的三条虚拟化路线是什么？",
+        "帮我出 5 道操作系统期末复习题",
+    ]
+    suggestions_html = "".join(
+        f'<button class="rag-suggestion" type="button">{suggestion}</button>'
+        for suggestion in suggestions
+    )
+
+    title = "课程知识库 · RAG 工作台 | JYY OS 2026"
+    description = f"基于 {len(chapters)} 讲操作系统课程原文的 RAG 问答工作台，回答带原文引用与检索依据。"
+
+    hero = f"""<main class="rag-main wrap">
+<section class="rag-hero">
+<div class="rag-hero-copy">
+<span class="eyebrow">KNOWLEDGE BASE / RAG WORKSPACE</span>
+<h1>把 {len(chapters)} 讲，<br><span>变成可以追问的知识库。</span></h1>
+<p>不是只给一个结论。助教会先检索课程原文，再组织回答，并把每一段依据摊开给你。当前页面是完整的 RAG 工作台，而不是右下角的小窗口。</p>
+<div class="rag-facts">
+<span><b>{len(chapters)}</b> 讲</span>
+<span><b>1,000+</b> 个小节</span>
+<span><b>{total_images}</b> 张截图</span>
+<span><b>DeepSeek</b> RAG</span>
+</div>
+<a class="rag-back-link" href="/">← 回到电子书阅读</a>
+</div>
+<div class="rag-flow-card">
+<div class="rag-flow-head"><span>RETRIEVAL PIPELINE</span><b>LIVE</b></div>
+<div class="rag-flow-step"><span>01</span><div><strong>检索原文</strong><small>从 1,000+ 个课程小节里找出相关片段</small></div></div>
+<div class="rag-flow-step"><span>02</span><div><strong>组织答案</strong><small>按你的问题选择精简、标准或深入回答</small></div></div>
+<div class="rag-flow-step"><span>03</span><div><strong>标注依据</strong><small>每一条结论都能回到具体讲次和小节</small></div></div>
+<div class="rag-flow-foot"><span class="live-dot"></span> 30 讲已建立索引</div>
+</div>
+</section>
+<section class="rag-shell" id="ragShell">
+<aside class="rag-library" id="ragLibrary" aria-label="课程知识库">
+<div class="rag-panel-head"><div><span>KNOWLEDGE BASE</span><h2>课程知识库</h2></div><button class="rag-panel-close" type="button" data-close-panel="library" aria-label="关闭知识库">{icon("close")}</button></div>
+<label class="rag-search">{icon("search")}<input id="ragLibrarySearch" type="search" placeholder="搜索讲次…" autocomplete="off"><kbd>/</kbd></label>
+<button class="rag-scope is-active" type="button" data-scope="all"><span>全部课程</span><b>{len(chapters)} 讲</b></button>
+<div class="rag-lib-scroll" id="ragLibraryList">{library_groups}</div>
+<p class="rag-panel-foot">检索范围只包含这 {len(chapters)} 讲，不会用课程外的内容补答案。</p>
+</aside>
+<section class="rag-chat">
+<header class="rag-chat-head">
+<div><span class="rag-status"><i></i> 知识库已连接</span><h2>课程助教</h2></div>
+<div class="rag-head-actions">
+<button class="rag-mobile-btn" type="button" id="ragLibraryToggle" aria-label="打开知识库">{icon("layers")}<span>知识库</span></button>
+<button class="rag-mobile-btn" type="button" id="ragEvidenceToggle" aria-label="查看检索依据">{icon("bookmark")}<span>依据</span></button>
+<button class="rag-new-btn" type="button" id="ragNewChat">＋ 新对话</button>
+</div>
+</header>
+<div class="rag-toolbar">
+<div class="rag-depth" role="group" aria-label="回答深度"><button type="button" data-depth="brief">精简</button><button type="button" data-depth="standard">标准</button><button type="button" data-depth="deep" class="is-active">深入</button></div>
+<span class="rag-scope-current" id="ragScopeLabel">全部 {len(chapters)} 讲</span>
+</div>
+<div class="rag-messages" id="ragMessages" aria-live="polite">
+<div class="rag-welcome">
+<span class="rag-welcome-icon">{icon("spark")}</span>
+<span class="eyebrow plain">START A DIALOGUE</span>
+<h3>从 30 讲里，找到真正有出处的答案。</h3>
+<p>我会先检索原文，再结合上下文回答。每一条关键结论都会附上可跳转的课程出处。</p>
+<div class="rag-suggestions">{suggestions_html}</div>
+<div class="rag-pipeline"><span>检索</span><i>→</i><span>阅读</span><i>→</i><span>回答</span><i>→</i><span>引用</span></div>
+</div>
+</div>
+<form class="rag-composer" id="ragForm">
+<textarea id="ragInput" rows="1" maxlength="2000" placeholder="问课程里的任何问题…" aria-label="输入课程问题"></textarea>
+<div class="rag-composer-foot"><span>Enter 发送 · Shift + Enter 换行</span><button class="rag-send" type="submit" id="ragSend">{icon("send")}<span>发送</span></button></div>
+</form>
+<p class="rag-disclaimer">回答由检索到的课程原文生成，可能有误差，请以原课为准。 <a href="/">继续阅读电子书 ↗</a></p>
+</section>
+<aside class="rag-evidence" id="ragEvidence" aria-label="检索依据">
+<div class="rag-panel-head"><div><span>RETRIEVED SOURCES</span><h2>原文依据</h2></div><button class="rag-panel-close" type="button" data-close-panel="evidence" aria-label="关闭依据">{icon("close")}</button></div>
+<div class="rag-evidence-summary" id="ragEvidenceSummary">检索到的片段会显示在这里。</div>
+<div class="rag-evidence-list" id="ragEvidenceList"><div class="rag-evidence-empty">{icon("layers")}<strong>等待一次提问</strong><p>每一次回答都会附上 4–8 段相关课程原文。</p></div></div>
+</aside>
+</section>
+</main>
+<div class="rag-scrim" id="ragScrim"></div>"""
+
+    return (
+        head(title, description, rag=True)
+        + f"""<body class="rag-page">
+{ambient()}
+<header class="site-header" id="ragHeader">
+<div class="wrap nav-shell">
+{brand("/")}
+<nav class="nav-links" id="ragNavLinks" aria-label="主导航">
+<a href="/">电子书</a>
+<a href="/#curriculum">30 讲目录</a>
+<a href="/assistant/" class="active" aria-current="page">课程助教</a>
+</nav>
+<a class="nav-cta" href="/">回到阅读 {icon("arrow")}</a>
+<button class="nav-toggle" id="ragNavToggle" type="button" aria-label="打开导航菜单" aria-expanded="false" aria-controls="ragNavLinks"><span></span><span></span></button>
+</div>
+</header>
+{hero}
+</body>
+</html>
+"""
+    )
+
+
 def not_found_page() -> str:
     title = "页面没有找到 | JYY OS 2026"
     return (
@@ -836,8 +980,27 @@ def not_found_page() -> str:
     )
 
 
+def split_chunks(text: str, limit: int = 1100) -> list[str]:
+    """Split a section into retrieval-sized pieces at sentence boundaries."""
+    if len(text) <= limit:
+        return [text]
+    pieces: list[str] = []
+    for sentence in re.split(r"(?<=[。！？；：])", text):
+        sentence = sentence.strip()
+        while len(sentence) > limit:
+            pieces.append(sentence[:limit].rstrip())
+            sentence = sentence[limit:].lstrip()
+        if not sentence:
+            continue
+        if pieces and len(pieces[-1]) + len(sentence) <= limit:
+            pieces[-1] += sentence
+        else:
+            pieces.append(sentence)
+    return pieces or [text]
+
+
 def build_course_index(chapters: list[dict]) -> None:
-    """Create the compact retrieval index consumed by /api/chat."""
+    """Create the retrieval index consumed by /api/chat and /assistant."""
     data_dir = SITE / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
 
@@ -853,6 +1016,7 @@ def build_course_index(chapters: list[dict]) -> None:
         for c in chapters
     ]
     sections: list[dict] = []
+    chunks: list[dict] = []
     heading_re = re.compile(
         r'<h([23])\b[^>]*\bid="([^"]+)"[^>]*>(.*?)</h\1>', re.S
     )
@@ -884,27 +1048,41 @@ def build_course_index(chapters: list[dict]) -> None:
             text = re.sub(r"\s+", " ", text).strip()
             if len(text) < 40:
                 continue
-            # Keep the index small enough to ship with the serverless function.
-            if len(text) > 2400:
-                text = text[:2400].rsplit(" ", 1)[0] + "…"
-            sections.append(
-                {
-                    "id": f"L{chapter['num']}-{anchor or 'intro'}",
-                    "lecture": chapter["num"],
-                    "lectureTitle": chapter["title"],
-                    "part": part_for(chapter["part"])["title"],
-                    "title": title,
-                    "anchor": anchor,
-                    "url": f"/lecture/{chapter['num']}/"
-                    + (f"#{anchor}" if anchor else ""),
-                    "text": text,
-                }
-            )
+            if len(text) > 8000:
+                text = text[:8000].rsplit(" ", 1)[0] + "…"
+            section_id = f"L{chapter['num']}-{anchor or 'intro'}"
+            section = {
+                "id": section_id,
+                "lecture": chapter["num"],
+                "lectureTitle": chapter["title"],
+                "part": part_for(chapter["part"])["title"],
+                "title": title,
+                "anchor": anchor,
+                "url": f"/lecture/{chapter['num']}/"
+                + (f"#{anchor}" if anchor else ""),
+                "text": text,
+            }
+            sections.append(section)
+            for index, chunk_text in enumerate(split_chunks(text)):
+                chunks.append(
+                    {
+                        "id": f"{section_id}-c{index}",
+                        "sectionId": section_id,
+                        "lecture": chapter["num"],
+                        "lectureTitle": chapter["title"],
+                        "part": section["part"],
+                        "title": title,
+                        "anchor": anchor,
+                        "url": section["url"],
+                        "text": chunk_text,
+                    }
+                )
 
     payload = {
-        "version": 1,
+        "version": 2,
         "lectures": lectures,
         "sections": sections,
+        "chunks": chunks,
     }
     (data_dir / "course-index.json").write_text(
         json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
@@ -912,6 +1090,7 @@ def build_course_index(chapters: list[dict]) -> None:
     )
     print(
         f"Course index: {len(lectures)} lectures, {len(sections)} sections, "
+        f"{len(chunks)} chunks, "
         f"{(data_dir / 'course-index.json').stat().st_size / 1024:.0f} KB"
     )
 
@@ -974,9 +1153,11 @@ def compute_asset_version() -> str:
     digest = hashlib.sha256()
     for relative in (
         "assets/css/main.css",
+        "assets/css/rag.css",
         "assets/js/app.js",
         "assets/js/chat.js",
         "assets/js/layout-init.js",
+        "assets/js/rag.js",
     ):
         path = SITE / relative
         digest.update(relative.encode("utf-8"))
@@ -1000,6 +1181,11 @@ def main() -> None:
 
     (SITE / "index.html").write_text(home_page(chapters), encoding="utf-8")
     (SITE / "404.html").write_text(not_found_page(), encoding="utf-8")
+    assistant_dir = SITE / "assistant"
+    assistant_dir.mkdir(parents=True, exist_ok=True)
+    assistant_dir.joinpath("index.html").write_text(
+        rag_page(chapters), encoding="utf-8"
+    )
 
     by_num = {c["num"]: c for c in chapters}
     for index, chapter in enumerate(chapters):
