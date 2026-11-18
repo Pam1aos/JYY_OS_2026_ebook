@@ -257,8 +257,13 @@
       const scroller = $(".side-scroll", side);
       if (scroller) {
         const group = current.closest(".side-group");
-        const top = group ? group.offsetTop - 6 : current.offsetTop;
-        scroller.scrollTop = Math.max(0, top);
+        const anchor = group || current;
+        const offset =
+          anchor.getBoundingClientRect().top -
+          scroller.getBoundingClientRect().top +
+          scroller.scrollTop -
+          6;
+        scroller.scrollTop = Math.max(0, offset);
       }
     }
 
