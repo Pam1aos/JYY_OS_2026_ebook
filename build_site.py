@@ -9,6 +9,7 @@ rebuilt with the Soft UI Evolution design system in ./site.
 from __future__ import annotations
 
 import html
+import hashlib
 import json
 import math
 import re
@@ -21,6 +22,7 @@ if not SRC.exists():
     # In the published repository the lecture folders live at the repo root.
     SRC = ROOT
 SITE = ROOT / "site"
+ASSET_VERSION = "dev"
 
 PARTS = [
     {
@@ -515,10 +517,10 @@ def head(title: str, description: str, css_prefix: str = "assets/") -> str:
 <meta property="og:description" content="{html.escape(description)}">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-<script src="/assets/js/layout-init.js"></script>
-<link rel="stylesheet" href="/assets/css/main.css">
-<script defer src="/assets/js/app.js"></script>
-<script defer src="/assets/js/chat.js"></script>
+<script src="/assets/js/layout-init.js?v={ASSET_VERSION}"></script>
+<link rel="stylesheet" href="/assets/css/main.css?v={ASSET_VERSION}">
+<script defer src="/assets/js/app.js?v={ASSET_VERSION}"></script>
+<script defer src="/assets/js/chat.js?v={ASSET_VERSION}"></script>
 </head>"""
 
 
@@ -967,9 +969,26 @@ def write_assets() -> None:
     )
 
 
+def compute_asset_version() -> str:
+    """Fingerprint CSS/JS so immutable caching cannot pin an old UI."""
+    digest = hashlib.sha256()
+    for relative in (
+        "assets/css/main.css",
+        "assets/js/app.js",
+        "assets/js/chat.js",
+        "assets/js/layout-init.js",
+    ):
+        path = SITE / relative
+        digest.update(relative.encode("utf-8"))
+        digest.update(path.read_bytes())
+    return digest.hexdigest()[:12]
+
+
 def main() -> None:
+    global ASSET_VERSION
     if not SRC.exists():
         raise SystemExit("source/ is missing; extract the upstream ebook archive first.")
+    ASSET_VERSION = compute_asset_version()
     SITE.mkdir(parents=True, exist_ok=True)
     (SITE / "assets" / "css").mkdir(parents=True, exist_ok=True)
     (SITE / "assets" / "js").mkdir(parents=True, exist_ok=True)
