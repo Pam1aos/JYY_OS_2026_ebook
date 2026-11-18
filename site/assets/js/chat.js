@@ -1037,10 +1037,8 @@
       setBusy(false);
       if (typing.bubble.classList.contains("chat-error")) {
         scrollToBottom();
-      } else if (assistantText.length > 260) {
-        scrollMessageStart(typing.row);
       } else {
-        scrollToBottom();
+        scrollMessageStart(typing.row);
       }
     }
   }
