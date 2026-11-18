@@ -1649,6 +1649,16 @@ p {
   line-height: 1.8;
 }
 
+.footer-about p a {
+  color: #5f78a6;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.footer-about p a:hover {
+  color: var(--blue);
+}
+
 .footer-col h4 {
   margin: 0 0 13px;
   color: #97a1b4;

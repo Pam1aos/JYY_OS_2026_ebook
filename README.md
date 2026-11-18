@@ -120,6 +120,7 @@
   - 官方讲义：[第 28 讲](https://jyywiki.cn/OS/2026/lect28.md)
 - [第 29 讲：虚拟机和容器](./29-虚拟机和容器/book.html)
   - [Markdown 源稿](./29-虚拟机和容器/book.md)
+  - [内容来源：Hazel_tutorail_slice_ebook](https://github.com/Pam1aos/Hazel_tutorail_slice_ebook)
   - 视频：[Bilibili BV1uaEB66EAH](https://www.bilibili.com/video/BV1uaEB66EAH/)
   - 官方讲义：[第 29 讲](https://jyywiki.cn/OS/2026/lect29.md)
 - [第 30 讲：Agentic AI 和我们的未来；课程总结](./30-AgenticAI和我们的未来/book.html)

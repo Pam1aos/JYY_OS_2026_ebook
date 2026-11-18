@@ -657,7 +657,7 @@ def home_page(chapters: list[dict]) -> str:
 <div class="footer-grid">
 <div class="footer-about">
 {brand("/")}
-<p>《操作系统原理》2026 春季课程图文电子书。内容整理自开源项目 JYY_OS_2026_ebook，课程讲义与幻灯片版权归蒋炎岩所有，采用 CC BY-NC 4.0 许可。</p>
+<p>《操作系统原理》2026 春季课程图文电子书。内容整理自开源项目 JYY_OS_2026_ebook，第 29 讲补充自 <a href="https://github.com/Pam1aos/Hazel_tutorail_slice_ebook" target="_blank" rel="noopener">Hazel_tutorail_slice_ebook</a>。课程讲义与幻灯片版权归蒋炎岩所有，采用 CC BY-NC 4.0 许可。</p>
 </div>
 <div class="footer-col"><h4>课程</h4><a href="https://jyywiki.cn/OS/2026/" target="_blank" rel="noopener">官方课程主页 ↗</a><a href="https://space.bilibili.com/202224425" target="_blank" rel="noopener">Bilibili · 蒋炎岩 ↗</a><a href="https://github.com/Pam1aos/JYY_OS_2026_ebook" target="_blank" rel="noopener">电子书源仓库 ↗</a></div>
 <div class="footer-col"><h4>开始</h4><a href="/lecture/01/">第 01 讲 · 绪论</a><a href="/lecture/13/">第 13 讲 · 并发</a><a href="/lecture/30/">第 30 讲 · 总结</a></div>
