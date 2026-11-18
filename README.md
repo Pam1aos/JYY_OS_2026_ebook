@@ -142,7 +142,7 @@
 ### 课程助教 MVP
 
 - 页面右下角的「问课程」入口，支持流式回答和课程原文引用
-- 服务端接口：`/api/chat`，密钥只保存在 Vercel 环境变量中
+- 服务端接口：`/api/chat/`，密钥只保存在 Vercel 环境变量中
 - 检索索引：`site/data/course-index.json`（30 讲，约 1000 个课程小节）
 - 未配置模型密钥时自动进入「检索演示模式」，用于预览交互和引用
 - 正式对话：在 Vercel 项目设置中添加 `DEEPSEEK_API_KEY`（Production），然后重新部署
