@@ -1953,6 +1953,20 @@ p {
   overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: rgba(32, 51, 92, 0.15) transparent;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 12px,
+    #000 calc(100% - 12px),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 12px,
+    #000 calc(100% - 12px),
+    transparent 100%
+  );
 }
 
 .side-scroll::-webkit-scrollbar {
