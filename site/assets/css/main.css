@@ -1049,6 +1049,26 @@ p {
   backdrop-filter: blur(18px);
 }
 
+.home-main {
+  padding-top: 16px;
+}
+
+.home-list #curriculum {
+  padding-top: 0;
+  padding-bottom: 44px;
+}
+
+.home-list .curriculum-tools {
+  position: sticky;
+  top: 0;
+  z-index: 45;
+  margin: 0 0 34px;
+  background: rgba(247, 250, 255, 0.9);
+  box-shadow: 0 22px 48px -38px rgba(35, 54, 107, 0.52);
+  backdrop-filter: blur(22px) saturate(1.25);
+  -webkit-backdrop-filter: blur(22px) saturate(1.25);
+}
+
 .search-box {
   position: relative;
   display: flex;
@@ -4235,6 +4255,12 @@ body.chat-open .chat-scrim {
 
   .filters {
     padding-bottom: 2px;
+  }
+
+  .home-list .curriculum-tools {
+    top: 0;
+    margin-bottom: 24px;
+    border-radius: 18px;
   }
 
   .chapter-grid {

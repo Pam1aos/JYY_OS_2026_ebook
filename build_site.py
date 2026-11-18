@@ -647,10 +647,6 @@ def home_page(chapters: list[dict]) -> str:
  {facts}"""
 
     curriculum = f"""<section class="section" id="curriculum">
-<div class="section-head">
-<div><span class="eyebrow">CURRICULUM / 课程目录</span><h2>{len(chapters)} 讲，<br><span class="soft">一套完整的系统观。</span></h2></div>
-<p class="intro">不是视频字幕的堆叠，而是按主题重新组织的图文讲义。你可以从第一讲顺序阅读，也可以直接跳进最关心的那一层。<strong>每一讲都保留官方讲义与 B 站原片入口。</strong></p>
-</div>
 <div class="curriculum-tools">
 <label class="search-box"><span class="sr-only">搜索章节</span>{icon("search")}<input id="chapterSearch" type="search" placeholder="搜索章节、主题或关键词…" autocomplete="off"><kbd>/</kbd></label>
 <div class="filters" role="group" aria-label="按主题筛选">{filters_html}</div>
@@ -709,12 +705,10 @@ def home_page(chapters: list[dict]) -> str:
     description = f"蒋炎岩《操作系统原理》2026 春季课程图文电子书，{len(chapters)} 讲完整收录，Soft UI Evolution 风格静态阅读站。"
     return (
         head(title, description)
-        + f"""<body>
+        + f"""<body class="home-list">
 {ambient()}
-{nav}
-{hero}
+<main class="wrap home-main">
 {curriculum}
-{guide}
 </main>
 {footer}
 </body>
