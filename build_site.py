@@ -540,6 +540,7 @@ def head(
 <script src="/assets/js/layout-init.js?v={ASSET_VERSION}"></script>
 <link rel="stylesheet" href="/assets/css/main.css?v={ASSET_VERSION}">
 {rag_css}
+<link rel="stylesheet" href="/assets/css/assistant.css?v={ASSET_VERSION}">
 <script defer src="/assets/js/app.js?v={ASSET_VERSION}"></script>
 {rag_js}
 </head>"""
@@ -687,7 +688,7 @@ def home_page(chapters: list[dict]) -> str:
 <p>《操作系统原理》2026 春季课程图文电子书。内容整理自开源项目 JYY_OS_2026_ebook，第 29 讲补充自 <a href="https://github.com/Pam1aos/Hazel_tutorail_slice_ebook" target="_blank" rel="noopener">Hazel_tutorail_slice_ebook</a>。课程讲义与幻灯片版权归蒋炎岩所有，采用 CC BY-NC 4.0 许可。</p>
 </div>
 <div class="footer-col"><h4>课程</h4><a href="https://jyywiki.cn/OS/2026/" target="_blank" rel="noopener">官方课程主页 ↗</a><a href="https://space.bilibili.com/202224425" target="_blank" rel="noopener">Bilibili · 蒋炎岩 ↗</a><a href="https://github.com/Pam1aos/JYY_OS_2026_ebook" target="_blank" rel="noopener">电子书源仓库 ↗</a></div>
-<div class="footer-col"><h4>开始</h4><a href="/lecture/01/">第 01 讲 · 绪论</a><a href="/assistant/">RAG 课程助教</a><a href="/lecture/30/">第 30 讲 · 总结</a></div>
+<div class="footer-col"><h4>开始</h4><a href="/lecture/01/">第 01 讲 · 绪论</a><a href="/lecture/13/">第 13 讲 · 并发</a><a href="/lecture/30/">第 30 讲 · 总结</a></div>
 </div>
 <div class="footer-legal"><span>© 2026 JYY OS 2026 电子书 · 非官方学习整理 · CC BY-NC 4.0</span><span>Soft UI Evolution · Designed for slow reading</span></div>
 </div>
@@ -699,7 +700,6 @@ def home_page(chapters: list[dict]) -> str:
 <nav class="nav-links" id="navLinks" aria-label="主导航">
 <a href="#curriculum">课程目录</a>
 <a href="#guide">阅读指南</a>
-<a href="/assistant/">课程助教</a>
 <a href="#about">关于本书</a>
 </nav>
 <a class="nav-cta" href="/lecture/01/">开始阅读 {icon("arrow")}</a>
@@ -1095,6 +1095,145 @@ def build_course_index(chapters: list[dict]) -> None:
     )
 
 
+CONCEPTS = [
+    ("C-abstraction", "抽象与接口", "foundation", ["01", "02", "03"], "操作系统用一组稳定接口，把硬件的复杂性藏起来。", ["C-syscall", "C-process"]),
+    ("C-ai", "Agentic AI", "foundation", ["01", "04", "30"], "从语言模型、工具调用到最小操作系统，理解 AI 时代的系统底座。", ["C-token", "C-agent", "C-security"]),
+    ("C-syscall", "系统调用", "process", ["02", "07"], "应用与内核之间的正式边界：进程通过系统调用访问操作系统对象。", ["C-fd", "C-process"]),
+    ("C-process", "进程", "process", ["05", "06"], "程序、fork/execve、退出与地址空间：一个进程如何诞生和结束。", ["C-address", "C-thread"]),
+    ("C-address", "地址空间", "process", ["06"], "虚拟地址、mmap、权限位与进程私有内存视图。", ["C-process", "C-fs"]),
+    ("C-fd", "文件描述符", "process", ["07", "08"], "用整数句柄命名操作系统对象，并通过管道和 Shell 组合程序。", ["C-libc", "C-syscall"]),
+    ("C-libc", "C 标准库", "systems", ["09", "10"], "在系统调用之上搭起的第一层应用世界，也是调试与抽象的入口。", ["C-link", "C-process"]),
+    ("C-link", "链接与加载", "systems", ["11", "12"], "从 ELF、符号解析到动态链接和从零构建 Linux 应用世界。", ["C-libc", "C-process"]),
+    ("C-thread", "线程", "concurrency", ["13"], "多处理器编程的最小执行单位，也是并发问题的起点。", ["C-race", "C-parallel"]),
+    ("C-race", "数据竞争", "concurrency", ["13", "17"], "共享内存、指令交错与顺序违反：并发 Bug 的根源。", ["C-mutex", "C-deadlock"]),
+    ("C-mutex", "互斥", "concurrency", ["14", "17"], "用锁把复杂并发退回顺序世界，同时付出性能与死锁的代价。", ["C-cond", "C-sem"]),
+    ("C-cond", "条件变量", "concurrency", ["15"], "让线程在条件不满足时等待，并在条件变化时被唤醒。", ["C-sem", "C-mutex"]),
+    ("C-sem", "信号量", "concurrency", ["16"], "用计数 token 表达互斥、同步、限流与生产者消费者。", ["C-deadlock", "C-mutex"]),
+    ("C-deadlock", "死锁", "concurrency", ["17"], "多把锁、循环等待与锁顺序：并发系统必须面对的失败模式。", ["C-mutex", "C-race"]),
+    ("C-parallel", "并行", "concurrency", ["18"], "从正确性走向可扩展性：并行算法与数据结构。", ["C-thread", "C-gpu"]),
+    ("C-async", "异步与协程", "hetero", ["19"], "用协程、Goroutine 和事件循环描述同一张计算图。", ["C-token", "C-parallel"]),
+    ("C-gpu", "GPU / SIMT", "hetero", ["20"], "从指令级并行到海量线程，理解 CPU、GPU 与 SIMT 编程模型。", ["C-parallel", "C-token"]),
+    ("C-token", "Token 旅程", "hetero", ["21"], "一个 Token 从 HTTP 请求穿过数据中心、网络和 GPU 的完整旅程。", ["C-ai", "C-gpu"]),
+    ("C-driver", "设备与驱动", "storage", ["22"], "从 GPIO 线到 file_operations：设备如何接入操作系统。", ["C-storage", "C-syscall"]),
+    ("C-storage", "存储设备", "storage", ["23"], "一个 bit 如何跨越时间：磁盘、闪存与存储层次。", ["C-fs", "C-driver"]),
+    ("C-fs", "文件系统", "storage", ["24", "25", "26"], "目录树、链接、快照、日志与崩溃一致性。", ["C-db", "C-journal"]),
+    ("C-journal", "崩溃一致性", "storage", ["26"], "从块设备到日志：系统崩溃后如何保证文件系统仍然可用。", ["C-fs", "C-db"]),
+    ("C-db", "数据库", "future", ["27"], "从文件持久化到 ACID 与向量检索，数据库如何在文件系统之上构建。", ["C-fs", "C-security"]),
+    ("C-security", "系统安全", "future", ["28"], "隔离、访问控制与攻击面：系统边界在哪里。", ["C-vm", "C-agent"]),
+    ("C-vm", "虚拟化", "future", ["29"], "全系统模拟、JIT、硬件虚拟化与 VMM 的影子页表。", ["C-container", "C-security"]),
+    ("C-container", "容器", "future", ["29", "30"], "Namespaces、cgroups、Docker 与 Kubernetes 的隔离与编排。", ["C-agent", "C-vm"]),
+    ("C-agent", "Agentic 未来", "future", ["30"], "Agentic AI 与操作系统的下一次交汇。", ["C-ai", "C-container"]),
+]
+
+LECTURE_NEXT = [
+    "01:02", "02:03", "03:04", "04:05", "05:06", "06:07", "07:08",
+    "08:09", "09:10", "10:11", "11:12", "12:13", "13:14", "14:15",
+    "15:16", "16:17", "17:18", "18:19", "19:20", "20:21", "21:22",
+    "22:23", "23:24", "24:25", "25:26", "26:27", "27:28", "28:29",
+    "29:30",
+]
+
+
+def build_knowledge_graph(chapters: list[dict]) -> None:
+    """Build the curated course concept graph opened from the chat window."""
+    data_dir = SITE / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    by_num = {chapter["num"]: chapter for chapter in chapters}
+    part_title = {part["key"]: part["title"] for part in PARTS}
+
+    nodes = [
+        {
+            "id": "core",
+            "label": "操作系统",
+            "type": "core",
+            "part": "all",
+            "desc": "30 讲课程的中心：接口、抽象、并发、存储与安全。",
+            "lectures": [chapter["num"] for chapter in chapters],
+        }
+    ]
+    for part in PARTS:
+        nodes.append(
+            {
+                "id": f"part-{part['key']}",
+                "label": part["title"],
+                "type": "hub",
+                "part": part["key"],
+                "desc": part["desc"],
+                "lectures": [
+                    chapter["num"]
+                    for chapter in chapters
+                    if chapter["part"] == part["key"]
+                ],
+            }
+        )
+    for chapter in chapters:
+        nodes.append(
+            {
+                "id": f"L{chapter['num']}",
+                "label": chapter["num"],
+                "title": chapter["title"],
+                "type": "lecture",
+                "part": chapter["part"],
+                "desc": chapter["deck"],
+                "href": f"/lecture/{chapter['num']}/",
+                "lectures": [chapter["num"]],
+            }
+        )
+    for concept_id, label, part, lecture_nums, desc, related in CONCEPTS:
+        nodes.append(
+            {
+                "id": concept_id,
+                "label": label,
+                "type": "concept",
+                "part": part,
+                "desc": desc,
+                "lectures": lecture_nums,
+                "related": related,
+            }
+        )
+
+    edges: list[dict] = []
+    seen_edges = set()
+
+    def edge(source: str, target: str, kind: str) -> None:
+        key = f"{source}>{target}:{kind}"
+        if key in seen_edges:
+            return
+        seen_edges.add(key)
+        edges.append({"source": source, "target": target, "type": kind})
+
+    for part in PARTS:
+        hub = f"part-{part['key']}"
+        edge("core", hub, "core")
+        for chapter in chapters:
+            if chapter["part"] == part["key"]:
+                edge(hub, f"L{chapter['num']}", "contains")
+        for concept_id, _, concept_part, _, _, _ in CONCEPTS:
+            if concept_part == part["key"]:
+                edge(hub, concept_id, "focus")
+
+    for concept_id, _, _, lecture_nums, _, related in CONCEPTS:
+        for lecture_num in lecture_nums:
+            if lecture_num in by_num:
+                edge(concept_id, f"L{lecture_num}", "explains")
+        for related_id in related:
+            edge(concept_id, related_id, "related")
+
+    for pair in LECTURE_NEXT:
+        left, right = pair.split(":")
+        edge(f"L{left}", f"L{right}", "next")
+
+    payload = {"version": 1, "nodes": nodes, "edges": edges}
+    (data_dir / "knowledge-graph.json").write_text(
+        json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    print(
+        f"Knowledge graph: {len(nodes)} nodes, {len(edges)} edges, "
+        f"{(data_dir / 'knowledge-graph.json').stat().st_size / 1024:.0f} KB"
+    )
+
+
 def write_assets() -> None:
     favicon = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
 <defs><linearGradient id="g" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse"><stop stop-color="#8fb1ff"/><stop offset=".5" stop-color="#6277ef"/><stop offset="1" stop-color="#d69bb8"/></linearGradient></defs>
@@ -1107,6 +1246,10 @@ def write_assets() -> None:
     vercel = {
         "trailingSlash": True,
         "cleanUrls": True,
+        "redirects": [
+            {"source": "/assistant", "destination": "/", "permanent": False},
+            {"source": "/assistant/", "destination": "/", "permanent": False},
+        ],
         "functions": {
             "api/chat.js": {
                 "maxDuration": 60,
@@ -1153,11 +1296,10 @@ def compute_asset_version() -> str:
     digest = hashlib.sha256()
     for relative in (
         "assets/css/main.css",
-        "assets/css/rag.css",
+        "assets/css/assistant.css",
         "assets/js/app.js",
         "assets/js/chat.js",
         "assets/js/layout-init.js",
-        "assets/js/rag.js",
     ):
         path = SITE / relative
         digest.update(relative.encode("utf-8"))
@@ -1181,11 +1323,6 @@ def main() -> None:
 
     (SITE / "index.html").write_text(home_page(chapters), encoding="utf-8")
     (SITE / "404.html").write_text(not_found_page(), encoding="utf-8")
-    assistant_dir = SITE / "assistant"
-    assistant_dir.mkdir(parents=True, exist_ok=True)
-    assistant_dir.joinpath("index.html").write_text(
-        rag_page(chapters), encoding="utf-8"
-    )
 
     by_num = {c["num"]: c for c in chapters}
     for index, chapter in enumerate(chapters):
@@ -1199,6 +1336,7 @@ def main() -> None:
 
     write_assets()
     build_course_index(chapters)
+    build_knowledge_graph(chapters)
     total_kb = sum(
         p.stat().st_size for p in SITE.rglob("*") if p.is_file()
     ) / 1024

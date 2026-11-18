@@ -1,6 +1,18 @@
 {
   "trailingSlash": true,
   "cleanUrls": true,
+  "redirects": [
+    {
+      "source": "/assistant",
+      "destination": "/",
+      "permanent": false
+    },
+    {
+      "source": "/assistant/",
+      "destination": "/",
+      "permanent": false
+    }
+  ],
   "functions": {
     "api/chat.js": {
       "maxDuration": 60

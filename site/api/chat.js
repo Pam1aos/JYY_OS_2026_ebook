@@ -239,10 +239,8 @@ function buildSystemPrompt(sections, context, depth) {
 
   const depthRule =
     depth === "brief"
-      ? "回答控制在 3-5 句话、250 字以内，直接给结论和最关键的依据，不做长展开。"
-      : depth === "deep"
-        ? "回答约 1000-1500 字，按「结论 / 机制 / 例子或代码 / 易错点」展开，至少引用 3 条来源；可以给出更完整的推导，但不要编造原文没有的事实。"
-        : "回答约 500-700 字，先给结论，再分点解释，给一个必要的小例子；不要写空泛套话。";
+      ? "精简模式：回答控制在 3-5 句话、250 字以内，直接给结论和最关键的依据，不做长展开。"
+      : "深入模式：回答约 1000-1500 字，按「结论 / 机制 / 例子或代码 / 易错点」展开，至少引用 3 条来源。可以在忠实于课程原文的基础上，调用通用操作系统知识做联想、对比和延伸；凡超出课程原文的补充，必须明确标为「延伸」，不要伪装成课程原文。";
 
   return `你是「JYY OS 课程助教」，服务于蒋炎岩《操作系统原理》2026 春季课程的完整知识库。
 
@@ -443,14 +441,12 @@ module.exports = async function handler(req, res) {
 
   const context = body.context && typeof body.context === "object" ? body.context : {};
   const query = messages[messages.length - 1].content;
-  const depth = ["brief", "standard", "deep"].includes(body.depth)
-    ? body.depth
-    : "standard";
+  const depth = body.depth === "deep" ? "deep" : "brief";
   const rawScope = normalize(body.scope);
   const scope = /^\d{1,2}$/.test(rawScope)
     ? rawScope.padStart(2, "0")
     : "all";
-  const limit = depth === "deep" ? 8 : depth === "brief" ? 4 : 6;
+  const limit = depth === "deep" ? 8 : 4;
   const sections = retrieve(query, context, limit, scope);
   const citations = toCitations(sections);
   const deepseekKey = normalize(process.env.DEEPSEEK_API_KEY);
@@ -512,7 +508,7 @@ module.exports = async function handler(req, res) {
       apiKey: provider.apiKey,
       model: provider.model,
       signal: controller.signal,
-      maxTokens: depth === "deep" ? 2400 : depth === "brief" ? 600 : 1200,
+      maxTokens: depth === "deep" ? 2400 : 600,
     });
   } catch (error) {
     if (error && error.name === "AbortError") {
