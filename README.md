@@ -2,7 +2,9 @@
 
 蒋炎岩《操作系统原理》2026 春季学期课程录像的图文电子书整理。
 
-## 目录
+> **在线阅读**：[jyy-os-2026.vercel.app](https://jyy-os-2026.vercel.app) · Soft UI Evolution 静态阅读版，30 讲完整收录。
+
+## 目录（30 讲）
 
 - [第 1 讲：Agentic AI 时代的操作系统课：绪论](./01-AgenticAI时代的操作系统课-绪论/book.html)
   - [Markdown 源稿](./01-AgenticAI时代的操作系统课-绪论/book.md)
@@ -116,7 +118,31 @@
   - [Markdown 源稿](./28-计算机系统安全/book.md)
   - 视频：[Bilibili BV1qkEX6FEb5](https://www.bilibili.com/video/BV1qkEX6FEb5/)
   - 官方讲义：[第 28 讲](https://jyywiki.cn/OS/2026/lect28.md)
+- [第 29 讲：虚拟机和容器](./29-虚拟机和容器/book.html)
+  - [Markdown 源稿](./29-虚拟机和容器/book.md)
+  - 视频：[Bilibili BV1uaEB66EAH](https://www.bilibili.com/video/BV1uaEB66EAH/)
+  - 官方讲义：[第 29 讲](https://jyywiki.cn/OS/2026/lect29.md)
 - [第 30 讲：Agentic AI 和我们的未来；课程总结](./30-AgenticAI和我们的未来/book.html)
   - [Markdown 源稿](./30-AgenticAI和我们的未来/book.md)
   - 视频：[Bilibili BV1q2jh6FEhX](https://www.bilibili.com/video/BV1q2jh6FEhX/)
   - 官方讲义：[第 30 讲](https://jyywiki.cn/OS/2026/lect30.md)
+
+
+## 静态阅读网页
+
+- **在线阅读**：<https://jyy-os-2026.vercel.app>
+- **Vercel 项目**：<https://vercel.com/pamus/jyy-os-2026>
+- **静态站点目录**：[`site/`](./site/)
+- **生成脚本**：[`build_site.py`](./build_site.py)
+- 部署配置：Vercel Root Directory 设为 `site`，Production Branch 为 `main`
+
+网站包含 30 讲内容、主题筛选、全文搜索、阅读进度、截图灯箱与移动端适配。所有课堂截图已从 PNG 压缩为 1440px WebP，部署体积约 41.5MB。
+
+```powershell
+# 重新生成静态页面
+python build_site.py
+
+# 本地预览
+cd site
+python -m http.server 4321
+```

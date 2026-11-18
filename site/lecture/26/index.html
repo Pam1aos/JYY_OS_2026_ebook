@@ -1,0 +1,1257 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第 26 讲 · 文件系统实现与崩溃一致性 | JYY OS 2026</title>
+<meta name="description" content="从块设备到日志，理解文件系统实现与崩溃一致性的关键机制。">
+<meta name="theme-color" content="#eef2fb">
+<meta property="og:type" content="website">
+<meta property="og:title" content="第 26 讲 · 文件系统实现与崩溃一致性 | JYY OS 2026">
+<meta property="og:description" content="从块设备到日志，理解文件系统实现与崩溃一致性的关键机制。">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/assets/css/main.css">
+<script defer src="/assets/js/app.js"></script>
+</head><body class="reader-body" data-chapter="26">
+<div class="ambient" aria-hidden="true"><span class="ambient-orb one"></span><span class="ambient-orb two"></span></div>
+<div class="grain" aria-hidden="true"></div>
+<div class="reader-progress" aria-hidden="true"><span></span></div>
+<header class="reader-topbar" id="readerMenu">
+<div class="reader-topbar-inner">
+<a class="brand" href="/" aria-label="JYY OS 2026 电子书首页">
+<span class="brand-mark" aria-hidden="true"></span>
+<span class="brand-text"><strong>JYY OS</strong><small>2026 · 电子书</small></span>
+</a>
+<div class="reader-crumb"><span>电子书</span><span class="sep">/</span><span>I/O、存储与文件系统</span><span class="sep">/</span><strong>第 26 讲</strong></div>
+<div class="reader-top-actions">
+<button class="icon-btn menu-toggle" id="menuToggle" type="button" aria-label="打开章节目录" aria-expanded="false" aria-controls="readerSide"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg><span>目录</span></button>
+<button class="icon-btn" type="button" data-mark-read aria-pressed="false" aria-label="标记本讲为已读"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.2 8.3 3.1 3.1 6.5-6.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span data-read-label>标记已读</span></button>
+<a class="icon-btn" href="/#curriculum"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2.2" y="2.2" width="4.4" height="4.4" rx="1.2" stroke="currentColor" stroke-width="1.3"/><rect x="9.4" y="2.2" width="4.4" height="4.4" rx="1.2" stroke="currentColor" stroke-width="1.3"/><rect x="2.2" y="9.4" width="4.4" height="4.4" rx="1.2" stroke="currentColor" stroke-width="1.3"/><rect x="9.4" y="9.4" width="4.4" height="4.4" rx="1.2" stroke="currentColor" stroke-width="1.3"/></svg><span>全部章节</span></a>
+</div>
+</div>
+</header>
+<div class="menu-scrim" aria-hidden="true"></div>
+<div class="reader-layout">
+<aside class="reader-side" id="readerSide" aria-label="章节目录">
+<div class="side-head"><span>CONTENTS</span><b>30 讲</b></div>
+<div class="side-scroll"><div class="side-group"><h4>01 / 视角与基础</h4><a class="side-link" href="/lecture/01/"><span class="n">01</span><span>Agentic AI 时代的操作系统课</span></a><a class="side-link" href="/lecture/02/"><span class="n">02</span><span>应用视角的操作系统</span></a><a class="side-link" href="/lecture/03/"><span class="n">03</span><span>硬件视角的操作系统</span></a><a class="side-link" href="/lecture/04/"><span class="n">04</span><span>LLM、Agents 与 Scaling Law</span></a></div><div class="side-group"><h4>02 / 进程与系统调用</h4><a class="side-link" href="/lecture/05/"><span class="n">05</span><span>程序和进程</span></a><a class="side-link" href="/lecture/06/"><span class="n">06</span><span>进程的地址空间</span></a><a class="side-link" href="/lecture/07/"><span class="n">07</span><span>访问操作系统对象</span></a><a class="side-link" href="/lecture/08/"><span class="n">08</span><span>终端和 UNIX Shell</span></a></div><div class="side-group"><h4>03 / 标准库、链接与应用</h4><a class="side-link" href="/lecture/09/"><span class="n">09</span><span>C 标准库原理</span></a><a class="side-link" href="/lecture/10/"><span class="n">10</span><span>调试 C 标准库</span></a><a class="side-link" href="/lecture/11/"><span class="n">11</span><span>链接和加载</span></a><a class="side-link" href="/lecture/12/"><span class="n">12</span><span>从零开始构建 Linux 应用世界</span></a></div><div class="side-group"><h4>04 / 并发</h4><a class="side-link" href="/lecture/13/"><span class="n">13</span><span>多处理器编程</span></a><a class="side-link" href="/lecture/14/"><span class="n">14</span><span>并发控制：互斥</span></a><a class="side-link" href="/lecture/15/"><span class="n">15</span><span>并发控制：条件变量</span></a><a class="side-link" href="/lecture/16/"><span class="n">16</span><span>并发控制：信号量</span></a><a class="side-link" href="/lecture/17/"><span class="n">17</span><span>并发 Bugs 和应对</span></a><a class="side-link" href="/lecture/18/"><span class="n">18</span><span>并行算法和数据结构</span></a></div><div class="side-group"><h4>05 / 异步与异构</h4><a class="side-link" href="/lecture/19/"><span class="n">19</span><span>协程与异步编程</span></a><a class="side-link" href="/lecture/20/"><span class="n">20</span><span>CPU、GPU 和 SIMT</span></a><a class="side-link" href="/lecture/21/"><span class="n">21</span><span>一个 Token 的旅程</span></a></div><div class="side-group"><h4>06 / I/O、存储与文件系统</h4><a class="side-link" href="/lecture/22/"><span class="n">22</span><span>输入输出设备和驱动</span></a><a class="side-link" href="/lecture/23/"><span class="n">23</span><span>存储设备原理</span></a><a class="side-link" href="/lecture/24/"><span class="n">24</span><span>文件系统 API (1)</span></a><a class="side-link" href="/lecture/25/"><span class="n">25</span><span>文件系统 API (2)</span></a><a class="side-link active" href="/lecture/26/"><span class="n">26</span><span>文件系统实现与崩溃一致性</span></a></div><div class="side-group"><h4>07 / 数据、安全与未来</h4><a class="side-link" href="/lecture/27/"><span class="n">27</span><span>数据库系统</span></a><a class="side-link" href="/lecture/28/"><span class="n">28</span><span>计算机系统安全</span></a><a class="side-link" href="/lecture/29/"><span class="n">29</span><span>虚拟机和容器</span></a><a class="side-link" href="/lecture/30/"><span class="n">30</span><span>Agentic AI 和我们的未来</span></a></div></div>
+<div class="side-foot"><span>已读进度</span><span><b data-read-count>0</b> / 30</span></div>
+</aside>
+<article class="reader-article">
+<header class="chapter-head">
+<span class="chapter-orb" aria-hidden="true"></span>
+<p class="eyebrow">LECTURE 26 · I/O、存储与文件系统</p>
+<h1>文件系统实现<br>与崩溃一致性</h1>
+<p class="chapter-deck">从块设备到日志，理解文件系统实现与崩溃一致性的关键机制。</p>
+<div class="chapter-meta"><span>约 41 分钟</span><span>46 张课堂截图</span><span>2026 春季</span></div>
+<div class="chapter-links">
+<a class="chapter-link primary" href="https://www.bilibili.com/video/BV12EV66bErd" target="_blank" rel="noopener"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M5 3.6v8.8L12 8 5 3.6Z" fill="currentColor"/></svg>Bilibili 原课</a>
+<a class="chapter-link" href="https://jyywiki.cn/OS/2026/lect26.md" target="_blank" rel="noopener"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 1.75h5.6L13 5.15V14.3H4V1.75Z" stroke="currentColor" stroke-width="1.3"/><path d="M9.4 1.9v3.5H13M6 8h5M6 10.6h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>官方讲义</a>
+</div>
+</header>
+<details class="mobile-toc"><summary>本讲目录 <span>14 节</span></summary><ol><li><a href="#_2">导语：文件系统就是一个持久化数据结构</a></li><li><a href="#1">1. 块设备不是一块简单的字节数组</a></li><li><a href="#2">2. 块访问的代价：缓存与读写放大</a></li><li><a href="#3">3. 设计文件系统：先做需求分析</a></li><li><a href="#4-superblock">4. Superblock：数据结构的根</a></li><li><a href="#5-fat">5. FAT：为极小空间设计的文件系统</a></li><li><a href="#6-unix-inode">6. UNIX 文件系统：分离 inode 与目录边</a></li><li><a href="#7">7. 崩溃一致性：块写入不是事务</a></li><li><a href="#8-fsck">8. FSCK：事后修复数据结构</a></li><li><a href="#9-append-only">9. 实现崩溃一致性：Append-only 与日志</a></li><li><a href="#10">10. 应用程序也必须实现崩溃一致性</a></li><li><a href="#11-crash-consistency-checker">11. Crash Consistency Checker</a></li><li><a href="#12_1">12. 总结：用合适的数据结构守护持久数据</a></li><li><a href="#_3">附：官方参考与延伸阅读</a></li></ol></details>
+<div class="prose">
+        
+
+<h2 id="_2">导语：文件系统就是一个持久化数据结构</h2>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>00:00</span></p>
+<p>上一讲已经说明：任何实现目录树与文件读写的对象都可以称为文件系统。</p>
+<p>这一讲把它放回块设备：</p>
+<blockquote>
+<p>如何在只能按块读写的存储设备上，实现目录树、文件、元数据和持久化？</p>
+</blockquote>
+<p>核心工具只有三个：</p>
+<div class="highlight"><pre><span></span><code><span class="n">bread</span><span class="p">(</span><span class="n">block</span><span class="p">);</span><span class="w">   </span><span class="c1">// load</span>
+<span class="n">bwrite</span><span class="p">(</span><span class="n">block</span><span class="p">);</span><span class="w">  </span><span class="c1">// store</span>
+<span class="n">bsync</span><span class="p">();</span><span class="w">        </span><span class="c1">// barrier / durability</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["目录树 / 文件"] --&gt; B["文件系统数据结构"]
+    B --&gt; C["bread / bwrite / bsync"]
+    C --&gt; D["块设备"]
+    D --&gt; E["持久化存储"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_02_30.webp" alt="块设备的 bread、bwrite、bsync 是文件系统的底层原语" loading="lazy" decoding="async">
+  <p class="video-caption">📷 块设备的 bread、bwrite、bsync 是文件系统的底层原语<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=150" target="_blank" rel="noopener">回到原视频 (00:02:30)</a></p>
+</div>
+
+<hr />
+<h2 id="1">1. 块设备不是一块简单的字节数组</h2>
+<h3 id="11-gpt">1.1 GPT 分区表</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>00:03</span></p>
+<p>一块磁盘常被划分为多个分区：</p>
+<div class="highlight"><pre><span></span><code>/dev/nvme0n1
+  /dev/nvme0n1p1
+  /dev/nvme0n1p2
+</code></pre></div>
+
+<p>分区信息由 <strong>GPT</strong> 描述：</p>
+<ul>
+<li>GUID Partition Table；</li>
+<li>UEFI 规范的一部分；</li>
+<li>固件启动时需要解析；</li>
+<li>头部记录分区位置、大小和类型；</li>
+<li>尾部通常保存备份副本。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    DISK["Block Device"] --&gt; MBR["Protective MBR"]
+    MBR --&gt; GPT["GPT Header"]
+    GPT --&gt; E1["Partition Entry 1"]
+    GPT --&gt; E2["Partition Entry 2"]
+    E1 --&gt; P1["/dev/nvme0n1p1"]
+    E2 --&gt; P2["/dev/nvme0n1p2"]
+    GPT --&gt; BACKUP["Backup GPT at Disk End"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_05_30.webp" alt="GPT 本身也是存储在磁盘上的数据结构" loading="lazy" decoding="async">
+  <p class="video-caption">📷 GPT 本身也是存储在磁盘上的数据结构<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=330" target="_blank" rel="noopener">回到原视频 (00:05:30)</a></p>
+</div>
+
+<h3 id="12">1.2 分区只是第一层抽象</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>00:06</span></p>
+<p>一个分区还可以继续被虚拟化：</p>
+<ul>
+<li>Loop Device；</li>
+<li>LVM Physical Volume；</li>
+<li>Volume Group；</li>
+<li>Logical Volume；</li>
+<li>NVMe Namespace。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    PV1["Physical Volume 1"] --&gt; VG["Volume Group"]
+    PV2["Physical Volume 2"] --&gt; VG
+    PV3["Physical Volume 3"] --&gt; VG
+    VG --&gt; LV1["Logical Volume 1"]
+    VG --&gt; LV2["Logical Volume 2"]
+    VG --&gt; LV3["Logical Volume 3"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_08_30.webp" alt="LVM 可以把多个物理卷组合并切分为逻辑卷" loading="lazy" decoding="async">
+  <p class="video-caption">📷 LVM 可以把多个物理卷组合并切分为逻辑卷<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=510" target="_blank" rel="noopener">回到原视频 (00:08:30)</a></p>
+</div>
+
+<h3 id="13-strace-lvm">1.3 用 strace 打开 LVM</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>00:10</span></p>
+<p>LVM 工具表面上是命令，底层仍然是一组系统调用：</p>
+<div class="highlight"><pre><span></span><code>open("/dev/loop-control")
+ioctl(LOOP_CTL_GET_FREE)
+open("/dev/mapper/control")
+ioctl(DM_DEV_CREATE)
+ioctl(DM_TABLE_LOAD)
+ioctl(DM_DEV_SUSPEND)
+</code></pre></div>
+
+<p>课程强调：这些复杂接口几乎全部通过 <code>ioctl</code> 暴露。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["LVM User Tool"] --&gt; B["/dev/loop-control"]
+    A --&gt; C["/dev/mapper/control"]
+    B --&gt; D["Loop IOCTL"]
+    C --&gt; E["Device Mapper IOCTL"]
+    D --&gt; F["Virtual Block Device"]
+    E --&gt; F
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_10_30.webp" alt="LVM 的创建和映射通过 loop/device-mapper ioctl 完成" loading="lazy" decoding="async">
+  <p class="video-caption">📷 LVM 的创建和映射通过 loop/device-mapper ioctl 完成<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=630" target="_blank" rel="noopener">回到原视频 (00:10:30)</a></p>
+</div>
+
+<h3 id="14-nvme-namespace">1.4 NVMe Namespace</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>00:11</span></p>
+<p>NVMe Namespace 像“硬件级 LVM”：</p>
+<ul>
+<li>一块 SSD 可暴露出多个 namespace；</li>
+<li>每个 namespace 看起来是独立块设备；</li>
+<li>上层文件系统只看到最终块数组。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    SSD["NVMe SSD"] --&gt; NS1["Namespace 1"]
+    SSD --&gt; NS2["Namespace 2"]
+    NS1 --&gt; FS1["Filesystem A"]
+    NS2 --&gt; FS2["Filesystem B"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_11_30.webp" alt="NVMe Namespace 在硬件层提供块设备切分" loading="lazy" decoding="async">
+  <p class="video-caption">📷 NVMe Namespace 在硬件层提供块设备切分<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=690" target="_blank" rel="noopener">回到原视频 (00:11:30)</a></p>
+</div>
+
+<hr />
+<h2 id="2">2. 块访问的代价：缓存与读写放大</h2>
+<h3 id="21">2.1 更新一个字节可能写多个块</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>00:12</span></p>
+<p>追加一个 4 KB 数据块至少涉及：</p>
+<ol>
+<li>更新数据块 bitmap；</li>
+<li>写入数据块；</li>
+<li>更新 inode 的大小、时间和索引。</li>
+</ol>
+<p>如果只修改一个字节：</p>
+<div class="highlight"><pre><span></span><code>bread(block)
+modify byte
+bwrite(block)
+update metadata
+</code></pre></div>
+
+<p>还会触发 SSD FTL 的映射表更新，导致更严重的读放大和写放大。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Write 1 Byte"] --&gt; B["Read Whole Block"]
+    B --&gt; C["Modify Byte"]
+    C --&gt; D["Write Whole Block"]
+    D --&gt; E["Update Metadata"]
+    E --&gt; F["FTL Mapping Update"]
+    F --&gt; G["Read / Write Amplification"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_13_30.webp" alt="块级接口会把小修改放大为多块读写" loading="lazy" decoding="async">
+  <p class="video-caption">📷 块级接口会把小修改放大为多块读写<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=810" target="_blank" rel="noopener">回到原视频 (00:13:30)</a></p>
+</div>
+
+<h3 id="22-buffer-cache">2.2 Buffer Cache</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>00:15</span></p>
+<p>操作系统在内存中缓存文件系统块：</p>
+<ul>
+<li><code>bread</code> 先查缓存；</li>
+<li>命中则直接返回；</li>
+<li>未命中才访问块设备；</li>
+<li><code>bwrite</code> 先写缓存，之后异步回写。</li>
+</ul>
+<p>这与内存层次和共享内存非常相似：</p>
+<div class="highlight"><pre><span></span><code>load  ≈ bread
+store ≈ bwrite
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["bread"] --&gt; B{"Cache Hit？"}
+    B -- "是" --&gt; C["Return Cached Block"]
+    B -- "否" --&gt; D["Read Device"]
+    D --&gt; E["Insert into Cache"]
+    E --&gt; C
+    F["bwrite"] --&gt; G["Update Cache"]
+    G --&gt; H["Write Back Later"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_15_30.webp" alt="文件系统通过缓存吸收部分块设备延迟" loading="lazy" decoding="async">
+  <p class="video-caption">📷 文件系统通过缓存吸收部分块设备延迟<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=930" target="_blank" rel="noopener">回到原视频 (00:15:30)</a></p>
+</div>
+
+<hr />
+<h2 id="3">3. 设计文件系统：先做需求分析</h2>
+<h3 id="31">3.1 需要持久化什么</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>00:17</span></p>
+<p>文件系统需要保存：</p>
+<ul>
+<li>文件字节数据；</li>
+<li>文件元数据：名称、大小、权限、时间；</li>
+<li>目录结构：名称到 inode 的映射；</li>
+<li>空间分配信息；</li>
+<li>链接关系。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Filesystem State"] --&gt; B["File Data"]
+    A --&gt; C["Metadata"]
+    A --&gt; D["Directory Entries"]
+    A --&gt; E["Allocation Bitmap"]
+    A --&gt; F["Links"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_17_30.webp" alt="文件系统需要持久化数据、元数据和目录图" loading="lazy" decoding="async">
+  <p class="video-caption">📷 文件系统需要持久化数据、元数据和目录图<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=1050" target="_blank" rel="noopener">回到原视频 (00:17:30)</a></p>
+</div>
+
+<h3 id="32-workload">3.2 常见 workload 统计</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>00:19</span></p>
+<p>经典研究给出一些经验规律：</p>
+<ul>
+<li>绝大多数文件很小；</li>
+<li>少量大文件占用多数空间；</li>
+<li>目录通常不超过几十项；</li>
+<li>文件系统通常填充到接近一半；</li>
+<li>元数据访问频率远高于文件内容全量读取。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Many Small Files"] --&gt; B["Optimize Small-file Path"]
+    C["Few Large Files"] --&gt; D["Support Large-file Growth"]
+    E["Small Directories"] --&gt; F["Simple Directory Layout"]
+    G["Half-full Filesystem"] --&gt; H["Balance Free-space Policy"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_19_30.webp" alt="文件大小与目录规模统计指导文件系统设计" loading="lazy" decoding="async">
+  <p class="video-caption">📷 文件大小与目录规模统计指导文件系统设计<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=1170" target="_blank" rel="noopener">回到原视频 (00:19:30)</a></p>
+</div>
+
+<h3 id="33">3.3 三个核心问题</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>00:21</span></p>
+<ol>
+<li>元数据放哪里？</li>
+<li>文件块索引使用什么数据结构？</li>
+<li>目录如何存储？</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Metadata Layout"] --&gt; D["Filesystem Design"]
+    B["Block Index"] --&gt; D
+    C["Directory Structure"] --&gt; D
+    D --&gt; E["Performance / Locality"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_22_30.webp" alt="元数据、块索引和目录是文件系统设计的三根支柱" loading="lazy" decoding="async">
+  <p class="video-caption">📷 元数据、块索引和目录是文件系统设计的三根支柱<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=1350" target="_blank" rel="noopener">回到原视频 (00:22:30)</a></p>
+</div>
+
+<hr />
+<h2 id="4-superblock">4. Superblock：数据结构的根</h2>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>00:23</span></p>
+<p>所有数据结构都需要入口：</p>
+<ul>
+<li>链表有 head；</li>
+<li>树有 root；</li>
+<li>ELF 有 header；</li>
+<li>文件系统有 Superblock。</li>
+</ul>
+<p>Superblock 记录：</p>
+<ul>
+<li>Magic Number；</li>
+<li>Block Size；</li>
+<li>文件系统总块数；</li>
+<li>空闲块与 inode 数量；</li>
+<li>元数据区域位置和大小。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    SB["Superblock"] --&gt; BQ["Block Bitmap"]
+    SB --&gt; IQ["Inode Bitmap"]
+    SB --&gt; IT["Inode Table"]
+    SB --&gt; DB["Data Blocks"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_23_30.webp" alt="Superblock 是文件系统的根元数据" loading="lazy" decoding="async">
+  <p class="video-caption">📷 Superblock 是文件系统的根元数据<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=1410" target="_blank" rel="noopener">回到原视频 (00:23:30)</a></p>
+</div>
+
+<h3 id="41-magic-number">4.1 Magic Number 与自动识别</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>00:24</span></p>
+<p><code>mkfs</code> 写入 Superblock，<code>mount</code> 根据 Magic Number 识别文件系统类型。</p>
+<p>如果 Superblock 损坏，文件系统可能无法挂载，因此通常保存多个副本。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["mkfs"] --&gt; B["Write Superblock"]
+    B --&gt; C["Magic / Layout / Counts"]
+    D["mount"] --&gt; E["Read Superblock"]
+    E --&gt; F{"Magic Recognized？"}
+    F -- "是" --&gt; G["Load Filesystem"]
+    F -- "否" --&gt; H["Mount Fails"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_24_30.webp" alt="Superblock Magic Number 决定文件系统识别与挂载" loading="lazy" decoding="async">
+  <p class="video-caption">📷 Superblock Magic Number 决定文件系统识别与挂载<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=1470" target="_blank" rel="noopener">回到原视频 (00:24:30)</a></p>
+</div>
+
+<hr />
+<h2 id="5-fat">5. FAT：为极小空间设计的文件系统</h2>
+<h3 id="51-fat-cluster">5.1 FAT 与 Cluster</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>00:26</span></p>
+<p>FAT 最早面向容量极小的软盘。</p>
+<p>物理扇区可能是 512 B，但文件系统把 <code>2^k</code> 个扇区组成一个 <strong>cluster</strong>：</p>
+<div class="highlight"><pre><span></span><code>cluster size = 512 B × 2^k
+</code></pre></div>
+
+<p>FAT 的核心是 cluster 的 <code>next</code> 数组。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    C1["Cluster 1"] --&gt; C2["Cluster 3"]
+    C2 --&gt; C3["Cluster 4"]
+    C3 --&gt; C4["EOF"]
+    FREE["0 = Free"] --&gt; C5["Available Cluster"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_26_30.webp" alt="FAT 把文件组织成 cluster 链表" loading="lazy" decoding="async">
+  <p class="video-caption">📷 FAT 把文件组织成 cluster 链表<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=1590" target="_blank" rel="noopener">回到原视频 (00:26:30)</a></p>
+</div>
+
+<h3 id="52-fat-next">5.2 FAT 表就是 next 数组</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>00:29</span></p>
+<p>FAT-12 使用 12 位指针：</p>
+<div class="highlight"><pre><span></span><code>0      = free
+EOF    = cluster chain end
+other  = next cluster
+</code></pre></div>
+
+<p>12 位不是字节整数，因此两个 FAT-12 entry 会打包进 3 个字节：</p>
+<div class="highlight"><pre><span></span><code>24 bits = entry[i] (12 bits) + entry[i+1] (12 bits)
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["FAT Entry 1: 12 bits"] --&gt; C["3-byte Packed Block"]
+    B["FAT Entry 2: 12 bits"] --&gt; C
+    C --&gt; D["Next FAT Entry"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_29_30.webp" alt="FAT-12 按 bit 压紧存储，极限节省空间" loading="lazy" decoding="async">
+  <p class="video-caption">📷 FAT-12 按 bit 压紧存储，极限节省空间<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=1770" target="_blank" rel="noopener">回到原视频 (00:29:30)</a></p>
+</div>
+
+<h3 id="53-fat">5.3 FAT 碎片</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>00:32</span></p>
+<p>频繁分配和释放会产生碎片：</p>
+<div class="highlight"><pre><span></span><code>file clusters:
+  464 → 465 → 466 ... 546
+
+another file:
+  2407 ... 2431 → 2511 ... 2587
+</code></pre></div>
+
+<p>大文件碎片化后：</p>
+<ul>
+<li>cluster 链跳跃；</li>
+<li>FAT entry 本身也可能跨块；</li>
+<li><code>lseek</code> 随机访问需要反复跟踪链；</li>
+<li>产生严重读放大。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Logical File Blocks"] --&gt; B["FAT Linked Clusters"]
+    B --&gt; C1["Contiguous Run"]
+    B --&gt; C2["Jump to Far Cluster"]
+    C2 --&gt; C3["Jump Back"]
+    C3 --&gt; D["Seek / I/O Amplification"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_33_00.webp" alt="碎片化让 FAT 链式索引产生大量随机 I/O" loading="lazy" decoding="async">
+  <p class="video-caption">📷 碎片化让 FAT 链式索引产生大量随机 I/O<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=1980" target="_blank" rel="noopener">回到原视频 (00:33:00)</a></p>
+</div>
+
+<h3 id="54-mmap-fat">5.4 用 mmap 解析 FAT</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>00:35</span></p>
+<p>把文件系统镜像映射到内存后，Superblock 就是结构体指针：</p>
+<div class="highlight"><pre><span></span><code><span class="k">struct</span><span class="w"> </span><span class="nc">fat32_header</span><span class="w"> </span><span class="o">*</span><span class="n">hdr</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">mmap</span><span class="p">(...);</span>
+</code></pre></div>
+
+<p>随后可以递归扫描目录树。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Disk Image"] --&gt; B["mmap"]
+    B --&gt; C["FAT32 Header"]
+    C --&gt; D["Parse BPB"]
+    D --&gt; E["Read FAT"]
+    E --&gt; F["DFS Directory Scan"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_35_30.webp" alt="readfat 工具用 mmap 把磁盘镜像当作数据结构访问" loading="lazy" decoding="async">
+  <p class="video-caption">📷 readfat 工具用 mmap 把磁盘镜像当作数据结构访问<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=2130" target="_blank" rel="noopener">回到原视频 (00:35:30)</a></p>
+</div>
+
+<h3 id="55-83">5.5 8.3 文件名</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>00:38</span></p>
+<p>早期 FAT 目录项固定 11 字节：</p>
+<div class="highlight"><pre><span></span><code>8字符文件名 + 3字符扩展名
+AUTOEXEC.BAT
+</code></pre></div>
+
+<p>长文件名通过扩展目录项和 <code>~1</code>、<code>~2</code> 短名兼容实现。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Long File Name"] --&gt; B["LFN Entries"]
+    A --&gt; C["8.3 Short Name"]
+    C --&gt; D["DOS Compatibility"]
+    B --&gt; E["Modern Long Name"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_38_30.webp" alt="FAT 用 8.3 短名和长文件扩展项保持兼容" loading="lazy" decoding="async">
+  <p class="video-caption">📷 FAT 用 8.3 短名和长文件扩展项保持兼容<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=2310" target="_blank" rel="noopener">回到原视频 (00:38:30)</a></p>
+</div>
+
+<h3 id="56">5.6 目录也是文件</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>00:40</span></p>
+<p>FAT 目录文件由大量 <code>directory entry</code> 组成：</p>
+<div class="highlight"><pre><span></span><code>name[11]
+attributes
+first_cluster_high
+first_cluster_low
+file_size
+</code></pre></div>
+
+<p>目录文件中保存每个子文件的第一块 cluster。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Directory File"] --&gt; D1["Entry: a.txt"]
+    A --&gt; D2["Entry: b.txt"]
+    A --&gt; D3["Entry: dir"]
+    D1 --&gt; C1["First Cluster"]
+    D2 --&gt; C2["First Cluster"]
+    D3 --&gt; C3["Subdirectory File"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_40_30.webp" alt="FAT 目录项记录名称、属性和首个 cluster" loading="lazy" decoding="async">
+  <p class="video-caption">📷 FAT 目录项记录名称、属性和首个 cluster<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=2430" target="_blank" rel="noopener">回到原视频 (00:40:30)</a></p>
+</div>
+
+<hr />
+<h2 id="6-unix-inode">6. UNIX 文件系统：分离 inode 与目录边</h2>
+<h3 id="61">6.1 图模型</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>00:41</span></p>
+<p>UNIX 文件系统把目录树扩展为图：</p>
+<ul>
+<li>顶点是文件或目录；</li>
+<li>目录项是边；</li>
+<li>边把文件名映射到 inode；</li>
+<li><code>.</code> 和 <code>..</code> 也是目录项。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    ROOT["/"] --&gt; HOME["/home"]
+    ROOT --&gt; BIN["/bin"]
+    HOME --&gt; DOT["."]
+    HOME --&gt; DOTDOT[".."]
+    HOME --&gt; FILE["a.txt"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_43_30.webp" alt="UNIX 文件系统使用目录边连接 inode 顶点" loading="lazy" decoding="async">
+  <p class="video-caption">📷 UNIX 文件系统使用目录边连接 inode 顶点<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=2610" target="_blank" rel="noopener">回到原视频 (00:43:30)</a></p>
+</div>
+
+<h3 id="62-inode">6.2 inode</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>00:43</span></p>
+<p>顶点元数据保存在 <strong>inode</strong>：</p>
+<ul>
+<li>mode；</li>
+<li>link count；</li>
+<li>uid / gid；</li>
+<li>size；</li>
+<li>timestamps；</li>
+<li>block index。</li>
+</ul>
+<div class="highlight"><pre><span></span><code><span class="k">struct</span><span class="w"> </span><span class="nc">inode</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">mode_t</span><span class="w"> </span><span class="n">mode</span><span class="p">;</span>
+<span class="w">    </span><span class="n">nlink_t</span><span class="w"> </span><span class="n">links</span><span class="p">;</span>
+<span class="w">    </span><span class="kt">uid_t</span><span class="w"> </span><span class="n">uid</span><span class="p">;</span>
+<span class="w">    </span><span class="kt">gid_t</span><span class="w"> </span><span class="n">gid</span><span class="p">;</span>
+<span class="w">    </span><span class="kt">off_t</span><span class="w"> </span><span class="n">size</span><span class="p">;</span>
+<span class="w">    </span><span class="n">block_t</span><span class="w"> </span><span class="n">index</span><span class="p">[...];</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Directory Entry"] --&gt; B["Inode Number"]
+    B --&gt; C["Inode Metadata"]
+    C --&gt; D["Data Block Index"]
+    D --&gt; E["File Bytes"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_43_30.webp" alt="inode 保存顶点元数据和数据块索引" loading="lazy" decoding="async">
+  <p class="video-caption">📷 inode 保存顶点元数据和数据块索引<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=2610" target="_blank" rel="noopener">回到原视频 (00:43:30)</a></p>
+</div>
+
+<h3 id="63">6.3 直接块与间接块</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>00:45</span></p>
+<p>为兼顾小文件快速访问与大文件容量，UNIX 使用联合索引：</p>
+<div class="highlight"><pre><span></span><code>12 direct blocks
+1 single indirect
+1 double indirect
+1 triple indirect
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    I["Inode"] --&gt; D["Direct Blocks"]
+    I --&gt; S["Single Indirect"]
+    S --&gt; S1["Data Blocks"]
+    I --&gt; D2["Double Indirect"]
+    I --&gt; T["Triple Indirect"]
+    D2 --&gt; D21["Indirect Blocks"]
+    T --&gt; T1["Indirect Trees"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_45_30.webp" alt="直接指针与多级间接索引兼顾小文件和大文件" loading="lazy" decoding="async">
+  <p class="video-caption">📷 直接指针与多级间接索引兼顾小文件和大文件<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=2730" target="_blank" rel="noopener">回到原视频 (00:45:30)</a></p>
+</div>
+
+<h3 id="64">6.4 目录项与硬链接</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>00:46</span></p>
+<p>目录是：</p>
+<div class="highlight"><pre><span></span><code>map&lt;string, inode_number&gt;
+</code></pre></div>
+
+<p>多个目录项可以指向同一个 inode，这就是硬链接。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["name a.txt"] --&gt; I["Inode 42"]
+    B["name alias.txt"] --&gt; I
+    I --&gt; D["File Data"]
+    I --&gt; L["Link Count = 2"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_46_30.webp" alt="多个目录项可以指向同一个 inode，实现硬链接" loading="lazy" decoding="async">
+  <p class="video-caption">📷 多个目录项可以指向同一个 inode，实现硬链接<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=2790" target="_blank" rel="noopener">回到原视频 (00:46:30)</a></p>
+</div>
+
+<h3 id="65-inline-symlink">6.5 Inline Symlink</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>00:47</span></p>
+<p>ext4 对不超过约 60 B 的符号链接：</p>
+<ul>
+<li>不分配额外数据块；</li>
+<li>直接把链接目标写进 inode 的块指针区域；</li>
+<li>节省空间和 I/O。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Short Symlink Target"] --&gt; B{"&lt;= 60 bytes？"}
+    B -- "是" --&gt; C["Store Target Inside Inode"]
+    B -- "否" --&gt; D["Allocate Data Block"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_47_30.webp" alt="短符号链接可以直接内联在 inode 中" loading="lazy" decoding="async">
+  <p class="video-caption">📷 短符号链接可以直接内联在 inode 中<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=2850" target="_blank" rel="noopener">回到原视频 (00:47:30)</a></p>
+</div>
+
+<h3 id="66-debugfs">6.6 debugfs 可视化</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>00:49</span></p>
+<p><code>debugfs</code> 可以在用户态读取 ext4 内部结构：</p>
+<ul>
+<li>inode；</li>
+<li>block allocation；</li>
+<li>directory entry；</li>
+<li>符号链接目标；</li>
+<li>文件到块的映射。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["ext4 Image"] --&gt; B["debugfs"]
+    B --&gt; C["Inodes"]
+    B --&gt; D["Directory Entries"]
+    B --&gt; E["Block Maps"]
+    C --&gt; F["Visualization"]
+    D --&gt; F
+    E --&gt; F
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_49_30.webp" alt="debugfs 把 ext4 内部数据结构暴露给用户态工具" loading="lazy" decoding="async">
+  <p class="video-caption">📷 debugfs 把 ext4 内部数据结构暴露给用户态工具<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=2970" target="_blank" rel="noopener">回到原视频 (00:49:30)</a></p>
+</div>
+
+<hr />
+<h2 id="7">7. 崩溃一致性：块写入不是事务</h2>
+<h3 id="71-append">7.1 一次 append 涉及多次写</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>00:51</span></p>
+<p>追加一个数据块：</p>
+<div class="highlight"><pre><span></span><code>1. bwrite(block bitmap)
+2. bwrite(data)
+3. bwrite(inode)
+</code></pre></div>
+
+<p>每个操作本身可能成功，但设备可以重排写顺序。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Allocate Block"] --&gt; B["Update Bitmap"]
+    B --&gt; C["Write Data"]
+    C --&gt; D["Update Inode"]
+    D --&gt; E["Filesystem Visible"]
+    F["Crash at Any Point"] --&gt; G["Possible Inconsistent State"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_54_30.webp" alt="追加一个块涉及 bitmap、数据和 inode 三处更新" loading="lazy" decoding="async">
+  <p class="video-caption">📷 追加一个块涉及 bitmap、数据和 inode 三处更新<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=3270" target="_blank" rel="noopener">回到原视频 (00:54:30)</a></p>
+</div>
+
+<h3 id="72">7.2 设备会重排写入</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>00:55</span></p>
+<p>从文件系统到物理介质之间有多层队列：</p>
+<div class="highlight"><pre><span></span><code>block cache
+  → block queue
+  → HDD scheduler / SSD FTL
+  → flash controller
+</code></pre></div>
+
+<p>HDD 会优先选择距离读写头最近的请求；SSD 会把写分配到不同物理块。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["bwrite 1"] --&gt; Q["Device Queue"]
+    B["bwrite 2"] --&gt; Q
+    C["bwrite 3"] --&gt; Q
+    Q --&gt; D["Reordered Physical Writes"]
+    D --&gt; E["Crash May Persist Any Subset"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_56_00.webp" alt="设备队列可能重排写请求，崩溃时只保留任意子集" loading="lazy" decoding="async">
+  <p class="video-caption">📷 设备队列可能重排写请求，崩溃时只保留任意子集<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=3360" target="_blank" rel="noopener">回到原视频 (00:56:00)</a></p>
+</div>
+
+<h3 id="73-23">7.3 2³ 种结果</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>00:56</span></p>
+<p>三个块写入在崩溃后可形成 <code>2³ = 8</code> 种已落盘子集。</p>
+<p>例如：</p>
+<div class="highlight"><pre><span></span><code>inode 已更新
+data 已更新
+bitmap 未更新
+</code></pre></div>
+
+<p>文件当前看起来正常，但未来 bitmap 会再次分配该块，导致数据被覆盖。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Inode Points to Block 40"] --&gt; B["Block 40 Contains Hello"]
+    C["Bitmap Still Marks Block 40 Free"] --&gt; D["Future Allocation Reuses Block 40"]
+    D --&gt; E["File Data Corrupted Later"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_56_30.webp" alt="bitmap 与 inode 不一致会在未来导致静默数据损坏" loading="lazy" decoding="async">
+  <p class="video-caption">📷 bitmap 与 inode 不一致会在未来导致静默数据损坏<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=3390" target="_blank" rel="noopener">回到原视频 (00:56:30)</a></p>
+</div>
+
+<h3 id="74-ssd-ftl">7.4 SSD FTL 崩溃</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>00:58</span></p>
+<p>早期 SSD 在掉电时可能损坏 FTL 自身的数据结构：</p>
+<ul>
+<li>L2P 映射表损坏；</li>
+<li>整个盘无法读取；</li>
+<li>SSD 无法像 HDD 一样拆盘恢复。</li>
+</ul>
+<p>课程提到通过可编程关断电源，曾发现多类 SSD 固件崩溃问题。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Power Loss"] --&gt; B["FTL Metadata Torn"]
+    B --&gt; C["Logical-to-Physical Map Invalid"]
+    C --&gt; D["Drive Unreadable"]
+    D --&gt; E["Firmware Failure Fixes"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_00_58_30.webp" alt="SSD 掉电可能损坏 FTL 元数据，后果比单文件损坏更严重" loading="lazy" decoding="async">
+  <p class="video-caption">📷 SSD 掉电可能损坏 FTL 元数据，后果比单文件损坏更严重<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=3510" target="_blank" rel="noopener">回到原视频 (00:58:30)</a></p>
+</div>
+
+<hr />
+<h2 id="8-fsck">8. FSCK：事后修复数据结构</h2>
+<h3 id="81">8.1 扫描一致性</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>01:00</span></p>
+<p>File System Check 扫描：</p>
+<ul>
+<li>inode 指向的数据块；</li>
+<li>block bitmap；</li>
+<li>directory graph；</li>
+<li>链接计数；</li>
+<li>超级块。</li>
+</ul>
+<p>可以恢复“最可能”的旧状态，但无法保证所有数据正确。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Scan Inodes"] --&gt; D["Collect Used Blocks"]
+    B["Scan Bitmap"] --&gt; E["Compare Allocation"]
+    C["Scan Directories"] --&gt; F["Rebuild Graph"]
+    D --&gt; G["Fix Inconsistencies"]
+    E --&gt; G
+    F --&gt; G
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_00_30.webp" alt="FSCK 从磁盘残余结构推断并修复一致性" loading="lazy" decoding="async">
+  <p class="video-caption">📷 FSCK 从磁盘残余结构推断并修复一致性<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=3630" target="_blank" rel="noopener">回到原视频 (01:00:30)</a></p>
+</div>
+
+<h3 id="82-lostfound">8.2 lost+found</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>01:01</span></p>
+<p>如果 inode 仍存在，但没有任何目录指向它，FSCK 可能把它放进：</p>
+<div class="highlight"><pre><span></span><code>/lost+found
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Orphan Inode"] --&gt; B{"Valid File Data？"}
+    B -- "是" --&gt; C["Move to lost+found"]
+    B -- "否" --&gt; D["Discard / Repair"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_01_30.webp" alt="lost+found 用于找回失去目录边但 inode 仍存在的文件" loading="lazy" decoding="async">
+  <p class="video-caption">📷 lost+found 用于找回失去目录边但 inode 仍存在的文件<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=3690" target="_blank" rel="noopener">回到原视频 (01:01:30)</a></p>
+</div>
+
+<h3 id="83">8.3 多指针更新天然不安全</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>01:02</span></p>
+<p>链表插入：</p>
+<div class="highlight"><pre><span></span><code>x-&gt;next = y
+y-&gt;prev = x
+y-&gt;next = n
+n-&gt;prev = y
+</code></pre></div>
+
+<p>崩溃在中间会留下半插入状态。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["x.next = y"] --&gt; B["y.prev = x"]
+    B --&gt; C["y.next = n"]
+    C --&gt; D["n.prev = y"]
+    E["Crash After Step 2"] --&gt; F["Half-linked Structure"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_02_30.webp" alt="传统多指针更新崩溃后可能形成半完成结构" loading="lazy" decoding="async">
+  <p class="video-caption">📷 传统多指针更新崩溃后可能形成半完成结构<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=3750" target="_blank" rel="noopener">回到原视频 (01:02:30)</a></p>
+</div>
+
+<hr />
+<h2 id="9-append-only">9. 实现崩溃一致性：Append-only 与日志</h2>
+<h3 id="91">9.1 两种数据结构视角</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>01:03</span></p>
+<p><strong>视角 1：实际数据结构</strong></p>
+<div class="highlight"><pre><span></span><code>树、链表、bitmap、inode
+</code></pre></div>
+
+<p>直接 multi-write，崩溃不安全。</p>
+<p><strong>视角 2：操作日志</strong></p>
+<div class="highlight"><pre><span></span><code>append operations
+replay operations
+</code></pre></div>
+
+<p>append-only 天然更容易实现崩溃一致性。</p>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Actual Data Structure"] --&gt; B["Multiple Writes"]
+    B --&gt; C["Crash Unsafe"]
+    D["Append-only History"] --&gt; E["Replay"]
+    E --&gt; F["Crash Consistent"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_04_30.webp" alt="用追加写记录历史，再重放恢复实际数据结构" loading="lazy" decoding="async">
+  <p class="video-caption">📷 用追加写记录历史，再重放恢复实际数据结构<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=3870" target="_blank" rel="noopener">回到原视频 (01:04:30)</a></p>
+</div>
+
+<h3 id="92-lsm-tree">9.2 LSM Tree</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>01:06</span></p>
+<p>Log-Structured Merge Tree：</p>
+<ul>
+<li>内存 MemTable 负责写；</li>
+<li>WAL 保证崩溃恢复；</li>
+<li>MemTable 满后 Flush；</li>
+<li>磁盘只保存 immutable SSTable；</li>
+<li>定期 Merge 小树到大树。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Write Request"] --&gt; B["MemTable"]
+    A --&gt; C["WAL"]
+    B --&gt; D{"MemTable Full？"}
+    D -- "是" --&gt; E["Flush to SSTable"]
+    E --&gt; F["Merge Lower Levels"]
+    C --&gt; G["Crash Recovery"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_06_30.webp" alt="LSM 把写集中到内存并使用 WAL 保证恢复" loading="lazy" decoding="async">
+  <p class="video-caption">📷 LSM 把写集中到内存并使用 WAL 保证恢复<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=3990" target="_blank" rel="noopener">回到原视频 (01:06:30)</a></p>
+</div>
+
+<h3 id="93-write-ahead-log">9.3 Write-ahead Log</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>01:08</span></p>
+<p>文件系统日志：</p>
+<ol>
+<li>写 <code>TXBegin</code>；</li>
+<li>写实际要修改的块；</li>
+<li><code>flush</code>；</li>
+<li>写 <code>TXEnd</code>；</li>
+<li><code>flush</code>；</li>
+<li>后台 checkpoint 到真实位置；</li>
+<li>回收日志。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["TXBegin"] --&gt; B["Journal Operations"]
+    B --&gt; C["flush"]
+    C --&gt; D["TXEnd"]
+    D --&gt; E["flush"]
+    E --&gt; F["Replay / Checkpoint"]
+    F --&gt; G["Reclaim Journal"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_08_30.webp" alt="日志用 flush 建立 TXEnd 与数据落盘的 happens-before 关系" loading="lazy" decoding="async">
+  <p class="video-caption">📷 日志用 flush 建立 TXEnd 与数据落盘的 happens-before 关系<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=4110" target="_blank" rel="noopener">回到原视频 (01:08:30)</a></p>
+</div>
+
+<h3 id="94-checkpointing">9.4 Checkpointing</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>01:10</span></p>
+<p>如果崩溃发生在 <code>TXEnd</code> 之前：</p>
+<div class="highlight"><pre><span></span><code>事务视为未完成
+</code></pre></div>
+
+<p>如果崩溃发生在 <code>TXEnd</code> 之后：</p>
+<div class="highlight"><pre><span></span><code>事务可完整 replay
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Crash Before TXEnd"] --&gt; B["Ignore Transaction"]
+    C["Crash After TXEnd"] --&gt; D["Replay Transaction"]
+    D --&gt; E["Filesystem Updated"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_10_30.webp" alt="TXEnd 决定日志事务是否在恢复时重放" loading="lazy" decoding="async">
+  <p class="video-caption">📷 TXEnd 决定日志事务是否在恢复时重放<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=4230" target="_blank" rel="noopener">回到原视频 (01:10:30)</a></p>
+</div>
+
+<h3 id="95-jbd">9.5 批处理与 JBD</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>01:11</span></p>
+<p>xv6、JBD 等实现会：</p>
+<ul>
+<li>合并多个系统调用；</li>
+<li>延迟回写；</li>
+<li>减少 flush 次数；</li>
+<li>牺牲少量延迟和丢失窗口换性能。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    S1["Syscall Write 1"] --&gt; T["One Journal Transaction"]
+    S2["Syscall Write 2"] --&gt; T
+    S3["Syscall Write 3"] --&gt; T
+    T --&gt; F["Single Flush"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_11_30.webp" alt="批处理把多个修改合并进一个事务" loading="lazy" decoding="async">
+  <p class="video-caption">📷 批处理把多个修改合并进一个事务<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=4290" target="_blank" rel="noopener">回到原视频 (01:11:30)</a></p>
+</div>
+
+<h3 id="96-ext4-checksum">9.6 ext4 checksum</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>01:12</span></p>
+<p>ext4 可以：</p>
+<ul>
+<li>不再依赖传统 <code>TXBegin/TXEnd</code> 标记；</li>
+<li>在日志头记录长度和 checksum；</li>
+<li>恢复时验证 checksum；</li>
+<li>checksum 错误则丢弃整个尾部事务。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Journal Header"] --&gt; B["Length + Checksum"]
+    B --&gt; C["Replay / Scan"]
+    C --&gt; D{"Checksum Valid？"}
+    D -- "是" --&gt; E["Apply Transaction"]
+    D -- "否" --&gt; F["Discard Tail"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_12_30.webp" alt="ext4 用日志 checksum 检测不完整事务" loading="lazy" decoding="async">
+  <p class="video-caption">📷 ext4 用日志 checksum 检测不完整事务<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=4350" target="_blank" rel="noopener">回到原视频 (01:12:30)</a></p>
+</div>
+
+<h3 id="97-metadata-journaling">9.7 Metadata Journaling</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>01:14</span></p>
+<p>ext4 默认元数据日志：</p>
+<ul>
+<li>inode、bitmap、目录结构进日志；</li>
+<li>文件数据不进日志；</li>
+<li>保证目录树一致；</li>
+<li>crash 可能丢最近数据。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Metadata Writes"] --&gt; J["Journal"]
+    B["File Data Writes"] --&gt; D["Direct Write Path"]
+    J --&gt; C["Directory Tree Consistency"]
+    D --&gt; E["Recent Data May Be Lost on Crash"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_14_30.webp" alt="元数据日志牺牲最近数据以保证目录结构一致" loading="lazy" decoding="async">
+  <p class="video-caption">📷 元数据日志牺牲最近数据以保证目录结构一致<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=4470" target="_blank" rel="noopener">回到原视频 (01:14:30)</a></p>
+</div>
+
+<hr />
+<h2 id="10">10. 应用程序也必须实现崩溃一致性</h2>
+<h3 id="101">10.1 常见的错误保存方式</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>01:15</span></p>
+<p>看起来合理的文件保存：</p>
+<div class="highlight"><pre><span></span><code><span class="n">Path</span><span class="p">(</span><span class="s2">"a.txt.tmp"</span><span class="p">)</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="n">new_data</span><span class="p">)</span>
+<span class="n">unlink</span><span class="p">(</span><span class="s2">"a.txt"</span><span class="p">)</span>
+<span class="n">rename</span><span class="p">(</span><span class="s2">"a.txt.tmp"</span><span class="p">,</span> <span class="s2">"a.txt"</span><span class="p">)</span>
+</code></pre></div>
+
+<p>但元数据日志可能只重放了：</p>
+<div class="highlight"><pre><span></span><code>create a.txt.tmp
+unlink a.txt
+</code></pre></div>
+
+<p>而没有重放数据写入，最终用户看到文件消失。</p>
+<div class="highlight"><pre><span></span><code>sequenceDiagram
+    participant App
+    participant FS
+    App-&gt;&gt;FS: create temp
+    App-&gt;&gt;FS: write temp
+    App-&gt;&gt;FS: unlink original
+    App-&gt;&gt;FS: rename temp
+    Note over FS: Crash before data durable
+    FS--&gt;&gt;App: Replay metadata only
+    App-&gt;&gt;FS: File missing / empty
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_15_30.webp" alt="临时文件、删除和重命名如果没有同步点，崩溃后可能丢文件" loading="lazy" decoding="async">
+  <p class="video-caption">📷 临时文件、删除和重命名如果没有同步点，崩溃后可能丢文件<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=4530" target="_blank" rel="noopener">回到原视频 (01:15:30)</a></p>
+</div>
+
+<h3 id="102-git-crash-consistency">10.2 Git 的 crash consistency</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>01:17</span></p>
+<p>Git 是 append-only object store，通常不调用同步：</p>
+<ul>
+<li>对象一旦写入，不像普通文件那样原地修改；</li>
+<li>FSCK 可以恢复引用图；</li>
+<li>快速关闭虚拟机可能导致 Git 目录不一致；</li>
+<li><code>git fsck</code> 可以重新扫描对象。</li>
+</ul>
+<p>课程 makefile 中加入全局 <code>sync</code> 以保证提交落盘。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Git Objects"] --&gt; B["Append-only Store"]
+    B --&gt; C["Crash May Leave Partial Filesystem"]
+    C --&gt; D["git fsck"]
+    D --&gt; E["Recover Object Graph"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_17_30.webp" alt="Git 靠 append-only 对象图和 fsck 恢复崩溃后的状态" loading="lazy" decoding="async">
+  <p class="video-caption">📷 Git 靠 append-only 对象图和 fsck 恢复崩溃后的状态<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=4650" target="_blank" rel="noopener">回到原视频 (01:17:30)</a></p>
+</div>
+
+<h3 id="103-sync">10.3 sync 系列系统调用</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>01:19</span></p>
+<div class="highlight"><pre><span></span><code><span class="n">sync</span><span class="p">();</span>
+<span class="n">syncfs</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+<span class="n">fsync</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+<span class="n">fdatasync</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+</code></pre></div>
+
+<p>区别：</p>
+<table>
+<thead>
+<tr>
+<th>调用</th>
+<th>同步范围</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sync</code></td>
+<td>所有文件系统</td>
+</tr>
+<tr>
+<td><code>syncfs</code></td>
+<td>一个文件系统</td>
+</tr>
+<tr>
+<td><code>fsync</code></td>
+<td>文件数据 + 全部元数据</td>
+</tr>
+<tr>
+<td><code>fdatasync</code></td>
+<td>文件数据 + 影响读回的必要元数据</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["sync()"] --&gt; B["Global"]
+    C["syncfs(fd)"] --&gt; D["Filesystem"]
+    E["fsync(fd)"] --&gt; F["File + Metadata"]
+    G["fdatasync(fd)"] --&gt; H["File Data + Minimal Metadata"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_19_30.webp" alt="不同 sync 调用覆盖的持久化范围不同" loading="lazy" decoding="async">
+  <p class="video-caption">📷 不同 sync 调用覆盖的持久化范围不同<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=4770" target="_blank" rel="noopener">回到原视频 (01:19:30)</a></p>
+</div>
+
+<h3 id="104-fdatasync">10.4 fdatasync 与数据库</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>01:21</span></p>
+<p>固定大小的数据库文件：</p>
+<ul>
+<li>空间早已分配；</li>
+<li>修改数据不改文件大小；</li>
+<li>inode block map 不变；</li>
+<li><code>fdatasync</code> 不需要同步大多数 inode 变化。</li>
+</ul>
+<p>因此数据库 WAL 常优先使用 <code>fdatasync</code>。</p>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Fixed-size Database File"] --&gt; B["Data Written"]
+    B --&gt; C["Size Unchanged"]
+    B --&gt; D["Block Map Unchanged"]
+    C --&gt; E["fdatasync"]
+    D --&gt; E
+    E --&gt; F["Avoid Inode Write"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_21_00.webp" alt="fdatasync 适合固定大小数据库和自定义 WAL" loading="lazy" decoding="async">
+  <p class="video-caption">📷 fdatasync 适合固定大小数据库和自定义 WAL<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=4860" target="_blank" rel="noopener">回到原视频 (01:21:00)</a></p>
+</div>
+
+<h3 id="105">10.5 正确保存文件</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>01:22</span></p>
+<p>基本模式：</p>
+<div class="highlight"><pre><span></span><code><span class="n">write</span><span class="p">(</span><span class="s2">"a.txt.tmp"</span><span class="p">,</span> <span class="n">new_data</span><span class="p">)</span>
+<span class="n">fsync</span><span class="p">(</span><span class="n">fd_of_tmp</span><span class="p">)</span>
+<span class="n">rename</span><span class="p">(</span><span class="s2">"a.txt.tmp"</span><span class="p">,</span> <span class="s2">"a.txt"</span><span class="p">)</span>
+</code></pre></div>
+
+<p>关键要求：</p>
+<ul>
+<li>新数据先 <code>fsync</code>；</li>
+<li>rename 由文件系统提供原子性；</li>
+<li>必要时再同步目录项。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Write Temp File"] --&gt; B["fsync Temp"]
+    B --&gt; C["Atomic rename"]
+    C --&gt; D["Old or New Complete Version"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_22_30.webp" alt="先同步临时文件，再用原子 rename 替换正式文件" loading="lazy" decoding="async">
+  <p class="video-caption">📷 先同步临时文件，再用原子 rename 替换正式文件<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=4950" target="_blank" rel="noopener">回到原视频 (01:22:30)</a></p>
+</div>
+
+<h3 id="106">10.6 现实软件中的问题</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>01:23</span></p>
+<p>课程研究曾发现：</p>
+<ul>
+<li>Make 可能留下错误构建结果；</li>
+<li>in-place sort 可能损坏文件；</li>
+<li>Perl 的 in-place 替换可能丢文件；</li>
+<li>2016 年的 Node.js 缺少安全保存文件的标准 API；</li>
+<li>许多 Electron 应用存在同类问题。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Legacy Application"] --&gt; B["Temporary File"]
+    B --&gt; C["Delete Original"]
+    C --&gt; D["Rename"]
+    D --&gt; E["Crash Inconsistency"]
+    F["Missing fsync"] --&gt; E
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_23_30.webp" alt="大量旧应用没有正确处理保存文件的崩溃一致性" loading="lazy" decoding="async">
+  <p class="video-caption">📷 大量旧应用没有正确处理保存文件的崩溃一致性<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=5010" target="_blank" rel="noopener">回到原视频 (01:23:30)</a></p>
+</div>
+
+<hr />
+<h2 id="11-crash-consistency-checker">11. Crash Consistency Checker</h2>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>01:25</span></p>
+<p>课程用 <code>strace</code> 追踪程序对文件的写入和同步调用：</p>
+<ol>
+<li>记录文件相关系统调用；</li>
+<li>枚举多种 crash 点；</li>
+<li>构造可能的重排顺序；</li>
+<li>重放文件系统状态；</li>
+<li>用 LLM 判断是否存在数据丢失或不一致；</li>
+<li>输出 <code>result.json</code>。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Application Run"] --&gt; B["strace File Syscalls"]
+    B --&gt; C["Trace + fsync Points"]
+    C --&gt; D["Generate Crash Prefixes"]
+    D --&gt; E["Replay States"]
+    E --&gt; F["LLM Inspect Result"]
+    F --&gt; G["Inconsistency Report"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_25_30.webp" alt="strace 加 AI 分析可以自动检查应用程序崩溃一致性" loading="lazy" decoding="async">
+  <p class="video-caption">📷 strace 加 AI 分析可以自动检查应用程序崩溃一致性<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=5130" target="_blank" rel="noopener">回到原视频 (01:25:30)</a></p>
+</div>
+
+<h3 id="111-ai">11.1 AI 时代的研究机会</h3>
+<p class="timestamp"><span class="ts-label">参考时间</span><span>01:26</span></p>
+<p>讲师指出：</p>
+<ul>
+<li>老论文的思想可以用 AI 重新实现；</li>
+<li>实验规模可以扩大百倍；</li>
+<li>LLM 可以替代许多脆弱 heuristics；</li>
+<li>但不要只做“洗论文”；</li>
+<li>应利用工具探索世界上没人做过的问题。</li>
+</ul>
+<div class="highlight"><pre><span></span><code>flowchart LR
+    A["Old Conceptual Paper"] --&gt; B["LLM Reimplementation"]
+    B --&gt; C["Larger Experiment"]
+    C --&gt; D["New Evidence"]
+    D --&gt; E["Original Research"]
+    C --&gt; F["Paper Washing"]
+</code></pre></div>
+
+<div class="video-card screenshot-card">
+  <img src="images/shot_01_26_30.webp" alt="AI 可以复现并扩大经典实验，但研究应追求未解决问题" loading="lazy" decoding="async">
+  <p class="video-caption">📷 AI 可以复现并扩大经典实验，但研究应追求未解决问题<br><a href="https://www.bilibili.com/video/BV12EV66bErd/?t=5190" target="_blank" rel="noopener">回到原视频 (01:26:30)</a></p>
+</div>
+
+<hr />
+<h2 id="12_1">12. 总结：用合适的数据结构守护持久数据</h2>
+<p>文件系统实现包含多个层次：</p>
+<ol>
+<li>用 GPT、LVM、NVMe Namespace 等虚拟化块设备；</li>
+<li>用 Superblock 建立入口；</li>
+<li>用 FAT 或 inode 组织文件块；</li>
+<li>用目录项组织命名图；</li>
+<li>用缓存降低块访问成本；</li>
+<li>用 FSCK 修复非一致状态；</li>
+<li>用 WAL/Journal 保证多块更新原子性；</li>
+<li>用 <code>fsync</code>、<code>fdatasync</code> 和原子 rename 保证应用级持久性。</li>
+</ol>
+<div class="highlight"><pre><span></span><code>flowchart TD
+    A["Block Device"] --&gt; B["Partitions / LVM"]
+    B --&gt; C["Superblock"]
+    C --&gt; D["Allocation Metadata"]
+    C --&gt; E["Inodes"]
+    C --&gt; F["Data Blocks"]
+    E --&gt; G["Directory Graph"]
+    G --&gt; H["Filesystem Operations"]
+    H --&gt; I["Journal / WAL"]
+    I --&gt; J["Crash Consistency"]
+</code></pre></div>
+
+<p>核心结论：</p>
+<blockquote>
+<p>文件系统不是必须照搬教科书的固定结构，而是围绕硬件、workload 和一致性要求设计的数据结构。持久数据的安全来自底层日志、同步协议和应用程序保存协议的共同配合。</p>
+</blockquote>
+<hr />
+<h2 id="_3">附：官方参考与延伸阅读</h2>
+<ul>
+<li><a href="https://uefi.org/specs/UEFI/2.10/05_GUID_Partition_Table_Format.html" target="_blank" rel="noopener">UEFI GPT 规范</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/persistence/lvm" target="_blank" rel="noopener">LVM 实验</a></li>
+<li><a href="https://jyywiki.cn/OS/manuals/MSFAT-spec.pdf" target="_blank" rel="noopener">MS FAT 规范</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/persistence/readfat" target="_blank" rel="noopener">readfat 实验</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/persistence/ext4" target="_blank" rel="noopener">Debug ext4 实验</a></li>
+<li><a href="https://dl.acm.org/doi/10.1145/3281031" target="_blank" rel="noopener">FSCK Crash 论文</a></li>
+<li><a href="https://jyywiki.cn/OS/demos/persistence/ccheck" target="_blank" rel="noopener">Crash Consistency Checker</a></li>
+<li><a href="https://www.usenix.org/conference/osdi14/technical-sessions/presentation/pillai" target="_blank" rel="noopener">All File Systems Are Not Created Equal</a></li>
+<li><a href="https://dl.acm.org/doi/10.1145/2950290.2950327" target="_blank" rel="noopener">Crash Consistency: Rethinking Application Programming Models</a></li>
+</ul>
+<p>官方课程资料：</p>
+<ul>
+<li><a href="https://jyywiki.cn/OS/2026/" target="_blank" rel="noopener">课程主页</a></li>
+<li><a href="https://jyywiki.cn/OS/2026/lect26.md" target="_blank" rel="noopener">第 26 讲讲义：文件系统实现</a></li>
+<li><a href="https://www.bilibili.com/video/BV12EV66bErd/" target="_blank" rel="noopener">视频：26 - 文件系统实现和崩溃一致性</a></li>
+</ul>
+<blockquote>
+<p><strong>版权与署名</strong>：本讲课程材料由蒋炎岩（jyy）编写。课程讲义与幻灯片采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">Creative Commons BY-NC 4.0</a> 许可；本电子书保留课程出处、作者署名与许可说明。</p>
+</blockquote>
+    </div>
+<details class="source-note"><summary>课程来源与版权说明</summary><div class="source-body">
+<p><strong>课程</strong>：2026 春季学期《操作系统原理》<br />
+<strong>讲师</strong>：蒋炎岩（jyy）<br />
+<strong>官方课程主页</strong>：<a href="https://jyywiki.cn/OS/2026/">https://jyywiki.cn/OS/2026/</a><br />
+<strong>官方讲义</strong>：<a href="https://jyywiki.cn/OS/2026/lect26.md">https://jyywiki.cn/OS/2026/lect26.md</a><br />
+<strong>视频来源</strong>：<a href="https://www.bilibili.com/video/BV12EV66bErd/">Bilibili BV12EV66bErd</a><br />
+<strong>版权说明</strong>：课程讲义与幻灯片归蒋炎岩所有，采用 <a href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons BY-NC 4.0</a> 许可；本电子书是对课堂讲授的书面化重构，保留出处与许可说明。</p>
+</div></details>
+<footer class="chapter-end">
+<div class="end-cta"><div><h3>读到这里，标记一下你的进度。</h3><p>进度只保存在你的浏览器里，不需要登录。</p></div><button class="end-btn" type="button" data-mark-read aria-pressed="false"><span data-read-label>标记已读</span></button></div>
+<nav class="pager" aria-label="章节翻页"><a href="/lecture/25/"><small>← PREVIOUS</small><strong>第 25 讲 · 文件系统 API (2)</strong></a><a class="next" href="/lecture/27/"><small>NEXT →</small><strong>第 27 讲 · 数据库系统</strong></a></nav>
+</footer>
+</article>
+<aside class="reader-toc" aria-label="本讲目录">
+<p class="toc-label">ON THIS PAGE</p>
+<nav class="toc-nav"><a href="#_2">导语：文件系统就是一个持久化数据结构</a><a href="#1">1. 块设备不是一块简单的字节数组</a><a href="#2">2. 块访问的代价：缓存与读写放大</a><a href="#3">3. 设计文件系统：先做需求分析</a><a href="#4-superblock">4. Superblock：数据结构的根</a><a href="#5-fat">5. FAT：为极小空间设计的文件系统</a><a href="#6-unix-inode">6. UNIX 文件系统：分离 inode 与目录边</a><a href="#7">7. 崩溃一致性：块写入不是事务</a><a href="#8-fsck">8. FSCK：事后修复数据结构</a><a href="#9-append-only">9. 实现崩溃一致性：Append-only 与日志</a><a href="#10">10. 应用程序也必须实现崩溃一致性</a><a href="#11-crash-consistency-checker">11. Crash Consistency Checker</a><a href="#12_1">12. 总结：用合适的数据结构守护持久数据</a><a href="#_3">附：官方参考与延伸阅读</a></nav>
+<div class="toc-meter"><div class="toc-meter-top"><span>READING</span><b id="meterText">0%</b></div><div class="toc-meter-bar"><span id="meterBar"></span></div></div>
+</aside>
+</div>
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="查看课堂截图"><button class="lightbox-close" type="button" aria-label="关闭">×</button><img src="" alt=""></div>
+</body>
+</html>
