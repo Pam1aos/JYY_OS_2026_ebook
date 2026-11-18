@@ -515,6 +515,7 @@ def head(title: str, description: str, css_prefix: str = "assets/") -> str:
 <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/assets/css/main.css">
 <script defer src="/assets/js/app.js"></script>
+<script defer src="/assets/js/chat.js"></script>
 </head>"""
 
 
@@ -828,6 +829,86 @@ def not_found_page() -> str:
     )
 
 
+def build_course_index(chapters: list[dict]) -> None:
+    """Create the compact retrieval index consumed by /api/chat."""
+    data_dir = SITE / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    lectures = [
+        {
+            "num": c["num"],
+            "title": c["title"],
+            "part": part_for(c["part"])["title"],
+            "deck": c["deck"],
+            "minutes": c["minutes"],
+            "url": f"/lecture/{c['num']}/",
+        }
+        for c in chapters
+    ]
+    sections: list[dict] = []
+    heading_re = re.compile(
+        r'<h([23])\b[^>]*\bid="([^"]+)"[^>]*>(.*?)</h\1>', re.S
+    )
+
+    for chapter in chapters:
+        body = chapter["body"]
+        matches = list(heading_re.finditer(body))
+        blocks: list[tuple[str, str, str]] = []
+        if matches:
+            intro = body[: matches[0].start()]
+            blocks.append(("导语", "", intro))
+            for index, match in enumerate(matches):
+                end = matches[index + 1].start() if index + 1 < len(matches) else len(body)
+                blocks.append(
+                    (
+                        strip_tags(match.group(3)),
+                        match.group(2),
+                        body[match.end() : end],
+                    )
+                )
+        else:
+            blocks.append(("全文", "", body))
+
+        for title, anchor, raw in blocks:
+            text = strip_tags(raw)
+            text = re.sub(
+                r"参考时间[:：]?\s*\d{1,2}:\d{2}(?::\d{2})?", " ", text
+            )
+            text = re.sub(r"\s+", " ", text).strip()
+            if len(text) < 40:
+                continue
+            # Keep the index small enough to ship with the serverless function.
+            if len(text) > 2400:
+                text = text[:2400].rsplit(" ", 1)[0] + "…"
+            sections.append(
+                {
+                    "id": f"L{chapter['num']}-{anchor or 'intro'}",
+                    "lecture": chapter["num"],
+                    "lectureTitle": chapter["title"],
+                    "part": part_for(chapter["part"])["title"],
+                    "title": title,
+                    "anchor": anchor,
+                    "url": f"/lecture/{chapter['num']}/"
+                    + (f"#{anchor}" if anchor else ""),
+                    "text": text,
+                }
+            )
+
+    payload = {
+        "version": 1,
+        "lectures": lectures,
+        "sections": sections,
+    }
+    (data_dir / "course-index.json").write_text(
+        json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    print(
+        f"Course index: {len(lectures)} lectures, {len(sections)} sections, "
+        f"{(data_dir / 'course-index.json').stat().st_size / 1024:.0f} KB"
+    )
+
+
 def write_assets() -> None:
     favicon = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
 <defs><linearGradient id="g" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse"><stop stop-color="#8fb1ff"/><stop offset=".5" stop-color="#6277ef"/><stop offset="1" stop-color="#d69bb8"/></linearGradient></defs>
@@ -840,6 +921,11 @@ def write_assets() -> None:
     vercel = {
         "trailingSlash": True,
         "cleanUrls": True,
+        "functions": {
+            "api/chat.js": {
+                "maxDuration": 60,
+            }
+        },
         "headers": [
             {
                 "source": "/assets/(.*)",
@@ -902,6 +988,7 @@ def main() -> None:
         )
 
     write_assets()
+    build_course_index(chapters)
     total_kb = sum(
         p.stat().st_size for p in SITE.rglob("*") if p.is_file()
     ) / 1024

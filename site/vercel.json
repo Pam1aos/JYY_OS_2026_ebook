@@ -1,6 +1,11 @@
 {
   "trailingSlash": true,
   "cleanUrls": true,
+  "functions": {
+    "api/chat.js": {
+      "maxDuration": 60
+    }
+  },
   "headers": [
     {
       "source": "/assets/(.*)",
