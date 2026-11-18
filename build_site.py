@@ -493,6 +493,8 @@ def icon(name: str, cls: str = "") -> str:
         "doc": '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 1.75h5.6L13 5.15V14.3H4V1.75Z" stroke="currentColor" stroke-width="1.3"/><path d="M9.4 1.9v3.5H13M6 8h5M6 10.6h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>',
         "grid": '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2.2" y="2.2" width="4.4" height="4.4" rx="1.2" stroke="currentColor" stroke-width="1.3"/><rect x="9.4" y="2.2" width="4.4" height="4.4" rx="1.2" stroke="currentColor" stroke-width="1.3"/><rect x="2.2" y="9.4" width="4.4" height="4.4" rx="1.2" stroke="currentColor" stroke-width="1.3"/><rect x="9.4" y="9.4" width="4.4" height="4.4" rx="1.2" stroke="currentColor" stroke-width="1.3"/></svg>',
         "menu": '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
+        "panel": '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2.2" y="2.6" width="11.6" height="10.8" rx="2" stroke="currentColor" stroke-width="1.3"/><path d="M6.3 2.9v10.2" stroke="currentColor" stroke-width="1.3"/></svg>',
+        "list": '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M5.6 4.1h8.2M5.6 8h8.2M5.6 11.9h8.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M2.7 4.1h.1M2.7 8h.1M2.7 11.9h.1" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
         "check": '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.2 8.3 3.1 3.1 6.5-6.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
         "search": '<svg viewBox="0 0 18 18" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="5.2" stroke="currentColor" stroke-width="1.4"/><path d="m12 12 3.2 3.2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
     }
@@ -513,6 +515,7 @@ def head(title: str, description: str, css_prefix: str = "assets/") -> str:
 <meta property="og:description" content="{html.escape(description)}">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<script src="/assets/js/layout-init.js"></script>
 <link rel="stylesheet" href="/assets/css/main.css">
 <script defer src="/assets/js/app.js"></script>
 <script defer src="/assets/js/chat.js"></script>
@@ -710,7 +713,7 @@ def reader_sidebar(chapters: list[dict], current: dict) -> str:
         )
         groups += f'<div class="side-group"><h4>{part["num"]} / {part["title"]}</h4>{links}</div>'
     return f"""<aside class="reader-side" id="readerSide" aria-label="章节目录">
-<div class="side-head"><span>CONTENTS</span><b>{len(chapters)} 讲</b></div>
+<div class="side-head"><span>CONTENTS</span><b>{len(chapters)} 讲</b><button class="side-collapse" type="button" data-collapse="contents" aria-label="收起章节目录" title="收起目录">−</button></div>
 <div class="side-scroll">{groups}</div>
 <div class="side-foot"><span>已读进度</span><span><b data-read-count>0</b> / {len(chapters)}</span></div>
 </aside>"""
@@ -723,8 +726,8 @@ def reader_toc(chapter: dict) -> str:
         f'<a href="#{item["id"]}">{html.escape(item["text"])}</a>'
         for item in chapter["toc"]
     )
-    return f"""<aside class="reader-toc" aria-label="本讲目录">
-<p class="toc-label">ON THIS PAGE</p>
+    return f"""<aside class="reader-toc" id="readerToc" aria-label="本讲目录">
+<div class="toc-label"><span>ON THIS PAGE</span><button class="side-collapse" type="button" data-collapse="toc" aria-label="收起本页目录" title="收起本页目录">−</button></div>
 <nav class="toc-nav">{links}</nav>
 <div class="toc-meter"><div class="toc-meter-top"><span>READING</span><b id="meterText">0%</b></div><div class="toc-meter-bar"><span id="meterBar"></span></div></div>
 </aside>"""
@@ -762,6 +765,8 @@ def chapter_page(chapter: dict, chapters: list[dict], prev_c: dict | None, next_
 {brand("/")}
 <div class="reader-crumb"><span>电子书</span><span class="sep">/</span><span>{part["title"]}</span><span class="sep">/</span><strong>第 {chapter["num"]} 讲</strong></div>
 <div class="reader-top-actions">
+<button class="icon-btn side-toggle contents-toggle" id="contentsToggle" type="button" aria-label="收起章节目录" aria-controls="readerSide" aria-pressed="true">{icon("panel")}<span>目录</span></button>
+<button class="icon-btn side-toggle toc-toggle" id="tocToggle" type="button" aria-label="收起本页目录" aria-controls="readerToc" aria-pressed="true">{icon("list")}<span>本页</span></button>
 <button class="icon-btn menu-toggle" id="menuToggle" type="button" aria-label="打开章节目录" aria-expanded="false" aria-controls="readerSide">{icon("menu")}<span>目录</span></button>
 <button class="icon-btn" type="button" data-mark-read aria-pressed="false" aria-label="标记本讲为已读">{icon("check")}<span data-read-label>标记已读</span></button>
 <a class="icon-btn" href="/#curriculum">{icon("grid")}<span>全部章节</span></a>

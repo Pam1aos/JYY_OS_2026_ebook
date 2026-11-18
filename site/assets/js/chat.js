@@ -141,19 +141,78 @@
         html.push(`<pre><code>${code.replace(/\n$/, "")}</code></pre>`);
         continue;
       }
-      const paragraphs = block.split(/\n{2,}/);
-      for (const paragraph of paragraphs) {
-        if (!paragraph.trim()) continue;
-        html.push(
-          `<p>${inlineMarkdown(paragraph).replace(/\n/g, "<br>")}</p>`
-        );
+      html.push(renderTextBlock(block));
+    }
+    return html.join("");
+  }
+
+  function renderTextBlock(block) {
+    const lines = block.split("\n");
+    const html = [];
+    let listType = "";
+    let listItems = [];
+    let paragraph = [];
+
+    const flushList = () => {
+      if (!listType) return;
+      html.push(
+        `<${listType}>${listItems
+          .map((item) => `<li>${inlineMarkdown(item)}</li>`)
+          .join("")}</${listType}>`
+      );
+      listType = "";
+      listItems = [];
+    };
+    const flushParagraph = () => {
+      if (!paragraph.length) return;
+      html.push(
+        `<p>${inlineMarkdown(paragraph.join("\n")).replace(/\n/g, "<br>")}</p>`
+      );
+      paragraph = [];
+    };
+
+    for (const line of lines) {
+      const bullet = line.match(/^\s*[-*]\s+(.+)$/);
+      const numbered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+      if (bullet) {
+        flushParagraph();
+        if (listType !== "ul") {
+          flushList();
+          listType = "ul";
+        }
+        listItems.push(bullet[1]);
+      } else if (numbered) {
+        flushParagraph();
+        if (listType !== "ol") {
+          flushList();
+          listType = "ol";
+        }
+        listItems.push(numbered[1]);
+      } else if (!line.trim()) {
+        flushList();
+        flushParagraph();
+      } else if (listType) {
+        listItems[listItems.length - 1] += `<br>${line}`;
+      } else {
+        paragraph.push(line);
       }
     }
+    flushList();
+    flushParagraph();
     return html.join("");
   }
 
   function scrollToBottom() {
     messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function scrollMessageStart(row) {
+    const top =
+      row.getBoundingClientRect().top -
+      messagesEl.getBoundingClientRect().top +
+      messagesEl.scrollTop -
+      6;
+    messagesEl.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
   }
 
   function welcomeMarkup() {
@@ -342,8 +401,13 @@
               setMode(payload.mode === "demo" ? "demo" : "model");
             } else if (payload.type === "delta") {
               assistantText += payload.content || "";
+              const stickToBottom =
+                messagesEl.scrollHeight -
+                  messagesEl.scrollTop -
+                  messagesEl.clientHeight <
+                120;
               typing.bubble.innerHTML = renderMarkdown(assistantText);
-              scrollToBottom();
+              if (stickToBottom) scrollToBottom();
             } else if (payload.type === "error") {
               throw new Error(payload.message || "回答中断了。");
             } else if (payload.type === "done") {
@@ -368,7 +432,13 @@
       typing.bubble.classList.add("chat-error");
     } finally {
       setBusy(false);
-      scrollToBottom();
+      if (typing.bubble.classList.contains("chat-error")) {
+        scrollToBottom();
+      } else if (assistantText.length > 260) {
+        scrollMessageStart(typing.row);
+      } else {
+        scrollToBottom();
+      }
     }
   }
 

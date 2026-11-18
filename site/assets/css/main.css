@@ -14,6 +14,9 @@
    ------------------------------------------------------------------ */
 :root {
   color-scheme: light;
+  --reader-left: 250px;
+  --reader-right: 190px;
+  --reader-gap: 24px;
   --bg: #eef2fb;
   --bg-deep: #e7ecf9;
   --paper: #ffffff;
@@ -1823,6 +1826,17 @@ p {
   display: none;
 }
 
+.side-toggle[aria-pressed="false"] {
+  border-color: rgba(28, 107, 74, 0.08);
+  background: var(--mint);
+  color: var(--mint-ink);
+}
+
+.side-toggle svg {
+  width: 14px;
+  height: 14px;
+}
+
 .mobile-toc {
   display: none;
   margin: 26px 0 4px;
@@ -1903,11 +1917,43 @@ p {
 
 .reader-layout {
   display: grid;
-  grid-template-columns: 250px minmax(0, 1fr) 190px;
+  grid-template-columns: var(--reader-left) minmax(0, 1fr) var(--reader-right);
   align-items: start;
-  gap: 24px;
+  column-gap: var(--reader-gap);
+  row-gap: 24px;
   width: min(1500px, calc(100% - 40px));
   margin: 14px auto 0;
+  transition: column-gap 0.25s var(--ease);
+}
+
+@media (min-width: 901px) {
+  html.hide-contents {
+    --reader-left: 0px;
+    --reader-gap: 0px;
+  }
+
+  html.hide-contents .reader-side {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateX(-12px);
+    overflow: hidden;
+  }
+}
+
+@media (min-width: 1181px) {
+  html.hide-toc {
+    --reader-right: 0px;
+    --reader-gap: 0px;
+  }
+
+  html.hide-toc .reader-toc {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateX(12px);
+    overflow: hidden;
+  }
 }
 
 .reader-side {
@@ -1922,6 +1968,8 @@ p {
   box-shadow: 0 24px 50px -42px rgba(35, 54, 107, 0.3);
   backdrop-filter: blur(18px);
   overflow: hidden;
+  transition: opacity 0.25s ease, visibility 0.25s ease,
+    transform 0.3s var(--ease);
 }
 
 .side-head {
@@ -1931,6 +1979,33 @@ p {
   gap: 10px;
   padding: 18px 18px 14px;
   border-bottom: 1px solid rgba(32, 51, 92, 0.06);
+}
+
+.side-collapse {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border: 1px solid rgba(32, 51, 92, 0.07);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.6);
+  color: #8b96aa;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.2s ease, background 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.side-collapse:hover {
+  border-color: rgba(47, 107, 255, 0.2);
+  background: #fff;
+  color: var(--blue-deep);
+}
+
+.side-head .side-collapse {
+  margin-left: 2px;
 }
 
 .side-head span {
@@ -2054,7 +2129,10 @@ p {
 
 .reader-article {
   position: relative;
+  width: 100%;
+  max-width: 980px;
   min-width: 0;
+  justify-self: center;
   padding: clamp(34px, 4.8vw, 68px) clamp(28px, 5.6vw, 76px)
     clamp(40px, 5vw, 72px);
   border: 1px solid rgba(255, 255, 255, 0.86);
@@ -2072,6 +2150,8 @@ p {
   padding: 6px 0;
   overflow-y: auto;
   scrollbar-width: none;
+  transition: opacity 0.25s ease, visibility 0.25s ease,
+    transform 0.3s var(--ease);
 }
 
 .reader-toc::-webkit-scrollbar {
@@ -2088,6 +2168,13 @@ p {
   font-weight: 800;
   letter-spacing: 0.13em;
   text-transform: uppercase;
+}
+
+.toc-label .side-collapse {
+  width: 20px;
+  height: 20px;
+  margin-left: auto;
+  font-size: 12px;
 }
 
 .toc-label::before {
@@ -3448,6 +3535,35 @@ body.chat-open .chat-scrim {
   margin-bottom: 0;
 }
 
+.chat-bubble ul,
+.chat-bubble ol {
+  margin: 5px 0 9px;
+  padding-left: 18px;
+}
+
+.chat-bubble ul:last-child,
+.chat-bubble ol:last-child {
+  margin-bottom: 0;
+}
+
+.chat-bubble li {
+  margin: 3px 0;
+  padding-left: 1px;
+}
+
+.chat-bubble ul {
+  list-style: disc;
+}
+
+.chat-bubble ol {
+  list-style: decimal;
+}
+
+.chat-bubble li::marker {
+  color: #6f8cc0;
+  font-size: 0.9em;
+}
+
 .chat-bubble strong {
   color: #14203a;
   font-weight: 800;
@@ -3696,6 +3812,10 @@ body.chat-open .chat-scrim {
 
 /* Responsive */
 @media (max-width: 1180px) {
+  :root {
+    --reader-left: 232px;
+  }
+
   .hero {
     grid-template-columns: minmax(0, 1fr) minmax(400px, 0.92fr);
     gap: 40px;
@@ -3716,7 +3836,11 @@ body.chat-open .chat-scrim {
   }
 
   .reader-layout {
-    grid-template-columns: 232px minmax(0, 1fr);
+    grid-template-columns: var(--reader-left, 232px) minmax(0, 1fr);
+  }
+
+  .toc-toggle {
+    display: none;
   }
 
   .reader-toc {
@@ -3848,6 +3972,14 @@ body.chat-open .chat-scrim {
 
   .menu-toggle {
     display: inline-flex;
+  }
+
+  .contents-toggle {
+    display: none;
+  }
+
+  .side-head .side-collapse {
+    display: none;
   }
 
   .reader-crumb {

@@ -137,7 +137,7 @@
 - **生成脚本**：[`build_site.py`](./build_site.py)
 - 部署配置：Vercel Root Directory 设为 `site`，Production Branch 为 `main`
 
-网站包含 30 讲内容、主题筛选、全文搜索、阅读进度、截图灯箱与移动端适配。所有课堂截图已从 PNG 压缩为 1440px WebP，部署体积约 42.4MB。
+网站包含 30 讲内容、主题筛选、全文搜索、阅读进度、截图灯箱与移动端适配。章节页左右两侧的目录都可以点击收起，并使用 localStorage 记住布局偏好。所有课堂截图已从 PNG 压缩为 1440px WebP，部署体积约 42.5MB。
 
 ### 课程助教 MVP
 

@@ -262,6 +262,81 @@
       }
     }
 
+    const collapseKey = "jyy-os-2026:layout";
+    const contentsToggle = $("#contentsToggle");
+    const tocToggle = $("#tocToggle");
+    const syncCollapseButtons = () => {
+      const contentsOpen = !root.classList.contains("hide-contents");
+      const tocOpen = !root.classList.contains("hide-toc");
+      if (contentsToggle) {
+        contentsToggle.setAttribute("aria-pressed", String(contentsOpen));
+        contentsToggle.setAttribute(
+          "aria-label",
+          contentsOpen ? "收起章节目录" : "展开章节目录"
+        );
+        contentsToggle.setAttribute(
+          "title",
+          contentsOpen ? "收起章节目录" : "展开章节目录"
+        );
+      }
+      if (tocToggle) {
+        tocToggle.setAttribute("aria-pressed", String(tocOpen));
+        tocToggle.setAttribute(
+          "aria-label",
+          tocOpen ? "收起本页目录" : "展开本页目录"
+        );
+        tocToggle.setAttribute(
+          "title",
+          tocOpen ? "收起本页目录" : "展开本页目录"
+        );
+      }
+    };
+    const saveCollapse = () => {
+      try {
+        localStorage.setItem(
+          collapseKey,
+          JSON.stringify({
+            contents: !root.classList.contains("hide-contents"),
+            toc: !root.classList.contains("hide-toc"),
+          })
+        );
+      } catch (_) {
+        /* private mode */
+      }
+    };
+    const toggleSide = (which, focusTarget) => {
+      if (which === "contents") {
+        const hidden = root.classList.toggle("hide-contents");
+        if (hidden && focusTarget) focusTarget.focus();
+      } else if (which === "toc") {
+        const hidden = root.classList.toggle("hide-toc");
+        if (hidden && focusTarget) focusTarget.focus();
+      }
+      syncCollapseButtons();
+      saveCollapse();
+    };
+
+    if (contentsToggle) {
+      contentsToggle.addEventListener("click", () =>
+        toggleSide("contents", contentsToggle)
+      );
+    }
+    if (tocToggle) {
+      tocToggle.addEventListener("click", () =>
+        toggleSide("toc", tocToggle)
+      );
+    }
+    $$("[data-collapse]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const which = button.dataset.collapse;
+        toggleSide(
+          which,
+          which === "contents" ? contentsToggle : tocToggle
+        );
+      });
+    });
+    syncCollapseButtons();
+
     const menuBtn = $("#menuToggle");
     const scrim = $(".menu-scrim");
     const closeMenu = () => {
