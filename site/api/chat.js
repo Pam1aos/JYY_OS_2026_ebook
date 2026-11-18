@@ -163,6 +163,29 @@ function retrieve(query, context, limit = 5) {
   if (!chosen.length) {
     for (const section of course.sections.slice(0, limit)) chosen.push(section);
   }
+  if (wantsSummary && lecture) {
+    const lectureSections = course.sections.filter(
+      (section) =>
+        section.lecture === lecture && !/^附/.test(section.title)
+    );
+    const summary = [...lectureSections]
+      .reverse()
+      .find((section) => /总结|结语|回顾/.test(section.title));
+    const summaryCandidates = summary
+      ? [summary]
+      : lectureSections.slice(-2);
+    for (const candidate of summaryCandidates) {
+      const exists = chosen.some(
+        (section) =>
+          section.lecture === candidate.lecture &&
+          section.title === candidate.title
+      );
+      if (!exists) {
+        chosen.pop();
+        chosen.push(candidate);
+      }
+    }
+  }
   return chosen;
 }
 
